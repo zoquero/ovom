@@ -16,6 +16,7 @@ our @EXPORT = qw( updatePerformance );
 
 our %configuration;
 our %ovomGlobals;
+our %inventory;
 
 sub updateInventory {
   Ovom::log(1, "Let's updateInventory");
@@ -25,34 +26,40 @@ sub updateInventory {
                         " --server "     . $configuration{'vCenterName'};
 
   open CMD,'-|', $dcListCommand or die "Can't run $dcListCommand :" . $@;
-  my $hosts = 0;
+  my @hosts = ();
+  my $parsingHosts = 0;
   my $host  = '';
-  my $vms   = 0;
+  my @vms   = ();
+  my $parsingVMs   = 0;
   my $vm    = '';
   my $line;
   while (defined($line=<CMD>)) {
     if ( $line =~ /^Hosts found:$/ ) {
-      $hosts = 1;
-      $vms   = 0;
+      $parsingHosts = 1;
+      $parsingVMs   = 0;
     }
     elsif ( $line =~ /^VM's found:$/ ) {
-      $hosts = 0;
-      $vms   = 1;
+      $parsingHosts = 0;
+      $parsingVMs   = 1;
     }
     else {
       next if $line =~ /^\s*$/;
       $line =~ /^\d+: (.+)$/;
-      if($hosts) {
+      if($parsingHosts) {
         $host = $1;
-        print "host = $host\n";
+        Ovom::log(0, "updateInventory; host discovered = $host");
+        push @hosts, $host;
       }
-      elsif($vms) {
+      elsif($parsingVMs) {
         $vm = $1;
-        print "vm = $vm\n";
+        Ovom::log(0, "updateInventory; vm discovered = $vm");
+        push @vms, $vm;
       }
     }
   }
   close CMD;
+  $Ovom::inventory{'hosts'} = \@hosts;
+  $Ovom::inventory{'vms'}   = \@vms;
 }
 
 

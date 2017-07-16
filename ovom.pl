@@ -14,5 +14,17 @@ print "vDataCenterName = $Ovom::configuration{'vDataCenterName'}\n";
 print "vCenterName     = $Ovom::configuration{'vCenterName'}\n";
 print "command.dcList  = $Ovom::configuration{'command.dcList'}\n";
 Ovom::updateInventory();
+print "Main: Let's print hosts:\n";
+my($aHost, $aVM);
+foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
+  print "$aHost; ";
+print "\n";
+}
+print "Main: Let's print VMs:\n";
+foreach $aVM (@{$Ovom::inventory{'vms'}}) {
+  print "$aVM; ";
+}
+print "\n";
+
 Ovom::updatePerformance();
 Ovom::collectorStop();
