@@ -17,9 +17,10 @@ our @EXPORT = qw( updatePerformance );
 our %configuration;
 our %ovomGlobals;
 our %inventory;
+our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
 sub updateInventory {
-  Ovom::log(1, "Let's updateInventory");
+  Ovom::log(1, "Updatiing inventory");
 
   my $dcListCommand = $configuration{'command.dcList'} .
                         " --datacenter " . $configuration{'vDataCenterName'} .
@@ -60,11 +61,55 @@ sub updateInventory {
   close CMD;
   $Ovom::inventory{'hosts'} = \@hosts;
   $Ovom::inventory{'vms'}   = \@vms;
+
+  my($aHost, $aVM, $s);
+  $s = "Discovered hosts: ";
+  foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
+    $s .= "$aHost;";
+  }
+  Ovom::log(0, $s);
+  
+  $s = "Discovered VMs: ";
+  foreach $aVM (@{$Ovom::inventory{'vms'}}) {
+    $s .= "$aVM;";
+  }
+  Ovom::log(0, $s);
+
+  my($ch, $cv);
+  $ch = $#{$Ovom::inventory{'hosts'}} + 1;
+  $cv = $#{$Ovom::inventory{'vms'}}   + 1;
+  Ovom::log(1, "Discovered $ch hosts and $cv VMs");
 }
 
 
 sub updatePerformance {
   Ovom::log(1, "Updating performance");
+
+  my($aHost, $aVM);
+  foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
+    
+  }
+
+}
+
+sub getHostPerfs {
+  my ($host) = shift;
+  my ($counterType);
+  foreach $counterType (@Ovom::counterTypes) {
+    my $getHostPerfCommand = $configuration{'command.getPerf'} .
+                             " --server "      . $configuration{'vCenterName'} .
+                             " --countertype " . $counterType .
+                             " --host "        . $host;
+  
+print "==== Mirem comptador $counterType de host $host: ====\n";
+    open CMD,'-|', $getHostPerfCommand or die "Can't run $getHostPerfCommand :" . $@;
+    my $line;
+    while (defined($line=<CMD>)) {
+print "    $line\n";
+    }
+    close CMD;
+  }
+
 }
 
 
@@ -115,7 +160,20 @@ sub log ($$) {
   my $nowStr = strftime('%Y%m%d_%H%M%S', gmtime);
   # gmtime instead of localtime, we want ~UTC
 
-  print {$Ovom::ovomGlobals{'collectorLogHandle'}} "${nowStr}Z: $msg\n";
+  my $crit;
+  if ($logLevel      == 0) {
+    $crit = "DEBUG";
+  } elsif ($logLevel == 1) {
+    $crit = "INFO";
+  } elsif ($logLevel == 2) {
+    $crit = "WARNING";
+  } elsif ($logLevel == 3) {
+    $crit = "ERROR";
+  } else {
+    $crit = "UNKNOWN";
+  }
+
+  print {$Ovom::ovomGlobals{'collectorLogHandle'}} "${nowStr}Z: [$crit] $msg\n";
 }
 
 1;
