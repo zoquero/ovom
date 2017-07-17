@@ -20,47 +20,55 @@ our %inventory;
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
 sub updateInventory {
-  Ovom::log(1, "Updatiing inventory");
+  my @hostArray = ();
+  my @vmArray   = ();
+  my $parsingHosts = 0;
+  my $host  = '';
+  my $parsingVMs   = 0;
+  my $vm    = '';
+  my $line;
+
+  Ovom::log(1, "Updating inventory");
 
   my $dcListCommand = $configuration{'command.dcList'} .
                         " --datacenter " . $configuration{'vDataCenterName'} .
                         " --server "     . $configuration{'vCenterName'};
 
-  open CMD,'-|', $dcListCommand or die "Can't run $dcListCommand :" . $@;
-  my @hosts = ();
-  my $parsingHosts = 0;
-  my $host  = '';
-  my @vms   = ();
-  my $parsingVMs   = 0;
-  my $vm    = '';
-  my $line;
-  while (defined($line=<CMD>)) {
-    if ( $line =~ /^Hosts found:$/ ) {
-      $parsingHosts = 1;
-      $parsingVMs   = 0;
-    }
-    elsif ( $line =~ /^VM's found:$/ ) {
-      $parsingHosts = 0;
-      $parsingVMs   = 1;
-    }
-    else {
-      next if $line =~ /^\s*$/;
-      $line =~ /^\d+: (.+)$/;
-      if($parsingHosts) {
-        $host = $1;
-        Ovom::log(0, "updateInventory; host discovered = $host");
-        push @hosts, $host;
-      }
-      elsif($parsingVMs) {
-        $vm = $1;
-        Ovom::log(0, "updateInventory; vm discovered = $vm");
-        push @vms, $vm;
-      }
-    }
+  if($configuration{'debug.mock.enabled'}) {
+    @hostArray = split /;/, $configuration{'debug.mock.hosts'};
+    @vmArray   = split /;/, $configuration{'debug.mock.vms'};
   }
-  close CMD;
-  $Ovom::inventory{'hosts'} = \@hosts;
-  $Ovom::inventory{'vms'}   = \@vms;
+  else {
+    open CMD,'-|', $dcListCommand or die "Can't run $dcListCommand :" . $@;
+    while (defined($line=<CMD>)) {
+      if ( $line =~ /^Hosts found:$/ ) {
+        $parsingHosts = 1;
+        $parsingVMs   = 0;
+      }
+      elsif ( $line =~ /^VM's found:$/ ) {
+        $parsingHosts = 0;
+        $parsingVMs   = 1;
+      }
+      else {
+        next if $line =~ /^\s*$/;
+        $line =~ /^\d+: (.+)$/;
+        if($parsingHosts) {
+          $host = $1;
+          Ovom::log(0, "updateInventory; host discovered = $host");
+          push @hostArray, $host;
+        }
+        elsif($parsingVMs) {
+          $vm = $1;
+          Ovom::log(0, "updateInventory; vm discovered = $vm");
+          push @vmArray, $vm;
+        }
+      }
+    }
+    close CMD;
+  }
+
+  $Ovom::inventory{'hosts'} = \@hostArray;
+  $Ovom::inventory{'vms'}   = \@vmArray;
 
   my($aHost, $aVM, $s);
   $s = "Discovered hosts: ";
@@ -87,7 +95,7 @@ sub updatePerformance {
 
   my($aHost, $aVM);
   foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
-    
+    getHostPerfs($aHost);
   }
 
 }
@@ -102,16 +110,46 @@ sub getHostPerfs {
                              " --host "        . $host;
   
 print "==== Mirem comptador $counterType de host $host: ====\n";
+    Ovom::log(0, "Getting counter '$counterType' from host '$host' running '$getHostPerfCommand'");
     open CMD,'-|', $getHostPerfCommand or die "Can't run $getHostPerfCommand :" . $@;
     my $line;
+    my ($counter, $instance, $description, $units, $sampleInfo, $value);
     while (defined($line=<CMD>)) {
-print "    $line\n";
+#print "    $line\n";
+      chomp $line;
+      if($line =~ /^\s*Counter\s*:\s*(.+)\s*$/) {
+        $counter = $1;
+      }
+      elsif($line =~ /^\s*Instance\s*:\s*(.+)\s*$/) {
+        $instance = $1;
+        $instance =~ s/^\s+//g;
+        $instance =~ s/\s+$//g;
+      }
+      elsif($line =~ /^\s*Description\s*:\s*(.+)\s*$/) {
+        $description = $1;
+      }
+      elsif($line =~ /^\s*Units\s*:\s*(.+)\s*$/) {
+        $units = $1;
+      }
+      elsif($line =~ /^\s*Sample info\s*:\s*(.+)\s*$/) {
+        $sampleInfo = $1;
+      }
+      elsif($line =~ /^\s*Value\s*:\s*(.+)\s*$/) {
+        $value = $1;
+# print "Read: counter=$counter, instance=$instance, description=$description, units=$units, sampleInfo=$sampleInfo, value=$value\n";
+        saveHostPerf($host, $counter, $instance, $description, $units, $sampleInfo, $value);
+      }
+#     else {
+#     }
+
     }
     close CMD;
   }
-
 }
 
+sub saveHostPerf {
+  my ($host, $counter, $instance, $description, $units, $sampleInfo, $value) = @_;
+}
 
 sub collectorInit {
   readConfiguration();
