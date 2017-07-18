@@ -87,6 +87,38 @@ sub updateInventory {
   $ch = $#{$Ovom::inventory{'hosts'}} + 1;
   $cv = $#{$Ovom::inventory{'vms'}}   + 1;
   Ovom::log(1, "Discovered $ch hosts and $cv VMs");
+
+  # Let's create folders for performance
+  my @periods = ("realtime", "day", "week", "month", "year");
+  foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
+    my $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$aHost/";
+    if(! -d $folder) {
+      Ovom::log(1, "Creating perfDataRoot folder for the host $aHost");
+      mkdir $folder or die "Failed to create folder for host $folder: $!";
+    }
+    foreach my $period (@periods) {
+      $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/" . $aHost . "/$period";
+      if(! -d $folder) {
+        Ovom::log(1, "Creating perfDataRoot folder for the host $aHost, period $period");
+        mkdir $folder or die "Failed to create folder for host $folder: $!";
+      }
+    }
+  }
+  foreach $aVM (@{$Ovom::inventory{'vms'}}) {
+    my $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/" . $aVM;
+    if(! -d $folder) {
+      Ovom::log(1, "Creating perfDataRoot folder for the vm $aVM");
+      mkdir $folder or die "Failed to create folder for vm $folder: $!";
+    }
+    foreach my $period (@periods) {
+      $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/" . $aVM . "/$period";
+      if(! -d $folder) {
+        Ovom::log(1, "Creating perfDataRoot folder for the vm $aVM, period $period");
+        mkdir $folder or die "Failed to create folder for host $folder: $!";
+      }
+    }
+  }
+
 }
 
 
@@ -104,6 +136,7 @@ sub getHostPerfs {
   my ($host) = shift;
   my ($counterType);
   foreach $counterType (@Ovom::counterTypes) {
+    my %hostPerfParams = ();
     my $getHostPerfCommand = $configuration{'command.getPerf'} .
                              " --server "      . $configuration{'vCenterName'} .
                              " --countertype " . $counterType .
@@ -114,6 +147,10 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
     open CMD,'-|', $getHostPerfCommand or die "Can't run $getHostPerfCommand :" . $@;
     my $line;
     my ($counter, $instance, $description, $units, $sampleInfo, $value);
+    my ($previousSampleInfo) = ('');
+    my (@valuesRefArray)     = ();
+    my (@counterUnitsArray)  = ();
+    $sampleInfo = '';
     while (defined($line=<CMD>)) {
 #print "    $line\n";
       chomp $line;
@@ -133,22 +170,75 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
       }
       elsif($line =~ /^\s*Sample info\s*:\s*(.+)\s*$/) {
         $sampleInfo = $1;
+        if($previousSampleInfo ne '' && $previousSampleInfo ne $sampleInfo) {
+          Ovom::log(3, "Different sampleInfo on two counters " . 
+                       "on same host $host, same counterType $counterType");
+          next;
+        }
       }
       elsif($line =~ /^\s*Value\s*:\s*(.+)\s*$/) {
         $value = $1;
+        push @valuesRefArray, \$value;
+        push @counterUnitsArray, "$counter ($units)";
 # print "Read: counter=$counter, instance=$instance, description=$description, units=$units, sampleInfo=$sampleInfo, value=$value\n";
-        saveHostPerf($host, $counter, $instance, $description, $units, $sampleInfo, $value);
       }
 #     else {
 #     }
 
     }
     close CMD;
+    if($#counterUnitsArray < 0 || $#valuesRefArray < 0) {
+      Ovom::log(3, "Found no counter or no values on host $host, counterType $counterType");
+      next;
+    }
+    $hostPerfParams{'host'}                 =  $host;
+    $hostPerfParams{'counterUnitsRefArray'} = \@counterUnitsArray;
+    $hostPerfParams{'sampleInfoRef'}        = \$sampleInfo;
+    $hostPerfParams{'valuesRefArray'}       = \@valuesRefArray;
+# $instance, $description,
+    saveHostPerf(\%hostPerfParams);
   }
 }
 
 sub saveHostPerf {
-  my ($host, $counter, $instance, $description, $units, $sampleInfo, $value) = @_;
+  my ($hostPerfParamsRef) = shift;
+  my ($host, @counterUnitsArray, $sampleInfo, @valuesRefArray);
+  $host              = $hostPerfParamsRef->{'host'};
+  @counterUnitsArray = @{$hostPerfParamsRef->{'counterUnitsRefArray'}};
+  $sampleInfo        = ${$hostPerfParamsRef->{'sampleInfoRef'}};
+  @valuesRefArray    = @{$hostPerfParamsRef->{'valuesRefArray'}};
+  print "saveHostPerf: host $host , ncua = " . $#counterUnitsArray . " nvra = " . $#valuesRefArray . "\n";
+
+  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/" . $host . "/realtime/latest.csv";
+  
+  my $fh;
+  open($fh, ">>", $outputFile)
+    or die "Could not open file '$outputFile': $!";
+  print $fh, $sampleInfo;
+  close($fh)
+}
+
+sub createDataFoldersIfNeeded {
+  my $folder = $Ovom::configuration{'perfDataRoot'};
+  if(! -d $folder) {
+    Ovom::log(1, "Creating perfDataRoot folder $folder");
+    mkdir $folder or die "Failed to create $folder: $!";
+  }
+  my $vCenterFolder .= "$folder/" . $Ovom::configuration{'vCenterName'};
+  if(! -d $vCenterFolder) {
+    Ovom::log(1, "Creating perfDataRoot folder for the vCenter $vCenterFolder");
+    mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
+  }
+  $folder = $vCenterFolder . "/hosts";
+  if(! -d $folder) {
+    Ovom::log(1, "Creating perfDataRoot folder for hosts of the vCenter $folder");
+    mkdir $folder or die "Failed to create $folder: $!";
+  }
+  $folder = $vCenterFolder . "/vms";
+  if(! -d $folder) {
+    Ovom::log(1, "Creating perfDataRoot folder for hosts of the vCenter $folder");
+    mkdir $folder or die "Failed to create $folder: $!";
+  }
 }
 
 sub collectorInit {
@@ -161,6 +251,7 @@ sub collectorInit {
     or die "Could not open collector log file '$clf': $!";
 
   Ovom::log(1, "Configuration read");
+  createDataFoldersIfNeeded();
 }
 
 
