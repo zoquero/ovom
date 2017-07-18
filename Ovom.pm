@@ -149,6 +149,7 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
     my ($counter, $instance, $description, $units, $sampleInfo, $value);
     my ($previousSampleInfo) = ('');
     my (@valuesRefArray)     = ();
+    my ($sampleInfoArrayRef);
     my (@counterUnitsArray)  = ();
     $sampleInfo = '';
     while (defined($line=<CMD>)) {
@@ -191,9 +192,10 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
       Ovom::log(3, "Found no counter or no values on host $host, counterType $counterType");
       next;
     }
+    $sampleInfoArrayRef = sampleInfoArrayRefFromString($sampleInfo);
     $hostPerfParams{'host'}                 =  $host;
     $hostPerfParams{'counterUnitsRefArray'} = \@counterUnitsArray;
-    $hostPerfParams{'sampleInfoRef'}        = \$sampleInfo;
+    $hostPerfParams{'sampleInfoArrayRef'}   = $sampleInfoArrayRef;
     $hostPerfParams{'valuesRefArray'}       = \@valuesRefArray;
 # $instance, $description,
     saveHostPerf(\%hostPerfParams);
@@ -202,20 +204,36 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
 
 sub saveHostPerf {
   my ($hostPerfParamsRef) = shift;
-  my ($host, @counterUnitsArray, $sampleInfo, @valuesRefArray);
+  my ($host, @counterUnitsArray, @sampleInfo, @valuesRefArray);
   $host              = $hostPerfParamsRef->{'host'};
   @counterUnitsArray = @{$hostPerfParamsRef->{'counterUnitsRefArray'}};
-  $sampleInfo        = ${$hostPerfParamsRef->{'sampleInfoRef'}};
+  @sampleInfo        = @{$hostPerfParamsRef->{'sampleInfoArrayRef'}};
   @valuesRefArray    = @{$hostPerfParamsRef->{'valuesRefArray'}};
-  print "saveHostPerf: host $host , ncua = " . $#counterUnitsArray . " nvra = " . $#valuesRefArray . "\n";
+  print "saveHostPerf: host $host , ncua = " . $#counterUnitsArray . " nvra = " . $#valuesRefArray . ", sampleInfo=$#sampleInfo\n";
 
   my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/" . $host . "/realtime/latest.csv";
   
   my $fh;
   open($fh, ">>", $outputFile)
     or die "Could not open file '$outputFile': $!";
-  print $fh, $sampleInfo;
-  close($fh)
+  print $fh "Host $host\n";
+  foreach my $aSampleInfo (@sampleInfo) {
+    print $fh "$aSampleInfo\n";
+  }
+  close($fh);
+}
+
+sub sampleInfoArrayRefFromString {
+  my $rawSampleInfoStrRef = shift;
+  my @sampleInfoArray = ();
+  my @tmpArray = split /,/, $rawSampleInfoStrRef;
+  my $z = 0;
+  for my $i (0 .. $#tmpArray) {
+    if ($i % 2) {
+      push @sampleInfoArray, $tmpArray[$i];
+    }
+  }
+  return \@sampleInfoArray;
 }
 
 sub createDataFoldersIfNeeded {
