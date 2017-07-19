@@ -192,11 +192,13 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
       Ovom::log(3, "Found no counter or no values on host $host, counterType $counterType");
       next;
     }
-    $sampleInfoArrayRef = sampleInfoArrayRefFromString($sampleInfo);
-    $hostPerfParams{'host'}                 =  $host;
+    $sampleInfoArrayRef = getSampleInfoArrayRefFromString($sampleInfo);
+    $hostPerfParams{'host'}                 = $host;
+    $hostPerfParams{'counterType'}          = $counterType;
     $hostPerfParams{'counterUnitsRefArray'} = \@counterUnitsArray;
     $hostPerfParams{'sampleInfoArrayRef'}   = $sampleInfoArrayRef;
-    $hostPerfParams{'valuesRefArray'}       = \@valuesRefArray;
+#   $hostPerfParams{'valuesRefArray'}       = \@valuesRefArray;
+    $hostPerfParams{'valuesRefOfArrayOfArrayOfRefs'}       = getValuesArrayOfArraysFromArrayOfStrings(\@valuesRefArray);
 # $instance, $description,
     saveHostPerf(\%hostPerfParams);
   }
@@ -204,26 +206,56 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
 
 sub saveHostPerf {
   my ($hostPerfParamsRef) = shift;
-  my ($host, @counterUnitsArray, @sampleInfo, @valuesRefArray);
+  my ($host, $counterType, @counterUnitsArray, @sampleInfo, @valuesArrayOfArrayOfRefs);
+  my (@aValuesArray);
+  my ($fh);
   $host              = $hostPerfParamsRef->{'host'};
+  $counterType       = $hostPerfParamsRef->{'counterType'};
   @counterUnitsArray = @{$hostPerfParamsRef->{'counterUnitsRefArray'}};
   @sampleInfo        = @{$hostPerfParamsRef->{'sampleInfoArrayRef'}};
-  @valuesRefArray    = @{$hostPerfParamsRef->{'valuesRefArray'}};
-  print "saveHostPerf: host $host , ncua = " . $#counterUnitsArray . " nvra = " . $#valuesRefArray . ", sampleInfo=$#sampleInfo\n";
+  @valuesArrayOfArrayOfRefs = @{$hostPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
+  print "saveHostPerf: host $host , ncua=$#counterUnitsArray sampleInfo=$#sampleInfo valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n";
 
-  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/" . $host . "/realtime/latest.csv";
+  foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
+    print "Un component de refToAnArrayOfValues té $#{$refToAnArrayOfValues} components\n";
+  }
+
+  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$host/realtime/$counterType.latest.csv";
+
+  my $headFile = $outputFile . ".head";
+  if (! -f $headFile) {
+    open($fh, ">", $headFile)
+      or die "Could not open file '$headFile': $!";
+    print $fh join (',', @counterUnitsArray) . "\n";
+    close($fh);
+  }
   
-  my $fh;
   open($fh, ">>", $outputFile)
     or die "Could not open file '$outputFile': $!";
-  print $fh "Host $host\n";
-  foreach my $aSampleInfo (@sampleInfo) {
-    print $fh "$aSampleInfo\n";
+  my $outputBuffer;
+  for my $i (0 .. $#sampleInfo) {
+    $outputBuffer = "$sampleInfo[$i]";
+    for my $j (0 .. $#valuesArrayOfArrayOfRefs) {
+      $outputBuffer .= ",${$valuesArrayOfArrayOfRefs[$j]}[$i]";
+    }
+    print $fh "$outputBuffer\n";
   }
   close($fh);
 }
 
-sub sampleInfoArrayRefFromString {
+sub getValuesArrayOfArraysFromArrayOfStrings {
+  my $valuesArrayOfStrings = shift;
+  my @arrayOfArrayRefs     = ();
+  my @aValuesArray         = ();
+  foreach my $aValuesRefArray (@$valuesArrayOfStrings) {
+    @aValuesArray = split /,/, $$aValuesRefArray;
+#   print "aValuesArray = $#aValuesArray \n";
+    push @arrayOfArrayRefs, \@aValuesArray;
+  }
+  return \@arrayOfArrayRefs;
+}
+
+sub getSampleInfoArrayRefFromString {
   my $rawSampleInfoStrRef = shift;
   my @sampleInfoArray = ();
   my @tmpArray = split /,/, $rawSampleInfoStrRef;
