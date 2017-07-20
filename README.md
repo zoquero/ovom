@@ -1,4 +1,4 @@
-# Summari
+# Summary
 
 Open vCenter Operations Manager is a tool to manage and monitor operational state and performance of a VMware vCenter infraestructure.
 
