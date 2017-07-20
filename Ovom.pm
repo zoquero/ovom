@@ -146,15 +146,18 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
     Ovom::log(0, "Getting counter '$counterType' from host '$host' running '$getHostPerfCommand'");
     open CMD,'-|', $getHostPerfCommand or die "Can't run $getHostPerfCommand :" . $@;
     my $line;
-    my ($counter, $instance, $description, $units, $sampleInfo, $value);
+    my ($counter, $instance, $description, $units, $sampleInfo);
+    my (@values) = ();
     my ($previousSampleInfo) = ('');
     my (@valuesRefArray)     = ();
     my ($sampleInfoArrayRef);
     my (@counterUnitsArray)  = ();
     $sampleInfo = '';
     while (defined($line=<CMD>)) {
-#print "    $line\n";
+      my $value = '';
       chomp $line;
+      next if($line =~ /^\s*$/);
+#print "DEBUG: $line\n";
       if($line =~ /^\s*Counter\s*:\s*(.+)\s*$/) {
         $counter = $1;
       }
@@ -178,10 +181,10 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
         }
       }
       elsif($line =~ /^\s*Value\s*:\s*(.+)\s*$/) {
-        $value = $1;
-        push @valuesRefArray, \$value;
+        my $valTmp = $1;
+#       Ovom::log(0, "DEBUG.getHostPerfs(): Value pushed for $counter ($units): [" . $valTmp . "]\n");
+        push @valuesRefArray, \$valTmp;
         push @counterUnitsArray, "$counter ($units)";
-# print "Read: counter=$counter, instance=$instance, description=$description, units=$units, sampleInfo=$sampleInfo, value=$value\n";
       }
 #     else {
 #     }
@@ -198,7 +201,7 @@ print "==== Mirem comptador $counterType de host $host: ====\n";
     $hostPerfParams{'counterUnitsRefArray'} = \@counterUnitsArray;
     $hostPerfParams{'sampleInfoArrayRef'}   = $sampleInfoArrayRef;
 #   $hostPerfParams{'valuesRefArray'}       = \@valuesRefArray;
-    $hostPerfParams{'valuesRefOfArrayOfArrayOfRefs'}       = getValuesArrayOfArraysFromArrayOfStrings(\@valuesRefArray);
+    $hostPerfParams{'valuesRefOfArrayOfArrayOfRefs'} = getValuesArrayOfArraysFromArrayOfStrings(\@valuesRefArray);
 # $instance, $description,
     saveHostPerf(\%hostPerfParams);
   }
@@ -214,10 +217,10 @@ sub saveHostPerf {
   @counterUnitsArray = @{$hostPerfParamsRef->{'counterUnitsRefArray'}};
   @sampleInfo        = @{$hostPerfParamsRef->{'sampleInfoArrayRef'}};
   @valuesArrayOfArrayOfRefs = @{$hostPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
-  print "saveHostPerf: host $host , ncua=$#counterUnitsArray sampleInfo=$#sampleInfo valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n";
+  Ovom::log(0, "DEBUG.saveHostPerf: host $host , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
 
   foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
-    print "Un component de refToAnArrayOfValues té $#{$refToAnArrayOfValues} components\n";
+    Ovom::log(0, "DEBUG.saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
   }
 
   my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$host/realtime/$counterType.latest.csv";
@@ -246,10 +249,9 @@ sub saveHostPerf {
 sub getValuesArrayOfArraysFromArrayOfStrings {
   my $valuesArrayOfStrings = shift;
   my @arrayOfArrayRefs     = ();
-  my @aValuesArray         = ();
   foreach my $aValuesRefArray (@$valuesArrayOfStrings) {
-    @aValuesArray = split /,/, $$aValuesRefArray;
-#   print "aValuesArray = $#aValuesArray \n";
+    my @aValuesArray = split /,/, $$aValuesRefArray;
+#   Ovom::log(0, "DEBUG.getValuesArrayOfArraysFromArrayOfStrings(): $#aValuesArray values: [0]=$aValuesArray[0], [1]=$aValuesArray[1], [2]=$aValuesArray[2], ...\n");
     push @arrayOfArrayRefs, \@aValuesArray;
   }
   return \@arrayOfArrayRefs;
@@ -260,8 +262,10 @@ sub getSampleInfoArrayRefFromString {
   my @sampleInfoArray = ();
   my @tmpArray = split /,/, $rawSampleInfoStrRef;
   my $z = 0;
+#print "DEBUG.gsiarfs: init\n";
   for my $i (0 .. $#tmpArray) {
     if ($i % 2) {
+#print "DEBUG:.gsiarfs: push = " . $tmpArray[$i] . "\n";
       push @sampleInfoArray, $tmpArray[$i];
     }
   }
