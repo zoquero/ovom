@@ -5,6 +5,7 @@ use Exporter;
 use Cwd 'abs_path';
 use File::Basename;
 use POSIX qw/strftime/;
+use Time::Piece;
 
 our @ISA= qw( Exporter );
 
@@ -142,7 +143,7 @@ sub getHostPerfs {
                              " --countertype " . $counterType .
                              " --host "        . $host;
   
-print "==== Mirem comptador $counterType de host $host: ====\n";
+print "DEBUG: ==== Let's get counter $counterType from host $host: ====\n";
     Ovom::log(0, "Getting counter '$counterType' from host '$host' running '$getHostPerfCommand'");
     open CMD,'-|', $getHostPerfCommand or die "Can't run $getHostPerfCommand :" . $@;
     my $line;
@@ -266,7 +267,13 @@ sub getSampleInfoArrayRefFromString {
   for my $i (0 .. $#tmpArray) {
     if ($i % 2) {
 #print "DEBUG:.gsiarfs: push = " . $tmpArray[$i] . "\n";
-      push @sampleInfoArray, $tmpArray[$i];
+
+      # 2017-07-20T05:49:40Z
+      $tmpArray[$i] =~ s/Z$/\+0000/;
+      my $t = Time::Piece->strptime($tmpArray[$i], "%Y-%m-%dT%H:%M:%S%z");
+      print $tmpArray[$i] . " = " . $t->epoch . "\n";
+
+      push @sampleInfoArray, $t->epoch;
     }
   }
   return \@sampleInfoArray;
