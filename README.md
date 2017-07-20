@@ -1,6 +1,6 @@
 # Summari
 
-Open vCenter Operations Manager is a suite to manage an monitor operational state and performance of a VMware vCenter infraestructure.
+Open vCenter Operations Manager is a tool to manage and monitor operational state and performance of a VMware vCenter infraestructure.
 
 It relies upon the vCenter Perl SDK API, tested on 6.5.
 
@@ -26,3 +26,9 @@ It's in an initial development stage but its goals are:
     * vHardware scale (more or less vCPUs for VMs)
 * Report alarms
 
+# Development
+
+It's in development stage. It's expected to have a release in september 2017 with at least:
+* Inventory
+* Collection of performance metrics
+* Show performance metrics
