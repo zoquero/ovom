@@ -127,10 +127,88 @@ sub updatePerformance {
   Ovom::log(1, "Updating performance");
 
   my($aHost, $aVM);
+  foreach $aVM (@{$Ovom::inventory{'vms'}}) {
+    getVmPerfs($aVM);
+  }
   foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
     getHostPerfs($aHost);
   }
 
+}
+
+
+sub getVmPerfs {
+  my ($vm) = shift;
+  my ($counterType);
+  foreach $counterType (@Ovom::counterTypes) {
+    my %vmPerfParams = ();
+    my $getVmPerfCommand = $configuration{'command.getPerf'} .
+                             " --server "      . $configuration{'vCenterName'} .
+                             " --countertype " . $counterType .
+                             " --vm "        . $vm;
+  
+print "DEBUG: ==== Let's get counter $counterType from vm $vm: ====\n";
+    Ovom::log(0, "Getting counter '$counterType' from vm '$vm' running '$getVmPerfCommand'");
+    open CMD,'-|', $getVmPerfCommand or die "Can't run $getVmPerfCommand :" . $@;
+    my $line;
+    my ($counter, $instance, $description, $units, $sampleInfo);
+    my (@values) = ();
+    my ($previousSampleInfo) = ('');
+    my (@valuesRefArray)     = ();
+    my ($sampleInfoArrayRef);
+    my (@counterUnitsArray)  = ();
+    $sampleInfo = '';
+    while (defined($line=<CMD>)) {
+      my $value = '';
+      chomp $line;
+      next if($line =~ /^\s*$/);
+#print "DEBUG: $line\n";
+      if($line =~ /^\s*Counter\s*:\s*(.+)\s*$/) {
+        $counter = $1;
+      }
+      elsif($line =~ /^\s*Instance\s*:\s*(.+)\s*$/) {
+        $instance = $1;
+        $instance =~ s/^\s+//g;
+        $instance =~ s/\s+$//g;
+      }
+      elsif($line =~ /^\s*Description\s*:\s*(.+)\s*$/) {
+        $description = $1;
+      }
+      elsif($line =~ /^\s*Units\s*:\s*(.+)\s*$/) {
+        $units = $1;
+      }
+      elsif($line =~ /^\s*Sample info\s*:\s*(.+)\s*$/) {
+        $sampleInfo = $1;
+        if($previousSampleInfo ne '' && $previousSampleInfo ne $sampleInfo) {
+          Ovom::log(3, "Different sampleInfo on two counters " . 
+                       "on same vm $vm, same counterType $counterType");
+          next;
+        }
+      }
+      elsif($line =~ /^\s*Value\s*:\s*(.+)\s*$/) {
+        my $valTmp = $1;
+#       Ovom::log(0, "DEBUG.getVmPerfs(): Value pushed for $counter ($units): [" . $valTmp . "]\n");
+        push @valuesRefArray, \$valTmp;
+        push @counterUnitsArray, "$counter ($units)";
+      }
+#     else {
+#     }
+
+    }
+    close CMD;
+    if($#counterUnitsArray < 0 || $#valuesRefArray < 0) {
+      Ovom::log(3, "Found no counter or no values on vm $vm, counterType $counterType");
+      next;
+    }
+    $sampleInfoArrayRef = getSampleInfoArrayRefFromString($sampleInfo);
+    $vmPerfParams{'vm'}                 = $vm;
+    $vmPerfParams{'counterType'}          = $counterType;
+    $vmPerfParams{'counterUnitsRefArray'} = \@counterUnitsArray;
+    $vmPerfParams{'sampleInfoArrayRef'}   = $sampleInfoArrayRef;
+    $vmPerfParams{'valuesRefOfArrayOfArrayOfRefs'} = getValuesArrayOfArraysFromArrayOfStrings(\@valuesRefArray);
+# $instance, $description,
+    saveVmPerf(\%vmPerfParams);
+  }
 }
 
 sub getHostPerfs {
@@ -201,12 +279,52 @@ print "DEBUG: ==== Let's get counter $counterType from host $host: ====\n";
     $hostPerfParams{'counterType'}          = $counterType;
     $hostPerfParams{'counterUnitsRefArray'} = \@counterUnitsArray;
     $hostPerfParams{'sampleInfoArrayRef'}   = $sampleInfoArrayRef;
-#   $hostPerfParams{'valuesRefArray'}       = \@valuesRefArray;
     $hostPerfParams{'valuesRefOfArrayOfArrayOfRefs'} = getValuesArrayOfArraysFromArrayOfStrings(\@valuesRefArray);
 # $instance, $description,
     saveHostPerf(\%hostPerfParams);
   }
 }
+
+
+sub saveVmPerf {
+  my ($vmPerfParamsRef) = shift;
+  my ($vm, $counterType, @counterUnitsArray, @sampleInfo, @valuesArrayOfArrayOfRefs);
+  my (@aValuesArray);
+  my ($fh);
+  $vm              = $vmPerfParamsRef->{'vm'};
+  $counterType       = $vmPerfParamsRef->{'counterType'};
+  @counterUnitsArray = @{$vmPerfParamsRef->{'counterUnitsRefArray'}};
+  @sampleInfo        = @{$vmPerfParamsRef->{'sampleInfoArrayRef'}};
+  @valuesArrayOfArrayOfRefs = @{$vmPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
+  Ovom::log(0, "DEBUG.saveHostPerf: vm $vm , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
+
+  foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
+    Ovom::log(0, "DEBUG.saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
+  }
+
+  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/$vm/realtime/$counterType.latest.csv";
+
+  my $headFile = $outputFile . ".head";
+  if (! -f $headFile) {
+    open($fh, ">", $headFile)
+      or die "Could not open file '$headFile': $!";
+    print $fh join (',', @counterUnitsArray) . "\n";
+    close($fh);
+  }
+  
+  open($fh, ">>", $outputFile)
+    or die "Could not open file '$outputFile': $!";
+  my $outputBuffer;
+  for my $i (0 .. $#sampleInfo) {
+    $outputBuffer = "$sampleInfo[$i]";
+    for my $j (0 .. $#valuesArrayOfArrayOfRefs) {
+      $outputBuffer .= ",${$valuesArrayOfArrayOfRefs[$j]}[$i]";
+    }
+    print $fh "$outputBuffer\n";
+  }
+  close($fh);
+}
+
 
 sub saveHostPerf {
   my ($hostPerfParamsRef) = shift;
