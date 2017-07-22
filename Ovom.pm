@@ -20,6 +20,12 @@ our %ovomGlobals;
 our %inventory;
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
+#
+# Gets inventory from vCenter and updates globals @hostArray and @vmArray .
+#
+# @return 1 error, 0 ok
+#
+#
 sub updateInventory {
   my @hostArray = ();
   my @vmArray   = ();
@@ -66,6 +72,11 @@ sub updateInventory {
       }
     }
     close CMD;
+    my $exit = $? >> 8;
+    if ($exit ne 0) {
+      Ovom::log(3, "Bad exit status running $dcListCommand to get inventory");
+      return 1;
+    }
   }
 
   $Ovom::inventory{'hosts'} = \@hostArray;
@@ -119,24 +130,41 @@ sub updateInventory {
       }
     }
   }
-
+  return 0;
 }
 
 
+#
+# Updates performance from hosts and VMs
+#
+# @return 0 ok, 1 errors
+#
 sub updatePerformance {
   Ovom::log(1, "Updating performance");
 
   my($aHost, $aVM);
   foreach $aVM (@{$Ovom::inventory{'vms'}}) {
-    getVmPerfs($aVM);
+    if(getVmPerfs($aVM)) {
+      Ovom::log(3, "Errors updating performance, going back to main");
+      return 1;
+    }
   }
   foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
-    getHostPerfs($aHost);
+    if(getHostPerfs($aHost)) {
+      Ovom::log(3, "Errors updating performance, going back to main");
+      return 1;
+    }
   }
-
+  return 0;
 }
 
 
+#
+# Gets performance metrics for a VM
+#
+# @param VM name
+# @return 0 ok, 1 errors (error running the command or data not available)
+#
 sub getVmPerfs {
   my ($vm) = shift;
   my ($counterType);
@@ -196,10 +224,18 @@ print "DEBUG: ==== Let's get counter $counterType from vm $vm: ====\n";
 
     }
     close CMD;
+    my $exit = $? >> 8;
+    if ($exit ne 0) {
+      Ovom::log(3, "Bad exit status running $getVmPerfCommand to get vm performance");
+      return 1;
+    }
+
     if($#counterUnitsArray < 0 || $#valuesRefArray < 0) {
       Ovom::log(3, "Found no counter or no values on vm $vm, counterType $counterType");
-      next;
+      return 1;
     }
+    splice @counterUnitsArray, 0, 0, "epoch(s)"; # time in seconds since 1 Jan 1970 UTC
+
     $sampleInfoArrayRef = getSampleInfoArrayRefFromString($sampleInfo);
     $vmPerfParams{'vm'}                 = $vm;
     $vmPerfParams{'counterType'}          = $counterType;
@@ -209,8 +245,15 @@ print "DEBUG: ==== Let's get counter $counterType from vm $vm: ====\n";
 # $instance, $description,
     saveVmPerf(\%vmPerfParams);
   }
+  return 0;
 }
 
+#
+# Gets performance metrics for a Host
+#
+# @param Host name
+# @return 0 ok, 1 errors (error running the command or data not available)
+#
 sub getHostPerfs {
   my ($host) = shift;
   my ($counterType);
@@ -270,10 +313,18 @@ print "DEBUG: ==== Let's get counter $counterType from host $host: ====\n";
 
     }
     close CMD;
+    my $exit = $? >> 8;
+    if ($exit ne 0) {
+      Ovom::log(3, "Bad exit status running $getHostPerfCommand to get host performance");
+      return 1;
+    }
+
     if($#counterUnitsArray < 0 || $#valuesRefArray < 0) {
       Ovom::log(3, "Found no counter or no values on host $host, counterType $counterType");
-      next;
+      return 1;
     }
+    splice @counterUnitsArray, 0, 0, "epoch(s)"; # time in seconds since 1 Jan 1970 UTC
+
     $sampleInfoArrayRef = getSampleInfoArrayRefFromString($sampleInfo);
     $hostPerfParams{'host'}                 = $host;
     $hostPerfParams{'counterType'}          = $counterType;
@@ -283,6 +334,7 @@ print "DEBUG: ==== Let's get counter $counterType from host $host: ====\n";
 # $instance, $description,
     saveHostPerf(\%hostPerfParams);
   }
+  return 0;
 }
 
 
@@ -296,10 +348,10 @@ sub saveVmPerf {
   @counterUnitsArray = @{$vmPerfParamsRef->{'counterUnitsRefArray'}};
   @sampleInfo        = @{$vmPerfParamsRef->{'sampleInfoArrayRef'}};
   @valuesArrayOfArrayOfRefs = @{$vmPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
-  Ovom::log(0, "DEBUG.saveHostPerf: vm $vm , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
+  Ovom::log(0, "saveHostPerf: vm $vm , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
 
   foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
-    Ovom::log(0, "DEBUG.saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
+    Ovom::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
   }
 
   my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/$vm/realtime/$counterType.latest.csv";
@@ -336,10 +388,10 @@ sub saveHostPerf {
   @counterUnitsArray = @{$hostPerfParamsRef->{'counterUnitsRefArray'}};
   @sampleInfo        = @{$hostPerfParamsRef->{'sampleInfoArrayRef'}};
   @valuesArrayOfArrayOfRefs = @{$hostPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
-  Ovom::log(0, "DEBUG.saveHostPerf: host $host , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
+  Ovom::log(0, "saveHostPerf: host $host , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
 
   foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
-    Ovom::log(0, "DEBUG.saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
+    Ovom::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
   }
 
   my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$host/realtime/$counterType.latest.csv";
@@ -423,11 +475,19 @@ sub createDataFoldersIfNeeded {
 sub collectorInit {
   readConfiguration();
 
-  my($clf) = $Ovom::configuration{'logFolder'} . "/collector.log";
-  $Ovom::ovomGlobals{'collectorLogFile'} = $clf;
+  # Regular log
+  my($clf) = $Ovom::configuration{'logFolder'} . "/collector.main.log";
+  $Ovom::ovomGlobals{'collectorMainLogFile'} = $clf;
 
-  open($Ovom::ovomGlobals{'collectorLogHandle'}, ">>", $clf)
-    or die "Could not open collector log file '$clf': $!";
+  open($Ovom::ovomGlobals{'collectorMainLogHandle'}, ">>", $clf)
+    or die "Could not open collector main log file '$clf': $!";
+
+  # Error log
+  my($celf) = $Ovom::configuration{'logFolder'} . "/collector.error.log";
+  $Ovom::ovomGlobals{'collectorErrorLogFile'} = $celf;
+
+  open($Ovom::ovomGlobals{'collectorErrorLogHandle'}, ">>", $celf)
+    or die "Could not open collector error log file '$celf': $!";
 
   Ovom::log(1, "Configuration read");
   createDataFoldersIfNeeded();
@@ -437,10 +497,13 @@ sub collectorInit {
 sub collectorStop {
   Ovom::log(1, "Stopping collector");
 
-  my($clf) = $Ovom::ovomGlobals{'collectorLogFile'};
+  close($Ovom::ovomGlobals{'collectorMainLogHandle'})
+    or die "Could not close collector main log file '" .
+             $Ovom::ovomGlobals{'collectorMainLogFile'} . "': $!";
 
-  close($Ovom::ovomGlobals{'collectorLogHandle'})
-    or die "Could not open collector log file '$clf': $!";
+  close($Ovom::ovomGlobals{'collectorErrorLogHandle'})
+    or die "Could not close collector error log file '" .
+             $Ovom::ovomGlobals{'collectorErrorLogFile'} . "': $!";
 }
 
 
@@ -481,7 +544,16 @@ sub log ($$) {
     $crit = "UNKNOWN";
   }
 
-  print {$Ovom::ovomGlobals{'collectorLogHandle'}} "${nowStr}Z: [$crit] $msg\n";
+  my $logHandle;
+  if($logLevel == 3) {
+    # Error !
+    $logHandle = $Ovom::ovomGlobals{'collectorErrorLogHandle'};
+  }
+  else {
+    # Main log
+    $logHandle = $Ovom::ovomGlobals{'collectorMainLogHandle'};
+  }
+  print $logHandle "${nowStr}Z: [$crit] $msg\n";
 }
 
 1;
