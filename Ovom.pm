@@ -20,6 +20,30 @@ our %ovomGlobals;
 our %inventory;
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
+# vmname/last_hour/
+# vmname/last_day/
+# vmname/last_week/
+# vmname/last_month/
+# vmname/last_year/
+
+sub getIntervalNames {
+  my @intervalNames = split /;/, $configuration{'intervals.names'};
+  return \@intervalNames;
+}
+
+
+sub getIntervalWidths {
+  my @intervalWidths = split /;/, $configuration{'intervals.widths'};
+  return \@intervalWidths;
+}
+
+
+sub getSampleLengths {
+  my @sampleLengths = split /;/, $configuration{'intervals.sample_lengths'};
+  return \@sampleLengths;
+}
+
+
 #
 # Gets inventory from vCenter and updates globals @hostArray and @vmArray .
 #
@@ -101,14 +125,14 @@ sub updateInventory {
   Ovom::log(1, "Discovered $ch hosts and $cv VMs");
 
   # Let's create folders for performance
-  my @periods = ("realtime", "day", "week", "month", "year");
+  my $intervalNamesRef = getIntervalNames();
   foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
     my $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$aHost/";
     if(! -d $folder) {
       Ovom::log(1, "Creating perfDataRoot folder for the host $aHost");
       mkdir $folder or die "Failed to create folder for host $folder: $!";
     }
-    foreach my $period (@periods) {
+    foreach my $period (@$intervalNamesRef) {
       $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/" . $aHost . "/$period";
       if(! -d $folder) {
         Ovom::log(1, "Creating perfDataRoot folder for the host $aHost, period $period");
@@ -122,7 +146,7 @@ sub updateInventory {
       Ovom::log(1, "Creating perfDataRoot folder for the vm $aVM");
       mkdir $folder or die "Failed to create folder for vm $folder: $!";
     }
-    foreach my $period (@periods) {
+    foreach my $period (@$intervalNamesRef) {
       $folder = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/" . $aVM . "/$period";
       if(! -d $folder) {
         Ovom::log(1, "Creating perfDataRoot folder for the vm $aVM, period $period");
@@ -145,14 +169,14 @@ sub updatePerformance {
   my($aHost, $aVM);
   foreach $aVM (@{$Ovom::inventory{'vms'}}) {
     if(getVmPerfs($aVM)) {
-      Ovom::log(3, "Errors updating performance, going back to main");
-      return 1;
+      Ovom::log(3, "Errors updating performance from VM $aVM, moving to next");
+      next;
     }
   }
   foreach $aHost (@{$Ovom::inventory{'hosts'}}) {
     if(getHostPerfs($aHost)) {
-      Ovom::log(3, "Errors updating performance, going back to main");
-      return 1;
+      Ovom::log(3, "Errors updating performance from Host $aHost, moving to next");
+      next;
     }
   }
   return 0;
@@ -354,7 +378,7 @@ sub saveVmPerf {
     Ovom::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
   }
 
-  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/$vm/realtime/$counterType.latest.csv";
+  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/vms/$vm/hour/$counterType.csv";
 
   my $headFile = $outputFile . ".head";
   if (! -f $headFile) {
@@ -394,7 +418,7 @@ sub saveHostPerf {
     Ovom::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
   }
 
-  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$host/realtime/$counterType.latest.csv";
+  my $outputFile = $Ovom::configuration{'perfDataRoot'} . "/" . $Ovom::configuration{'vCenterName'} . "/hosts/$host/hour/$counterType.csv";
 
   my $headFile = $outputFile . ".head";
   if (! -f $headFile) {
@@ -441,7 +465,7 @@ sub getSampleInfoArrayRefFromString {
       # 2017-07-20T05:49:40Z
       $tmpArray[$i] =~ s/Z$/\+0000/;
       my $t = Time::Piece->strptime($tmpArray[$i], "%Y-%m-%dT%H:%M:%S%z");
-      print $tmpArray[$i] . " = " . $t->epoch . "\n";
+#     print $tmpArray[$i] . " = " . $t->epoch . "\n";
 
       push @sampleInfoArray, $t->epoch;
     }
