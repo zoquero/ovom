@@ -1,0 +1,23 @@
+Util::connect();
+my $entity;
+  my $vm = Opts::get_option('vm');
+  # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | DataCenter | ClusterComputeResource
+
+  $entity = Vim::find_entity_view(view_type => 'VirtualMachine',
+                                   properties => ['name','summary'],
+                                   filter => { name => $vm });
+                                   filter => { name => $host });
+}
+
+if (!$entity) {
+   die "Target entity not found\n";
+}
+
+# https://www.vmware.com/support/developer/viperltoolkit/doc/perl_toolkit_guide_idx.html
+# https://blogs.vmware.com/vsphere/2012/02/uniquely-identifying-virtual-machines-in-vsphere-and-vcloud-part-1-overview.html
+# https://blogs.vmware.com/vsphere/2012/02/uniquely-identifying-virtual-machines-in-vsphere-and-vcloud-part-2-technical.html print "Name:\n";
+print " VM name :" . $entity->name . "\n";
+print " MoRefId :" . $entity->summary->vm->value      . "\n";
+print " UUID    :" . $entity->summary->config->uuid   . "\n";
+print " numCpu  :" . $entity->summary->config->numCpu . "\n";
+
