@@ -32,3 +32,6 @@ It's in development stage. It's expected to have a release in september 2017 wit
 * Inventory
 * Collection of performance metrics
 * Show performance metrics
+
+# Some API links
+* http://www.ovh.com/images/vmWorld/OVH60.pdf

@@ -13,10 +13,10 @@ use VMware::VIRuntime;
 our @ISA= qw( Exporter );
 
 # Functions that CAN be exported:
-our @EXPORT_OK = qw( updateInventory updatePerformance collectorInit collectorStop readConfiguration log );
+our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collectorStop readConfiguration log );
 
 # # Functions that are exported by default:
-# our @EXPORT = qw( updatePerformance );
+# our @EXPORT = qw( getLatestPerformance );
 
 our %configuration;
 our %ovomGlobals;
@@ -47,6 +47,33 @@ our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # }
 
 
+sub connect {
+  my $vCWSUrl = 'https://'
+                . $OvomExtractor::configuration{'vCenterName'}
+                . '/sdk/webService';
+  eval { Util::connect($vCWSUrl,
+                       $OvomExtractor::configuration{'vCUsername'},
+                       $OvomExtractor::configuration{'vCPassword'}); };
+  if($@) {
+    OvomExtractor::log(3, "Errors connecting to $vCWSUrl: $@");
+    return 1;
+  }
+  OvomExtractor::log(1, "Successfully connected to $vCWSUrl");
+  return 0;
+}
+
+
+sub disconnect {
+  eval { Util::disconnect(); };
+  if($@) {
+    OvomExtractor::log(3, "Errors disconnecting from vCenter : $@");
+    return 1;
+  }
+  OvomExtractor::log(1, "Successfully disconnected from vCenter");
+  return 0;
+}
+
+
 #
 # Gets inventory from vCenter and updates globals @hostArray and @vmArray .
 #
@@ -56,36 +83,48 @@ our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 sub updateInventory {
   my @hosts = ();
   my @vms   = ();
-  OvomExtractor::log(1, "Updating inventory");
 
   #
   # Let's connect to vC:
   #
-  my $vCWSUrl = 'https://'
-               . $OvomExtractor::configuration{'vCenterName'}
-               . '/sdk/webService';
-  eval { Util::connect($vCWSUrl,
-                       $OvomExtractor::configuration{'vCUsername'},
-                       $OvomExtractor::configuration{'vCPassword'}); };
+  return 1 if(OvomExtractor::connect());
+
+  # get datacenters
+  # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | DataCenter | ClusterComputeResource
+#  my $dcViews = Vim::find_entity_views(view_type => 'DataCenter',
+#                                   properties => ['name']);
+##                                  properties => ['name','summary']
+
+  my $dcViews;
+  eval {
+    $dcViews = Vim::find_entity_views(
+      'view_type'  => 'Datacenter',
+#     'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
+      'properties' => ['name'] # 1/10 data
+    );
+  };
   if($@) {
-    OvomExtractor::log(3, "Errors connecting to $vCWSUrl: $@");
+    OvomExtractor::log(3, "Errors getting DataCenters: $@");
     return 1;
   }
-  else {
-    OvomExtractor::log(1, "Successfully connected to $vCWSUrl");
+
+  if (!@$dcViews) {
+    OvomExtractor::log(3, "Can't find DataCenters in the vCenter");
   }
+
+
+  foreach (@$dcViews) {
+    print "===============\n";
+    print "DEBUG: DataCenter: " . $_->name . "\n";
+#   print Dumper($_);
+    print "===============\n";
+  }
+
 
   #
   # Let's disconnect to vC
   #
-  eval { Util::disconnect(); };
-  if($@) {
-    OvomExtractor::log(3, "Errors disconnecting from $vCWSUrl: $@");
-    return 1;
-  }
-  else {
-    OvomExtractor::log(1, "Successfully disconnected from $vCWSUrl");
-  }
+  return 1 if(OvomExtractor::disconnect());
   return 0;
 
 #   my @hostArray = ();
@@ -195,23 +234,23 @@ sub updateInventory {
 
 
 #
-# Updates performance from hosts and VMs
+# Gets last performance data from hosts and VMs
 #
 # @return 0 ok, 1 errors
 #
-sub updatePerformance {
+sub getLatestPerformance {
   OvomExtractor::log(1, "Updating performance");
 
   my($aHost, $aVM);
   foreach $aVM (@{$OvomExtractor::inventory{'vms'}}) {
     if(getVmPerfs($aVM)) {
-      OvomExtractor::log(3, "Errors updating performance from VM $aVM, moving to next");
+      OvomExtractor::log(3, "Errors getting performance from VM $aVM, moving to next");
       next;
     }
   }
   foreach $aHost (@{$OvomExtractor::inventory{'hosts'}}) {
     if(getHostPerfs($aHost)) {
-      OvomExtractor::log(3, "Errors updating performance from Host $aHost, moving to next");
+      OvomExtractor::log(3, "Errors getting performance from Host $aHost, moving to next");
       next;
     }
   }
@@ -536,7 +575,7 @@ sub collectorInit {
   readConfiguration();
 
   # Regular log
-  my($clf) = $OvomExtractor::configuration{'logFolder'} . "/collector.main.log";
+  my($clf) = $OvomExtractor::configuration{'log.folder'} . "/collector.main.log";
   $OvomExtractor::ovomGlobals{'collectorMainLogFile'} = $clf;
 
   open($OvomExtractor::ovomGlobals{'collectorMainLogHandle'}, ">>", $clf)
@@ -545,7 +584,7 @@ sub collectorInit {
   $OvomExtractor::ovomGlobals{'collectorMainLogHandle'}->autoflush;
 
   # Error log
-  my($celf) = $OvomExtractor::configuration{'logFolder'} . "/collector.error.log";
+  my($celf) = $OvomExtractor::configuration{'log.folder'} . "/collector.error.log";
   $OvomExtractor::ovomGlobals{'collectorErrorLogFile'} = $celf;
 
   open($OvomExtractor::ovomGlobals{'collectorErrorLogHandle'}, ">>", $celf)
@@ -590,7 +629,7 @@ sub readConfiguration {
 
 sub log ($$) {
   my ($logLevel, $msg) = @_;
-  return if($OvomExtractor::configuration{'logLevel'} gt $logLevel);
+  return if($OvomExtractor::configuration{'log.level'} gt $logLevel);
 
   my $nowStr = strftime('%Y%m%d_%H%M%S', gmtime);
   # gmtime instead of localtime, we want ~UTC
@@ -609,15 +648,24 @@ sub log ($$) {
   }
 
   my $logHandle;
+  my $duplicate = 0;
   if($logLevel == 3) {
     # Error !
     $logHandle = $OvomExtractor::ovomGlobals{'collectorErrorLogHandle'};
+    if($OvomExtractor::configuration{'log.duplicateErrors'}) {
+      $duplicate = 1;
+    }
   }
   else {
     # Main log
     $logHandle = $OvomExtractor::ovomGlobals{'collectorMainLogHandle'};
   }
   print $logHandle "${nowStr}Z: [$crit] $msg\n";
+
+  if($duplicate) {
+    $logHandle = $OvomExtractor::ovomGlobals{'collectorMainLogHandle'};
+    print $logHandle "${nowStr}Z: [$crit] $msg\n";
+  }
 }
 
 1;
