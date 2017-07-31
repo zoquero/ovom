@@ -9,8 +9,12 @@ use OvomExtractor;
 my $inventoryRefreshCount = 0;
 OvomExtractor::collectorInit();
 while(1) {
-  OvomExtractor::log(1, "Extraction loop #" . ++$inventoryRefreshCount);
-  if($inventoryRefreshCount % $OvomExtractor::configuration{'inventory.refreshPeriod'} == 0) {
+  ####################
+  # Inventory update #
+  ####################
+  OvomExtractor::log(1, "Extraction loop #" . $inventoryRefreshCount);
+  if($inventoryRefreshCount++
+     % $OvomExtractor::configuration{'inventory.refreshPeriod'} == 0) {
     OvomExtractor::log(1, "Let's update the inventory");
     if(OvomExtractor::updateInventory()) {
       OvomExtractor::log(2, "Errors updating inventory");
@@ -19,6 +23,15 @@ while(1) {
       OvomExtractor::log(2, "The inventory has been updated");
     }
   }
+  else {
+    OvomExtractor::log(0,
+      "We will not update the inventory this loop"
+      . " you can adjust inventory.refreshPeriod");
+  }
+
+  ###################
+  # Get performance #
+  ###################
   OvomExtractor::log(1, "Let's get latest performance data");
   if(OvomExtractor::getLatestPerformance()) {
     OvomExtractor::log(3, "Errors getting performance data");

@@ -20,7 +20,7 @@ our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collecto
 
 our %configuration;
 our %ovomGlobals;
-our %inventory;
+our %inventory; # keys = vDCs, vms, hosts, clusters
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
 # vmname/last_hour/
@@ -74,6 +74,21 @@ sub disconnect {
 }
 
 
+sub pushDcsToInventory {
+  my $dcViews = shift;
+# my $dcsRef  = $inventory{'vDCs'};
+# my @dcs     = @$dcsRef;
+  foreach my $aDcView (@$dcViews) {
+    my %aVdc = (); # keys = name, ... folders?
+    $aVdc{'name'} = $aDcView->name;
+    push @{$inventory{'vDCs'}}, \%aVdc;
+#foreach $aHost (@{$Ovom::inventory{'hosts'}}) 
+
+  }
+# $inventory{'vDCs'} = @dcs;
+}
+
+
 #
 # Gets inventory from vCenter and updates globals @hostArray and @vmArray .
 #
@@ -100,7 +115,7 @@ sub updateInventory {
     $dcViews = Vim::find_entity_views(
       'view_type'  => 'Datacenter',
 #     'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
-      'properties' => ['name'] # 1/10 data
+      'properties' => ['name'] # 1/10 data, faster if you just need the vDC name
     );
   };
   if($@) {
@@ -113,13 +128,20 @@ sub updateInventory {
   }
 
 
+  @{$inventory{'vDCs'}} = ();
   foreach (@$dcViews) {
     print "===============\n";
     print "DEBUG: DataCenter: " . $_->name . "\n";
 #   print Dumper($_);
+    pushDcsToInventory($dcViews); ## pushes to $inventory{'vDCs'}
     print "===============\n";
   }
 
+#  print "DEBUG: Let's print vDC list:\n";
+#  foreach my $aVdc (@{$inventory{'vDCs'}}) {
+#    print "DEBUG: a vDC: " . $$aVdc{'name'} . "\n";
+#  }
+#  print "DEBUG: list printed\n";
 
   #
   # Let's disconnect to vC
