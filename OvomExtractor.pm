@@ -103,6 +103,10 @@ sub pushToInventory {
 
     # Specific attributes
     if($type eq 'vDCs') {
+      $aEntity{'datastoreFolder'} = defined $aEntityView->datastoreFolder->{'value'} ? $aEntityView->datastoreFolder->{'value'} : '';
+      $aEntity{'vmFolder'}        = defined $aEntityView->vmFolder->{'value'}        ? $aEntityView->vmFolder->{'value'}        : '';
+      $aEntity{'hostFolder'}      = defined $aEntityView->hostFolder->{'value'}      ? $aEntityView->hostFolder->{'value'}      : '';
+      $aEntity{'networkFolder'}   = defined $aEntityView->networkFolder->{'value'}   ? $aEntityView->networkFolder->{'value'}   : '';
     }
     elsif($type eq 'vms') {
     }
@@ -159,7 +163,14 @@ sub inventory2Csv {
     return 1;
   }
   foreach my $aEntity (@{$inventory{$entityType}}) {
-    print $csvHandler $$aEntity{'name'} . ";" . $$aEntity{'mo_ref'} . ";" . $$aEntity{'parent'} . "\n";
+    my $aVdcStr = $$aEntity{'name'}            . ";";
+    $aVdcStr   .= $$aEntity{'mo_ref'}          . ";";
+    $aVdcStr   .= $$aEntity{'parent'}          . ";";
+    $aVdcStr   .= $$aEntity{'datastoreFolder'} . ";";
+    $aVdcStr   .= $$aEntity{'vmFolder'}        . ";";
+    $aVdcStr   .= $$aEntity{'hostFolder'}      . ";";
+    $aVdcStr   .= $$aEntity{'networkFolder'}   . "\n";
+    print $csvHandler "$aVdcStr\n";
   }
   if( ! close($csvHandler) ) {
     OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
@@ -170,6 +181,23 @@ sub inventory2Csv {
   # CSV file for hosts
   #########################
   $entityType = "hosts";
+  $csv = "$inventoryBaseFolder/$entityType.csv";
+  if( ! open($csvHandler, ">", $csv) ) {
+    OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
+    return 1;
+  }
+  foreach my $aEntity (@{$inventory{$entityType}}) {
+    print $csvHandler $$aEntity{'name'} . ";" . $$aEntity{'mo_ref'} . ";" . $$aEntity{'parent'} . "\n";
+  }
+  if( ! close($csvHandler) ) {
+    OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
+    return 1;
+  }
+
+  #########################
+  # CSV file for clusters
+  #########################
+  $entityType = "clusters";
   $csv = "$inventoryBaseFolder/$entityType.csv";
   if( ! open($csvHandler, ">", $csv) ) {
     OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
@@ -229,9 +257,6 @@ sub updateInventory {
   # get datacenters
   #################
   # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | DataCenter | ClusterComputeResource
-#  my $dcViews = Vim::find_entity_views(view_type => 'DataCenter',
-#                                   properties => ['name']);
-##                                  properties => ['name','summary']
 
   OvomExtractor::log(0, "Getting DataCenter list");
   my $dcViews;
@@ -240,7 +265,7 @@ sub updateInventory {
     $dcViews = Vim::find_entity_views(
       'view_type'  => 'Datacenter',
 #     'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
-      'properties' => ['name','parent'] # 1/10 data, faster if you just need the vDC name
+      'properties' => ['name','parent','datastoreFolder','vmFolder','hostFolder','networkFolder']
     );
   };
   if($@) {
@@ -265,6 +290,32 @@ sub updateInventory {
   pushToInventory($dcViews, 'vDCs'); ## pushes to $inventory{'vDCs'}
 
 
+  ##############
+  # get clusters
+  ##############
+  OvomExtractor::log(0, "Getting cluster list");
+  my $clusterViews;
+  $timeBefore=Time::HiRes::time;
+  eval {
+    $clusterViews = Vim::find_entity_views(
+      'view_type'  => 'ClusterComputeResource',
+      'properties' => ['name','parent']
+    );
+  };
+  if($@) {
+    OvomExtractor::log(3, "Errors getting clusters: $@");
+    return 1;
+  }
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: Cluster list took "
+                        . sprintf("%.3f", $eTime) . " s");
+
+  if (!@$clusterViews) {
+    OvomExtractor::log(3, "Can't find clusters in the vCenter");
+  }
+
+  @{$inventory{'clusters'}} = ();
+  pushToInventory($clusterViews, 'clusters'); ## pushes to $inventory{'clusters'}
 
 
   ###########
@@ -300,6 +351,7 @@ sub updateInventory {
 #   }
   pushToInventory($hostViews, 'hosts'); ## pushes to $inventory{'hosts'}
 
+
   #########
   # get VMs
   #########
@@ -331,8 +383,6 @@ sub updateInventory {
 #     pushToInventory($vmViews, 'vms'); ## pushes to $inventory{'vms'}
 #   }
   pushToInventory($vmViews, 'vms'); ## pushes to $inventory{'vms'}
-
-
 
 
 #  print "DEBUG: Let's print vDC list:\n";
