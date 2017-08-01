@@ -20,7 +20,7 @@ our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collecto
 
 our %configuration;
 our %ovomGlobals;
-our %inventory; # keys = vDCs, vms, hosts, clusters
+our %inventory; # keys = vDCs, vms, hosts, clusters, folders
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
 # vmname/last_hour/
@@ -74,18 +74,54 @@ sub disconnect {
 }
 
 
-sub pushDcsToInventory {
-  my $dcViews = shift;
-# my $dcsRef  = $inventory{'vDCs'};
-# my @dcs     = @$dcsRef;
-  foreach my $aDcView (@$dcViews) {
-    my %aVdc = (); # keys = name, ... folders?
-    $aVdc{'name'} = $aDcView->name;
-    push @{$inventory{'vDCs'}}, \%aVdc;
-#foreach $aHost (@{$Ovom::inventory{'hosts'}}) 
+#
+# Pushes entities to the inventory hash.
+# The pushed object is a hash with data.
+#
+# @param Array of Views from VIM API
+# @param string specifying the type.
+#               It can be: vDCs | vms | hosts | clusters | folders
+# @return none
+#
+sub pushToInventory {
+  my $entityViews = shift;
+  my $type    = shift;
+  foreach my $aEntityView (@$entityViews) {
+    my %aEntity = (); # keys = name, ... folders?
+    # Common attributes
+    $aEntity{'name'} = $aEntityView->name;
+    # Specific attributes
+    if($type eq 'vDCs') {
+    }
+    elsif($type eq 'vms') {
+    }
+    elsif($type eq 'hosts') {
 
+# parent 
+# runtime.standbyMode
+# runtime.powerState
+# runtime.inMaintenanceMode
+# config.host | mo_ref
+# summary.hardware.memorySize
+# summary.hardware.numCpuCores
+# summary.hardware.numCpuThreads
+
+      $aEntity{'parent'}                         = $aEntityView->parent;
+#     $aEntity{'mo_ref'}                         = $aEntityView->mo_ref;
+      $aEntity{'summary.hardware.memorySize'}    = $aEntityView->summary->hardware->memorySize;
+      $aEntity{'summary.hardware.numCpuCores'}   = $aEntityView->summary->hardware->numCpuCores;
+      $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
+    }
+    elsif($type eq 'clusters') {
+    }
+    elsif($type eq 'folders') {
+    }
+    else {
+      OvomExtractor::log(3, "Unexpected type '$type' in pushToInventory");
+    }
+
+    push @{$inventory{$type}}, \%aEntity;
   }
-# $inventory{'vDCs'} = @dcs;
 }
 
 
@@ -98,19 +134,24 @@ sub pushDcsToInventory {
 sub updateInventory {
   my @hosts = ();
   my @vms   = ();
+  my ($timeBefore, $timeAfter);
 
   #
   # Let's connect to vC:
   #
   return 1 if(OvomExtractor::connect());
 
+  #################
   # get datacenters
+  #################
   # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | DataCenter | ClusterComputeResource
 #  my $dcViews = Vim::find_entity_views(view_type => 'DataCenter',
 #                                   properties => ['name']);
 ##                                  properties => ['name','summary']
 
+  OvomExtractor::log(0, "Getting DataCenter list");
   my $dcViews;
+  $timeBefore=time;
   eval {
     $dcViews = Vim::find_entity_views(
       'view_type'  => 'Datacenter',
@@ -122,6 +163,8 @@ sub updateInventory {
     OvomExtractor::log(3, "Errors getting DataCenters: $@");
     return 1;
   }
+  $timeAfter=time;
+  OvomExtractor::log(0, "Profiling: DataCenter list took " . ($timeAfter-$timeBefore));
 
   if (!@$dcViews) {
     OvomExtractor::log(3, "Can't find DataCenters in the vCenter");
@@ -130,12 +173,79 @@ sub updateInventory {
 
   @{$inventory{'vDCs'}} = ();
   foreach (@$dcViews) {
-    print "===============\n";
     print "DEBUG: DataCenter: " . $_->name . "\n";
 #   print Dumper($_);
-    pushDcsToInventory($dcViews); ## pushes to $inventory{'vDCs'}
-    print "===============\n";
+    pushToInventory($dcViews, 'vDCs'); ## pushes to $inventory{'vDCs'}
   }
+
+
+
+
+  ###########
+  # get hosts
+  ###########
+  OvomExtractor::log(0, "Getting host list");
+  my $hostViews;
+  $timeBefore=time;
+  eval {
+    $hostViews = Vim::find_entity_views(
+      'view_type'  => 'HostSystem',
+#     'properties' => ['name','runtime','config','summary']
+      'properties' => ['name','summary']
+    );
+  };
+  if($@) {
+    OvomExtractor::log(3, "Errors getting hosts: $@");
+    return 1;
+  }
+  $timeAfter=time;
+  OvomExtractor::log(0, "Profiling: Host list took " . ($timeAfter-$timeBefore));
+
+  if (!@$hostViews) {
+    OvomExtractor::log(3, "Can't find hosts in the vCenter");
+  }
+
+  @{$inventory{'hosts'}} = ();
+  foreach (@$hostViews) {
+    print "DEBUG: Host: " . $_->name . "\n";
+#   print Dumper($_);
+    pushToInventory($hostViews, 'hosts'); ## pushes to $inventory{'hosts'}
+  }
+
+
+
+  #########
+  # get VMs
+  #########
+  OvomExtractor::log(0, "Getting VM list");
+  my $vmViews;
+  $timeBefore=time;
+  eval {
+    $vmViews = Vim::find_entity_views(
+      'view_type'  => 'VirtualMachine',
+      'properties' => ['name']
+    );
+  };
+  if($@) {
+    OvomExtractor::log(3, "Errors getting VMs: $@");
+    return 1;
+  }
+  $timeAfter=time;
+  OvomExtractor::log(0, "Profiling: VM list took " . ($timeAfter-$timeBefore));
+
+  if (!@$vmViews) {
+    OvomExtractor::log(3, "Can't find VMs in the vCenter");
+  }
+
+  @{$inventory{'vms'}} = ();
+  foreach (@$vmViews) {
+    print "DEBUG: VM: " . $_->name . "\n";
+#   print Dumper($_);
+    pushToInventory($vmViews, 'vms'); ## pushes to $inventory{'vms'}
+  }
+
+
+
 
 #  print "DEBUG: Let's print vDC list:\n";
 #  foreach my $aVdc (@{$inventory{'vDCs'}}) {
