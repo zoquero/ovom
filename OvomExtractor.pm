@@ -8,6 +8,7 @@ use POSIX qw/strftime/;
 use Time::Piece;
 use IO::Handle;  ## autoflush
 use VMware::VIRuntime;
+use Time::HiRes; ## gettimeofday
 
 
 our @ISA= qw( Exporter );
@@ -108,6 +109,7 @@ sub pushToInventory {
 
       $aEntity{'parent'}                         = $aEntityView->parent;
 #     $aEntity{'mo_ref'}                         = $aEntityView->mo_ref;
+# cal provar així: $aEntity->{mo_ref}{value} , com a https://sourceforge.net/p/viperltoolkit/discussion/609932/thread/8ebc28bc/
       $aEntity{'summary.hardware.memorySize'}    = $aEntityView->summary->hardware->memorySize;
       $aEntity{'summary.hardware.numCpuCores'}   = $aEntityView->summary->hardware->numCpuCores;
       $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
@@ -134,7 +136,7 @@ sub pushToInventory {
 sub updateInventory {
   my @hosts = ();
   my @vms   = ();
-  my ($timeBefore, $timeAfter);
+  my ($timeBefore, $eTime);
 
   #
   # Let's connect to vC:
@@ -151,7 +153,7 @@ sub updateInventory {
 
   OvomExtractor::log(0, "Getting DataCenter list");
   my $dcViews;
-  $timeBefore=time;
+  $timeBefore=Time::HiRes::time;
   eval {
     $dcViews = Vim::find_entity_views(
       'view_type'  => 'Datacenter',
@@ -163,8 +165,9 @@ sub updateInventory {
     OvomExtractor::log(3, "Errors getting DataCenters: $@");
     return 1;
   }
-  $timeAfter=time;
-  OvomExtractor::log(0, "Profiling: DataCenter list took " . ($timeAfter-$timeBefore));
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: DataCenter list took "
+                        . sprintf("%.3f", $eTime) . " s");
 
   if (!@$dcViews) {
     OvomExtractor::log(3, "Can't find DataCenters in the vCenter");
@@ -186,7 +189,7 @@ sub updateInventory {
   ###########
   OvomExtractor::log(0, "Getting host list");
   my $hostViews;
-  $timeBefore=time;
+  $timeBefore=Time::HiRes::time;
   eval {
     $hostViews = Vim::find_entity_views(
       'view_type'  => 'HostSystem',
@@ -198,8 +201,9 @@ sub updateInventory {
     OvomExtractor::log(3, "Errors getting hosts: $@");
     return 1;
   }
-  $timeAfter=time;
-  OvomExtractor::log(0, "Profiling: Host list took " . ($timeAfter-$timeBefore));
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: Host list took "
+                        . sprintf("%.3f", $eTime) . " s");
 
   if (!@$hostViews) {
     OvomExtractor::log(3, "Can't find hosts in the vCenter");
@@ -219,7 +223,7 @@ sub updateInventory {
   #########
   OvomExtractor::log(0, "Getting VM list");
   my $vmViews;
-  $timeBefore=time;
+  $timeBefore=Time::HiRes::time;
   eval {
     $vmViews = Vim::find_entity_views(
       'view_type'  => 'VirtualMachine',
@@ -230,8 +234,9 @@ sub updateInventory {
     OvomExtractor::log(3, "Errors getting VMs: $@");
     return 1;
   }
-  $timeAfter=time;
-  OvomExtractor::log(0, "Profiling: VM list took " . ($timeAfter-$timeBefore));
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: VM list took "
+                        . sprintf("%.3f", $eTime) . " s");
 
   if (!@$vmViews) {
     OvomExtractor::log(3, "Can't find VMs in the vCenter");
@@ -724,7 +729,7 @@ sub collectorInit {
 
   $OvomExtractor::ovomGlobals{'collectorErrorLogHandle'}->autoflush;
 
-  OvomExtractor::log(1, "Configuration read");
+  OvomExtractor::log(1, "Init: Configuration read and log handles open");
   createDataFoldersIfNeeded();
 }
 
