@@ -9,7 +9,7 @@ use Time::Piece;
 use IO::Handle;  ## autoflush
 use VMware::VIRuntime;
 use Time::HiRes; ## gettimeofday
-
+use DataCenter;  ## Our Entities
 
 our @ISA= qw( Exporter );
 
@@ -88,6 +88,16 @@ sub pushToInventory {
   my $entityViews = shift;
   my $type    = shift;
   foreach my $aEntityView (@$entityViews) {
+
+
+
+my $d = DataCenter->new($aEntityView);
+print "DEBUG: DataCenter to csv:\n";
+print "DEBUG: " . $d->toCsvRow . "\n";
+print "DEBUG: DataCenter to csv done.\n";
+exit (1);
+
+
     my %aEntity = (); # keys = name, ... folders?
     # Common attributes
     $aEntity{'name'}   = $aEntityView->name;
