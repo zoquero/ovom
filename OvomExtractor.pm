@@ -211,7 +211,7 @@ sub getViewsFromCsv {
   my $entityType = shift;
   my @entities;
   my ($csv, $csvHandler);
-  my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.csvFolder'}
+  my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.inventoryRoot'}
                              . "/" . $OvomExtractor::configuration{'vCenterName'} ;
   OvomExtractor::log(0, "Let's read inventory from CSV files on "
                         . $mockingCsvBaseFolder . " for mocking");
