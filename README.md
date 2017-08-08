@@ -29,9 +29,47 @@ It's in an initial development stage but its goals are:
 # Development
 
 It's in development stage. It's expected to have a release in september 2017 with at least:
+
 * Inventory
 * Collection of performance metrics
 * Show performance metrics
 
 # Some API links
 * http://www.ovh.com/images/vmWorld/OVH60.pdf
+
+# Installation
+
+## Database
+
+Nowadays it just supports MySQL through Perl DBI
+
+* Setup Database configuration in **`ovom.conf`**
+    * **`db.hostname`**
+    * **`db.name`**
+    * **`db.username`**
+    * **`db.password`**
+
+* Creation of the DataBase, the user and authorizations:
+
+```
+$ mysql -u root -p
+mysql> CREATE DATABASE ovomdb;
+mysql> CREATE USER 'ovomdbuser'@'localhost' IDENTIFIED BY 'ovomdbpass';
+mysql> GRANT CREATE, DELETE, INSERT, SELECT, UPDATE 
+             ON `ovomdb`.* TO 'ovomdbuser'@'localhost';
+mysql> flush privileges;
+```
+
+* Creation of tables and initial data from scripts **`db/ddl.sql`** and **`db/data.sql`** :
+```
+$ mysql -u root       -prootpassword        < db/db_and_grants.sql
+$ mysql -u root       -prootpassword ovomdb < db/ddl.sql
+$ mysql -u ovomdbuser -povomdbpass   ovomdb < db/data.sql
+```
+
+# Uninstallation
+
+* Remove authorizations
+* Remove user
+* Remove database ( **`DROP DATABASE ovomdb`** )
+
