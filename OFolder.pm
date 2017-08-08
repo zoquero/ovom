@@ -28,11 +28,11 @@ sub _init {
   ##
   ## The root folder "Datacenters" hasn't parent
   ##
-  if (defined($self->{view}->parent) && defined($self->{view}->parent->{value})) {
-    $self->{parent}        = $self->{view}->parent->{value};
+  if (defined($self->{view}->{parent}) && defined($self->{view}->{parent}->{value})) {
+    $self->{parent}        = $self->{view}->{parent}->{value};
   }
   else {
-    $self->{parent}        = '';
+    $self->{parent}        = '__NO_PARENT__';
   }
 }
 

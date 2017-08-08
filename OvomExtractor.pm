@@ -9,11 +9,21 @@ use Time::Piece;
 use IO::Handle;  ## autoflush
 use VMware::VIRuntime;
 use Time::HiRes; ## gettimeofday
-use ODataCenter;  ## Our Entities
+
+# Our entities:
+use ODataCenter;
 use OFolder;
 use OCluster;
 use OHost;
 use OVirtualMachine;
+
+# Mocking views to load entities:
+use OMockVirtualMachineView;
+use OMockClusterView;
+use OMockHostView;
+use OMockDataCenterView;
+use OMockFolderView;
+use OMockVirtualMachineView;
 
 
 our @ISA= qw( Exporter );
@@ -24,10 +34,12 @@ our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collecto
 # # Functions that are exported by default:
 # our @EXPORT = qw( getLatestPerformance );
 
+our $csvSep = ";";
 our %configuration;
 our %ovomGlobals;
 our %inventory; # keys = vDCs, vms, hosts, clusters, folders
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
+
 
 # vmname/last_hour/
 # vmname/last_day/
@@ -184,6 +196,91 @@ sub pushToInventory {
     push @{$inventory{$type}}, \$aEntity;
   }
 }
+
+
+#
+# Gets views from CSV files.
+# Usefull for Mocking when debugging
+#
+# @arg $entityType
+# @return undef if error, \@entities else
+#
+sub getViewsFromCsv {
+  # %inventory keys = vDCs, vms, hosts, clusters, folders
+
+  my $entityType = shift;
+  my @entities;
+  my ($csv, $csvHandler);
+  my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.csvFolder'}
+                             . "/" . $OvomExtractor::configuration{'vCenterName'} ;
+  OvomExtractor::log(0, "Let's read inventory from CSV files on "
+                        . $mockingCsvBaseFolder . " for mocking");
+
+# ODataCenter->new($aEntityView);
+# OVirtualMachine->new($aEntityView);
+# OHost->new($aEntityView);
+# OCluster->new($aEntityView);
+# OFolder->new($aEntityView);
+
+  if( $entityType eq "vDCs"
+   || $entityType eq "vms"
+   || $entityType eq "hosts"
+   || $entityType eq "clusters"
+   || $entityType eq "folders") {
+    $csv = "$mockingCsvBaseFolder/$entityType.csv";
+    if( ! open($csvHandler, "<", $csv) ) {
+      OvomExtractor::log(3, "Could not open mocking CSV file '$csv': $!");
+      return undef;
+    }
+
+    local $_;
+    while (<$csvHandler>) {
+      chomp;
+      next if /^\s*$/;
+      my @parts = split /$csvSep/;
+      if ($#parts < 0) {
+        OvomExtractor::log(3, "Can't parse this line '$_' on file '$csv': $!");
+        if( ! close($csvHandler) ) {
+          OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
+        }
+        return undef;
+      }
+      if( $entityType eq "vDCs") {
+        push @entities, OMockDataCenterView->new(@parts);
+      }
+      elsif( $entityType eq "vms") {
+        push @entities, OMockVirtualMachineView->new(@parts);
+      }
+      elsif( $entityType eq "hosts") {
+        push @entities, OMockHostView->new(@parts);
+      }
+      elsif( $entityType eq "clusters") {
+        push @entities, OMockClusterView->new(@parts);
+      }
+      elsif( $entityType eq "folders") {
+        push @entities, OMockFolderView->new(@parts);
+      }
+      else {
+        OvomExtractor::log(3, "Unknown entity type '$entityType' passed to getViewsFromCsv");
+        if( ! close($csvHandler) ) {
+          OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
+        }
+        return undef;
+      }
+    }
+    if( ! close($csvHandler) ) {
+      OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
+      return undef;
+    }
+  }
+  else {
+    OvomExtractor::log(3, "Unknown entity type '$entityType' passed to getViewsFromCsv");
+    return undef;
+  }
+  
+  return \@entities;
+}
+
 
 #
 # Print %inventory to CSV files

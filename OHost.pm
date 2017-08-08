@@ -25,7 +25,7 @@ sub _init {
   my ($self, $view) = @_;
   $self->{name}            = $self->{view}->{name};
   $self->{mo_ref}          = $self->{view}->{mo_ref}{value};
-  $self->{parent}          = $self->{view}->parent->{value};
+  $self->{parent}          = $self->{view}->{parent}->{value};
 }
 
 sub toCsvRow {
