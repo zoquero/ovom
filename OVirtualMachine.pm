@@ -14,28 +14,14 @@ sub new {
     mo_ref          => $view->{mo_ref}->{value},
     parent          => $view->{parent}->{value},
   }, $class;
-# $self->_init($view);
   return $self;
 }
 
-##  #
-##  # Initializes fields from the view.
-##  #
-##  sub _init {
-##    my ($self, $view) = @_;
-##    $self->{name}            = $self->{view}->{name};
-##    $self->{mo_ref}          = $self->{view}->{mo_ref}{value};
-##  # Previous:
-##  # $self->{parent}          = $self->{view}->parent->{value};
-##  #
-##    $self->{parent}          = $self->{view}->{parent}->{value};
-##  }
-
 sub toCsvRow {
   my $self = shift;
-  my $csvRow = $self->{name}            . $csvSep;
-  $csvRow   .= $self->{mo_ref}          . $csvSep;
-  $csvRow   .= $self->{parent}          . $csvSep;
+  my $csvRow = $self->{name}    . $csvSep;
+  $csvRow   .= $self->{mo_ref}  . $csvSep;
+  $csvRow   .= $self->{parent};
   return $csvRow;
 }
 

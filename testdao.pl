@@ -37,20 +37,20 @@ foreach my $aView (@$someDataCenterViews) {
 }
 foreach my $aView (@$someVirtualMachineViews) {
   my $aEntity = OVirtualMachine->new($aView);
-# print "VM : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
+  print "VM : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
 }
 foreach my $aView (@$someHostViews) {
   my $aEntity = OHost->new($aView);
-# print "Host : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
+  print "Host : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
 }
 foreach my $aView (@$someClusterViews) {
   my $aEntity = OCluster->new($aView);
-# print "Cluster : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
+  print "Cluster : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
 }
 foreach my $aView (@$someFolderViews) {
   my $aEntity = OFolder->new($aView);
-  my $parent = defined($aEntity->{parent}) ? $aEntity->{parent} : "__UNDEFINED__";
-# print "Folder : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = $parent\n";
+  my $parent = defined($aEntity->{parent}) ? $aEntity->{parent} : '';
+  print "Folder : name = " . $aEntity->{name} . " moref = " . $aEntity->{mo_ref} . " parent = $parent\n";
 }
 
 OvomExtractor::collectorStop();
