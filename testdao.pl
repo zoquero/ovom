@@ -14,11 +14,11 @@ use OCluster;
 print "Testing DBI\n";
 OvomExtractor::collectorInit();
 
-my $someDataCenterViews     = OvomExtractor::getViewsFromCsv('vDCs');
-my $someVirtualMachineViews = OvomExtractor::getViewsFromCsv('vms');
-my $someHostViews           = OvomExtractor::getViewsFromCsv('hosts');
-my $someClusterViews        = OvomExtractor::getViewsFromCsv('clusters');
-my $someFolderViews         = OvomExtractor::getViewsFromCsv('folders');
+my $someDataCenterViews     = OvomExtractor::getViewsFromCsv('Datacenter');
+my $someVirtualMachineViews = OvomExtractor::getViewsFromCsv('VirtualMachine');
+my $someHostViews           = OvomExtractor::getViewsFromCsv('HostSystem');
+my $someClusterViews        = OvomExtractor::getViewsFromCsv('ClusterComputeResource');
+my $someFolderViews         = OvomExtractor::getViewsFromCsv('Folder');
 
 foreach my $aView (@$someDataCenterViews) {
   my $aEntity = ODataCenter->new($aView);
@@ -44,7 +44,13 @@ foreach my $aView (@$someFolderViews) {
   print "Folder : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = $parent\n";
 }
 
+my $r;
 OvomDao::connect();
+# $r = OvomDao::connected();
+# OvomDao::transactionBegin();
+# OvomDao::transactionRollback();
+# $r = OvomDao::connected();
+OvomDao::select();
 OvomDao::disconnect();
 
 OvomExtractor::collectorStop();
