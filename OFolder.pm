@@ -63,18 +63,40 @@ sub compare {
     Carp::croack("The argument doesn't look like an entity in 'compare'");
     return -2;
   }
-  if ( $self->{mo_ref} ne $other->{mo_ref} ) {
+  elsif ( $self->{mo_ref} ne $other->{mo_ref} ) {
     # Different folder (mo_ref differs)
     return -1;
   }
-  if ( $self->{name}    ne $other->{name}
-    || $self->{parent}  ne $other->{parent}
-    || $self->{enabled} ne $other->{enabled} ) {
+  elsif ( ( $self->{name}    eq $other->{name}
+         && $self->{name}    eq 'Datacenters' )
+       && ( $self->{parent}  eq '' 
+         && $other->{parent} eq 'group-d1' )) {
+    #
+    # It's the special root folder that has:
+    # name   == 'Datacenters'
+    # mo_ref == 'group-d1'
+    # parent == ''
+    #
+    # So, it's the same object.
+    #
+    return 1;
+  }
+  elsif ( $self->{name}    ne $other->{name}
+       || $self->{parent}  ne $other->{parent}
+       || $self->{enabled} ne $other->{enabled} ) {
     # Same folder (equal mo_ref), but name or parent has changed
     return 0;
   }
-  # Equal object
-  return 1;
+  elsif ($self->{parent} eq '') {
+    # Same folder (equal mo_ref), but name or parent has changed
+    Carp::croack("vCenter shows a Folder with empty parent "
+               . "and doesn't look like to be the root");
+    return -2;
+  }
+  else {
+    # Equal object
+    return 1;
+  }
 }
 
 1;

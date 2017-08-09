@@ -247,12 +247,11 @@ sub updateAsNeeded {
   my @toUpdate;
   my @toInsert;
   my @toDelete;
+  my @loadedPositionsNotTobeDeleted;
+## splice @toDelete, $j, 1;
   if( !defined($discovered) || !defined($loadedFromDb)) {
     Carp::croack("updateAsNeeded needs a reference to 2 entities as argument");
     return -1;
-  }
-  foreach my $aLoadedFromDb (@$loadedFromDb) {
-    push @toDelete, $aLoadedFromDb;
   }
 
   print "INITIALLY:\n";
@@ -260,11 +259,8 @@ sub updateAsNeeded {
   print "DEBUG: loadedFromDb = " . $#$loadedFromDb . "\n";
   print "DEBUG: to insert    = " . $#toInsert . "\n";
   print "DEBUG: to update    = " . $#toUpdate . "\n";
-  print "DEBUG: to delete    = " . $#toDelete . "\n";
-
 
   foreach my $aDiscovered (@$discovered) {
-    my $found = 0;
     my $j = -1;
     foreach my $aLoadedFromDb (@$loadedFromDb) {
       $j++;
@@ -277,28 +273,28 @@ sub updateAsNeeded {
       }
       elsif ($r == 1) {
         # Equal
-print "DEBUG: Let's delte the component $j of toDelete, that has $#toDelete components\n";
-print "DEBUG: previously contains:\n";
-foreach my $k (@toDelete) {
-  print "DEBUG: name = " . $k->{name} . "\n";
-}
-        splice @toDelete, $j, 1;
-        $j--;
-        $found = 1;
+        push @loadedPositionsNotTobeDeleted, $j;
         last;
       }
       elsif ($r == 0) {
         # Changed (same mo_ref but some other attribute differs)
         push @toUpdate, $aDiscovered;
-        splice @toDelete, $j, 1;
-        $j--;
-        $found = 1;
+        push @loadedPositionsNotTobeDeleted, $j;
         last;
       }
-      # $r == -1  =>  differ, next
+      else {
+        # $r == -1  =>  differ
+        if ($j == $#$loadedFromDb) {
+print "DEBUG: Differs and $j looks like last component. Has to be inserted into DB.\n";
+          push @toInsert, $aDiscovered;
+          push @loadedPositionsNotTobeDeleted, $j;
+        }
+      }
     }
-    if ($found == 0) {
-      push @toInsert, $aDiscovered;
+  }
+  for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
+    if ( grep /^$i$/, @loadedPositionsNotTobeDeleted ) {
+      push @toDelete, $$loadedFromDb[$i];
     }
   }
 

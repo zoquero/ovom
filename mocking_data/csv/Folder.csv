@@ -1,7 +1,7 @@
-Datacenters;group-d1;
-datastore;group-s5;datacenter-2
-host;group-h4;datacenter-2
-network;group-n6;datacenter-2
-vm;group-v3;datacenter-2
-erp;group-v9653;group-v3
-www;group-v9659;group-v3
+Datacenters;group-d1;;1
+datastore;group-s5;datacenter-2;1
+host;group-h4;datacenter-2;1
+network;group-n6;datacenter-2;1
+vm;group-v3;datacenter-2;1
+erp;group-v9653;group-v3;1
+www;group-v9659;group-v3;1
