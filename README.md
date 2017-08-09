@@ -69,7 +69,7 @@ $ mysql -u ovomdbuser -povomdbpass   ovomdb < db/data.sql
 
 # Uninstallation
 
-* Remove authorizations
+* Remove authorizations (revoke grants)
 * Remove user
 * Remove database ( **`DROP DATABASE ovomdb`** )
 
