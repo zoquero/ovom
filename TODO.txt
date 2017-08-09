@@ -1,2 +1,3 @@
+* Bug: In current implementation parents are always Folders. Wrong! "parent" is an object, with type = Folder | DataCenter , at least. As a first correction we could just look for paren'ts mo_ref in Folder list and if it search fails we can than look for that mo_ref in DataCenter list. It's really simpler to deal with parents in code as simply a simple mo_ref. I don't know if the mo_ref namespace is the same for all the objects...
 * log rotation
 * getting hardware alarms

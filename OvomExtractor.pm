@@ -37,9 +37,10 @@ our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collecto
 our $csvSep = ";";
 our %configuration;
 our %ovomGlobals;
-our %inventory; # keys = vDCs, vms, hosts, clusters, folders
+our %inventory; # keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
-
+# our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
+our @entityTypes = ("Folder", "HostSystem", "VirtualMachine", "Datacenter", "ClusterComputeResource");
 
 # vmname/last_hour/
 # vmname/last_day/
@@ -66,6 +67,12 @@ our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 
 
 sub connect {
+
+  if($configuration{'debug.mock.enabled'}) {
+    OvomExtractor::log(1, "In mocking mode. Now we should be connecting to a vCenter...");
+    return 0;
+  }
+
   my $vCWSUrl = 'https://'
                 . $OvomExtractor::configuration{'vCenterName'}
                 . '/sdk/webService';
@@ -82,6 +89,12 @@ sub connect {
 
 
 sub disconnect {
+
+  if($configuration{'debug.mock.enabled'}) {
+    OvomExtractor::log(1, "In mocking mode. Now we should be disconnecting from a vCenter...");
+    return 0;
+  }
+
   eval { Util::disconnect(); };
   if($@) {
     OvomExtractor::log(3, "Errors disconnecting from vCenter : $@");
@@ -100,7 +113,7 @@ sub disconnect {
 #
 # @param Array of Views from VIM API
 # @param string specifying the type.
-#               It can be: vDCs | vms | hosts | clusters | folders
+#               It can be: Datacenter | VirtualMachine | HostSystem | ClusterComputeResource | Folder
 # @return none
 #
 sub pushToInventory {
@@ -108,13 +121,13 @@ sub pushToInventory {
   my $type    = shift;
   foreach my $aEntityView (@$entityViews) {
     my $aEntity;
-    if($type eq 'vDCs') {
+    if($type eq 'Datacenter') {
       $aEntity = ODataCenter->new($aEntityView);
     }
-    elsif($type eq 'vms') {
+    elsif($type eq 'VirtualMachine') {
       $aEntity = OVirtualMachine->new($aEntityView);
     }
-    elsif($type eq 'hosts') {
+    elsif($type eq 'HostSystem') {
       $aEntity = OHost->new($aEntityView);
 
 # parent 
@@ -125,73 +138,19 @@ sub pushToInventory {
 # summary.hardware.memorySize
 # summary.hardware.numCpuCores
 # summary.hardware.numCpuThreads
-
 #      $aEntity{'summary.hardware.memorySize'}    = $aEntityView->summary->hardware->memorySize;
 #      $aEntity{'summary.hardware.numCpuCores'}   = $aEntityView->summary->hardware->numCpuCores;
 #      $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
     }
-    elsif($type eq 'clusters') {
+    elsif($type eq 'ClusterComputeResource') {
       $aEntity = OCluster->new($aEntityView);
     }
-    elsif($type eq 'folders') {
+    elsif($type eq 'Folder') {
       $aEntity = OFolder->new($aEntityView);
     }
     else {
       OvomExtractor::log(3, "Unexpected type '$type' in pushToInventory");
     }
-
-## 
-## my $d = DataCenter->new($aEntityView);
-## print "DEBUG: DataCenter to csv:\n";
-## print "DEBUG: " . $d->toCsvRow . "\n";
-## print "DEBUG: DataCenter to csv done.\n";
-## exit (1);
-## 
-## 
-##     my %aEntity = (); # keys = name, ... folders?
-##     # Common attributes
-##     $aEntity{'name'}   = $aEntityView->name;
-##     $aEntity{'mo_ref'} = $aEntityView->{'mo_ref'}{'value'};
-##     $aEntity{'parent'} = defined $aEntityView->parent->{'value'} ? $aEntityView->parent->{'value'} : '';
-## 
-## # print "DEBUG: name   = " . $aEntity{'name'}                  . "\n";
-## # print "DEBUG: mo_ref = " . $aEntityView->{'mo_ref'}{'value'} . "\n";
-## # print "DEBUG: keys/values:\n";
-## # foreach my $k (keys %aEntity) {
-## #   print "DEBUG: entity[$k]  = " . $aEntity{$k} . "\n";
-## # }
-## 
-##     # Specific attributes
-##     if($type eq 'vDCs') {
-##       $aEntity{'datastoreFolder'} = defined $aEntityView->datastoreFolder->{'value'} ? $aEntityView->datastoreFolder->{'value'} : '';
-##       $aEntity{'vmFolder'}        = defined $aEntityView->vmFolder->{'value'}        ? $aEntityView->vmFolder->{'value'}        : '';
-##       $aEntity{'hostFolder'}      = defined $aEntityView->hostFolder->{'value'}      ? $aEntityView->hostFolder->{'value'}      : '';
-##       $aEntity{'networkFolder'}   = defined $aEntityView->networkFolder->{'value'}   ? $aEntityView->networkFolder->{'value'}   : '';
-##     }
-##     elsif($type eq 'vms') {
-##     }
-##     elsif($type eq 'hosts') {
-## 
-## # parent 
-## # runtime.standbyMode
-## # runtime.powerState
-## # runtime.inMaintenanceMode
-## # config.host | mo_ref
-## # summary.hardware.memorySize
-## # summary.hardware.numCpuCores
-## # summary.hardware.numCpuThreads
-## 
-## #      $aEntity{'summary.hardware.memorySize'}    = $aEntityView->summary->hardware->memorySize;
-## #      $aEntity{'summary.hardware.numCpuCores'}   = $aEntityView->summary->hardware->numCpuCores;
-## #      $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
-##     }
-##     elsif($type eq 'clusters') {
-##     }
-##     elsif($type eq 'folders') {
-##     }
-##     else {
-##       OvomExtractor::log(3, "Unexpected type '$type' in pushToInventory");
-##     }
 
     push @{$inventory{$type}}, \$aEntity;
   }
@@ -206,28 +165,24 @@ sub pushToInventory {
 # @return undef if error, \@entities else
 #
 sub getViewsFromCsv {
-  # %inventory keys = vDCs, vms, hosts, clusters, folders
+  # %inventory keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
 
   my $entityType = shift;
   my @entities;
   my ($csv, $csvHandler);
   my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.inventoryRoot'}
                              . "/" . $OvomExtractor::configuration{'vCenterName'} ;
-  OvomExtractor::log(0, "Let's read inventory from CSV files on "
-                        . $mockingCsvBaseFolder . " for mocking");
 
-# ODataCenter->new($aEntityView);
-# OVirtualMachine->new($aEntityView);
-# OHost->new($aEntityView);
-# OCluster->new($aEntityView);
-# OFolder->new($aEntityView);
-
-  if( $entityType eq "vDCs"
-   || $entityType eq "vms"
-   || $entityType eq "hosts"
-   || $entityType eq "clusters"
-   || $entityType eq "folders") {
+  if( $entityType eq "Datacenter"
+   || $entityType eq "VirtualMachine"
+   || $entityType eq "HostSystem"
+   || $entityType eq "ClusterComputeResource"
+   || $entityType eq "Folder") {
     $csv = "$mockingCsvBaseFolder/$entityType.csv";
+
+    OvomExtractor::log(0, "Reading $entityType entities from inventory CSV file "
+                          . $csv . " for mocking");
+
     if( ! open($csvHandler, "<", $csv) ) {
       OvomExtractor::log(3, "Could not open mocking CSV file '$csv': $!");
       return undef;
@@ -245,23 +200,24 @@ sub getViewsFromCsv {
         }
         return undef;
       }
-      if( $entityType eq "vDCs") {
+      if( $entityType eq "Datacenter") {
         push @entities, OMockDataCenterView->new(@parts);
       }
-      elsif( $entityType eq "vms") {
+      elsif( $entityType eq "VirtualMachine") {
         push @entities, OMockVirtualMachineView->new(@parts);
       }
-      elsif( $entityType eq "hosts") {
+      elsif( $entityType eq "HostSystem") {
         push @entities, OMockHostView->new(@parts);
       }
-      elsif( $entityType eq "clusters") {
+      elsif( $entityType eq "ClusterComputeResource") {
         push @entities, OMockClusterView->new(@parts);
       }
-      elsif( $entityType eq "folders") {
+      elsif( $entityType eq "Folder") {
         push @entities, OMockFolderView->new(@parts);
       }
       else {
-        OvomExtractor::log(3, "Unknown entity type '$entityType' passed to getViewsFromCsv");
+        OvomExtractor::log(3, "Unknown entity type '$entityType' "
+                            . "passed to getViewsFromCsv");
         if( ! close($csvHandler) ) {
           OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
         }
@@ -274,7 +230,8 @@ sub getViewsFromCsv {
     }
   }
   else {
-    OvomExtractor::log(3, "Unknown entity type '$entityType' passed to getViewsFromCsv");
+    OvomExtractor::log(3, "Unknown entity type '$entityType' "
+                        . "passed to getViewsFromCsv");
     return undef;
   }
   
@@ -289,116 +246,34 @@ sub getViewsFromCsv {
 # @return 1 error, 0 ok
 #
 sub inventory2Csv {
-  # %inventory keys = vDCs, vms, hosts, clusters, folders
-
   my ($csv, $csvHandler);
   my $entityType;
   my($inventoryBaseFolder) = $OvomExtractor::configuration{'inventoryRoot'}
                              . "/" . $OvomExtractor::configuration{'vCenterName'} ;
+
   OvomExtractor::log(0, "Let's write inventory into CSV files on "
                         . $inventoryBaseFolder);
 
-  ##########################
-  # CSV file for DataCenters
-  ##########################
-  $entityType = "vDCs";
-  $csv = "$inventoryBaseFolder/$entityType.csv";
-  if( ! open($csvHandler, ">", $csv) ) {
-    OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
-    return 1;
+  # %inventory keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
+  foreach my $aEntityType (@entityTypes) {
+    $csv = "$inventoryBaseFolder/$aEntityType.csv";
+    OvomExtractor::log(0, "Writing inventory for $aEntityType entities "
+                        . "on CSV file '$csv'");
+    if( ! open($csvHandler, ">", $csv) ) {
+      OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
+      return 1;
+    }
+    foreach my $aEntity (@{$inventory{$aEntityType}}) {
+      print $csvHandler $$aEntity->toCsvRow() . "\n";
+    }
+    if( ! close($csvHandler) ) {
+      OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
+      return 1;
+    }
   }
-  foreach my $aEntity (@{$inventory{$entityType}}) {
-#    my $aVdcStr = $$aEntity{'name'}            . ";";
-#    $aVdcStr   .= $$aEntity{'mo_ref'}          . ";";
-#    $aVdcStr   .= $$aEntity{'parent'}          . ";";
-#    $aVdcStr   .= $$aEntity{'datastoreFolder'} . ";";
-#    $aVdcStr   .= $$aEntity{'vmFolder'}        . ";";
-#    $aVdcStr   .= $$aEntity{'hostFolder'}      . ";";
-#    $aVdcStr   .= $$aEntity{'networkFolder'}   . "\n";
-#    print $csvHandler "$aVdcStr\n";
-    print $csvHandler $$aEntity->toCsvRow() . "\n";
-
-  }
-  if( ! close($csvHandler) ) {
-    OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
-    return 1;
-  }
-
-  #########################
-  # CSV file for hosts
-  #########################
-  $entityType = "hosts";
-  $csv = "$inventoryBaseFolder/$entityType.csv";
-  if( ! open($csvHandler, ">", $csv) ) {
-    OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
-    return 1;
-  }
-  foreach my $aEntity (@{$inventory{$entityType}}) {
-#   print $csvHandler $$aEntity{'name'} . ";" . $$aEntity{'mo_ref'} . ";" . $$aEntity{'parent'} . "\n";
-    print $csvHandler $$aEntity->toCsvRow() . "\n";
-  }
-  if( ! close($csvHandler) ) {
-    OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
-    return 1;
-  }
-
-  #########################
-  # CSV file for clusters
-  #########################
-  $entityType = "clusters";
-  $csv = "$inventoryBaseFolder/$entityType.csv";
-  if( ! open($csvHandler, ">", $csv) ) {
-    OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
-    return 1;
-  }
-  foreach my $aEntity (@{$inventory{$entityType}}) {
-#   print $csvHandler $$aEntity{'name'} . ";" . $$aEntity{'mo_ref'} . ";" . $$aEntity{'parent'} . "\n";
-    print $csvHandler $$aEntity->toCsvRow() . "\n";
-  }
-  if( ! close($csvHandler) ) {
-    OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
-    return 1;
-  }
-
-  ######################
-  # CSV file for folders
-  ######################
-  $entityType = "folders";
-  $csv = "$inventoryBaseFolder/$entityType.csv";
-  if( ! open($csvHandler, ">", $csv) ) {
-    OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
-    return 1;
-  }
-  foreach my $aEntity (@{$inventory{$entityType}}) {
-#   print $csvHandler $$aEntity{'name'} . ";" . $$aEntity{'mo_ref'} . ";" . $$aEntity{'parent'} . "\n";
-    print $csvHandler $$aEntity->toCsvRow() . "\n";
-  }
-  if( ! close($csvHandler) ) {
-    OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
-    return 1;
-  }
-
-  #########################
-  # CSV file for VMs
-  #########################
-  $entityType = "vms";
-  $csv = "$inventoryBaseFolder/$entityType.csv";
-  if( ! open($csvHandler, ">", $csv) ) {
-    OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
-    return 1;
-  }
-  foreach my $aEntity (@{$inventory{$entityType}}) {
-#   print $csvHandler $$aEntity{'name'} . ";" . $$aEntity{'mo_ref'} . ";" . $$aEntity{'parent'} . "\n";
-    print $csvHandler $$aEntity->toCsvRow() . "\n";
-  }
-  if( ! close($csvHandler) ) {
-    OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
-    return 1;
-  }
-  
+  # Ok!
   return 0;
 }
-
 
 
 #
@@ -421,175 +296,55 @@ sub updateInventory {
   OvomExtractor::log(1, "Profiling: Connecting to vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
 
-  #################
-  # get datacenters
-  #################
-  # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | DataCenter | ClusterComputeResource
-
-  OvomExtractor::log(0, "Getting DataCenter list");
-  my $dcViews;
-  $timeBefore=Time::HiRes::time;
-  eval {
-    $dcViews = Vim::find_entity_views(
-      'view_type'  => 'Datacenter',
-#     'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
-      'properties' => ['name','parent','datastoreFolder','vmFolder','hostFolder','networkFolder']
-    );
-  };
-  if($@) {
-    OvomExtractor::log(3, "Errors getting DataCenters: $@");
-    return 1;
-  }
-  $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: DataCenter list took "
-                        . sprintf("%.3f", $eTime) . " s");
-
-  if (!@$dcViews) {
-    OvomExtractor::log(3, "Can't find DataCenters in the vCenter");
-  }
-
-
-  @{$inventory{'vDCs'}} = ();
-#   foreach (@$dcViews) {
-#     print "DEBUG: DataCenter: " . $_->name . "\n";
-# #   print Dumper($_);
-#     pushToInventory($dcViews, 'vDCs'); ## pushes to $inventory{'vDCs'}
-#   }
-  pushToInventory($dcViews, 'vDCs'); ## pushes to $inventory{'vDCs'}
-
-
-  ###########
-  # get hosts
-  ###########
-  OvomExtractor::log(0, "Getting host list");
-  my $hostViews;
-  $timeBefore=Time::HiRes::time;
-  eval {
-    $hostViews = Vim::find_entity_views(
-      'view_type'  => 'HostSystem',
-#     'properties' => ['name','runtime','config','summary']
-      'properties' => ['name','parent']
-    );
-  };
-  if($@) {
-    OvomExtractor::log(3, "Errors getting hosts: $@");
-    return 1;
-  }
-  $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Host list took "
-                        . sprintf("%.3f", $eTime) . " s");
-
-  if (!@$hostViews) {
-    OvomExtractor::log(3, "Can't find hosts in the vCenter");
-  }
-
-  @{$inventory{'hosts'}} = ();
-#   foreach (@$hostViews) {
-#     print "DEBUG: Host: " . $_->name . "\n";
-# #   print Dumper($_);
-#     pushToInventory($hostViews, 'hosts'); ## pushes to $inventory{'hosts'}
-#   }
-  pushToInventory($hostViews, 'hosts'); ## pushes to $inventory{'hosts'}
-
-
   ##############
-  # get clusters
+  # Get entities
   ##############
-  OvomExtractor::log(0, "Getting cluster list");
-  my $clusterViews;
-  $timeBefore=Time::HiRes::time;
-  eval {
-    $clusterViews = Vim::find_entity_views(
-      'view_type'  => 'ClusterComputeResource',
-      'properties' => ['name','parent']
-    );
-  };
-  if($@) {
-    OvomExtractor::log(3, "Errors getting clusters: $@");
-    return 1;
+  # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | Datacenter | ClusterComputeResource
+
+  foreach my $aEntityType (@entityTypes) {
+    OvomExtractor::log(0, "Getting $aEntityType list");
+    my $entityViews;
+    $timeBefore=Time::HiRes::time;
+
+    if($configuration{'debug.mock.enabled'}) {
+      $entityViews = getViewsFromCsv($aEntityType);
+    }
+    else {
+      if ($aEntityType eq 'Datacenter') {
+        eval {
+          $entityViews = Vim::find_entity_views(
+            'view_type'  => $aEntityType,
+#           'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
+            'properties' => ['name','parent','datastoreFolder','vmFolder','hostFolder','networkFolder']
+          );
+        };
+      }
+      else {
+        eval {
+          $entityViews = Vim::find_entity_views(
+            'view_type'  => $aEntityType,
+            'properties' => ['name','parent']
+          );
+        };
+      }
+    }
+
+    if($@) {
+      OvomExtractor::log(3, "Errors getting $aEntityType list: $@");
+      return 1;
+    }
+    $eTime=Time::HiRes::time - $timeBefore;
+    OvomExtractor::log(1, "Profiling: $aEntityType list took "
+                          . sprintf("%.3f", $eTime) . " s");
+  
+    if (!@$entityViews) {
+      OvomExtractor::log(3, "Can't find ${aEntityType}s in the vCenter");
+    }
+  
+    # load the entity object and pushe it to $inventory{$aEntityType}
+    @{$inventory{$aEntityType}} = (); # Let's clean it before
+    pushToInventory($entityViews, $aEntityType);
   }
-  $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Cluster list took "
-                        . sprintf("%.3f", $eTime) . " s");
-
-  if (!@$clusterViews) {
-    OvomExtractor::log(3, "Can't find clusters in the vCenter");
-  }
-
-  @{$inventory{'clusters'}} = ();
-  pushToInventory($clusterViews, 'clusters'); ## pushes to $inventory{'clusters'}
-
-
-  #############
-  # get Folders
-  #############
-  OvomExtractor::log(0, "Getting Folder list");
-  my $folderViews;
-  $timeBefore=Time::HiRes::time;
-  eval {
-    $folderViews = Vim::find_entity_views(
-      'view_type'  => 'Folder',
-      'properties' => ['name','parent']
-    );
-  };
-  if($@) {
-    OvomExtractor::log(3, "Errors getting Folders: $@");
-    return 1;
-  }
-  $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Folder list took "
-                        . sprintf("%.3f", $eTime) . " s");
-
-  if (!@$folderViews) {
-    OvomExtractor::log(3, "Can't find Folders in the vCenter");
-  }
-
-  @{$inventory{'folders'}} = ();
-  pushToInventory($folderViews, 'folders'); ## pushes to $inventory{'folders'}
-
-
-  #########
-  # get VMs
-  #########
-  OvomExtractor::log(0, "Getting VM list");
-  my $vmViews;
-  $timeBefore=Time::HiRes::time;
-  eval {
-    $vmViews = Vim::find_entity_views(
-      'view_type'  => 'VirtualMachine',
-      'properties' => ['name','parent']
-    );
-  };
-  if($@) {
-    OvomExtractor::log(3, "Errors getting VMs: $@");
-    return 1;
-  }
-  $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: VM list took "
-                        . sprintf("%.3f", $eTime) . " s");
-
-  if (!@$vmViews) {
-    OvomExtractor::log(3, "Can't find VMs in the vCenter");
-  }
-
-  @{$inventory{'vms'}} = ();
-#   foreach (@$vmViews) {
-#     print "DEBUG: VM: " . $_->name . "\n";
-# #   print Dumper($_);
-#     pushToInventory($vmViews, 'vms'); ## pushes to $inventory{'vms'}
-#   }
-  pushToInventory($vmViews, 'vms'); ## pushes to $inventory{'vms'}
-
-
-
-
-
-#  print "DEBUG: Let's print vDC list:\n";
-#  foreach my $aVdc (@{$inventory{'vDCs'}}) {
-#    print "DEBUG: a vDC: " . $$aVdc{'name'} . "\n";
-#  }
-#  print "DEBUG: list printed\n";
-
 
   #
   # Let's disconnect to vC
@@ -605,112 +360,8 @@ sub updateInventory {
   # print %inventory to CSV files
   ###############################
   return 1 if(inventory2Csv());
-
   return 0;
 
-#   my @hostArray = ();
-#   my @vmArray   = ();
-# 
-#   my $parsingHosts = 0;
-#   my $host  = '';
-#   my $parsingVMs   = 0;
-#   my $vm    = '';
-#   my $line;
-
-
-#   my $dcListCommand = $configuration{'command.dcList'} .
-#                         " --datacenter " . $configuration{'vDataCenterName'} .
-#                         " --server "     . $configuration{'vCenterName'};
-# 
-#   if($configuration{'debug.mock.enabled'}) {
-#     @hostArray = split /;/, $configuration{'debug.mock.hosts'};
-#     @vmArray   = split /;/, $configuration{'debug.mock.vms'};
-#   }
-#   else {
-#     open CMD,'-|', $dcListCommand or die "Can't run $dcListCommand :" . $@;
-#     while (defined($line=<CMD>)) {
-#       if ( $line =~ /^Hosts found:$/ ) {
-#         $parsingHosts = 1;
-#         $parsingVMs   = 0;
-#       }
-#       elsif ( $line =~ /^VM's found:$/ ) {
-#         $parsingHosts = 0;
-#         $parsingVMs   = 1;
-#       }
-#       else {
-#         next if $line =~ /^\s*$/;
-#         $line =~ /^\d+: (.+)$/;
-#         if($parsingHosts) {
-#           $host = $1;
-#           OvomExtractor::log(0, "updateInventory; host discovered = $host");
-#           push @hostArray, $host;
-#         }
-#         elsif($parsingVMs) {
-#           $vm = $1;
-#           OvomExtractor::log(0, "updateInventory; vm discovered = $vm");
-#           push @vmArray, $vm;
-#         }
-#       }
-#     }
-#     close CMD;
-#     my $exit = $? >> 8;
-#     if ($exit ne 0) {
-#       OvomExtractor::log(3, "Bad exit status running $dcListCommand to get inventory");
-#       return 1;
-#     }
-#   }
-# 
-#   $OvomExtractor::inventory{'hosts'} = \@hostArray;
-#   $OvomExtractor::inventory{'vms'}   = \@vmArray;
-# 
-#   my($aHost, $aVM, $s);
-#   $s = "Discovered hosts: ";
-#   foreach $aHost (@{$OvomExtractor::inventory{'hosts'}}) {
-#     $s .= "$aHost;";
-#   }
-#   OvomExtractor::log(0, $s);
-#   
-#   $s = "Discovered VMs: ";
-#   foreach $aVM (@{$OvomExtractor::inventory{'vms'}}) {
-#     $s .= "$aVM;";
-#   }
-#   OvomExtractor::log(0, $s);
-# 
-#   my($ch, $cv);
-#   $ch = $#{$OvomExtractor::inventory{'hosts'}} + 1;
-#   $cv = $#{$OvomExtractor::inventory{'vms'}}   + 1;
-#   OvomExtractor::log(1, "Discovered $ch hosts and $cv VMs");
-# 
-#   # Let's create folders for performance
-#   my $intervalNamesRef = getIntervalNames();
-#   foreach $aHost (@{$OvomExtractor::inventory{'hosts'}}) {
-#     my $folder = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenterName'} . "/hosts/$aHost/";
-#     if(! -d $folder) {
-#       OvomExtractor::log(1, "Creating perfDataRoot folder for the host $aHost");
-#       mkdir $folder or die "Failed to create folder for host $folder: $!";
-#     }
-#     foreach my $period (@$intervalNamesRef) {
-#       $folder = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenterName'} . "/hosts/" . $aHost . "/$period";
-#       if(! -d $folder) {
-#         OvomExtractor::log(1, "Creating perfDataRoot folder for the host $aHost, period $period");
-#         mkdir $folder or die "Failed to create folder for host $folder: $!";
-#       }
-#     }
-#   }
-#   foreach $aVM (@{$OvomExtractor::inventory{'vms'}}) {
-#     my $folder = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenterName'} . "/vms/" . $aVM;
-#     if(! -d $folder) {
-#       OvomExtractor::log(1, "Creating perfDataRoot folder for the vm $aVM");
-#       mkdir $folder or die "Failed to create folder for vm $folder: $!";
-#     }
-#     foreach my $period (@$intervalNamesRef) {
-#       $folder = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenterName'} . "/vms/" . $aVM . "/$period";
-#       if(! -d $folder) {
-#         OvomExtractor::log(1, "Creating perfDataRoot folder for the vm $aVM, period $period");
-#         mkdir $folder or die "Failed to create folder for host $folder: $!";
-#       }
-#     }
-#   }
 }
 
 
@@ -723,15 +374,17 @@ sub getLatestPerformance {
   OvomExtractor::log(1, "Updating performance");
 
   my($aHost, $aVM);
-  foreach $aVM (@{$OvomExtractor::inventory{'vms'}}) {
+  foreach $aVM (@{$OvomExtractor::inventory{'VirtualMachine'}}) {
     if(getVmPerfs($aVM)) {
-      OvomExtractor::log(3, "Errors getting performance from VM $aVM, moving to next");
+      OvomExtractor::log(3, "Errors getting performance from VM $aVM, "
+                          . "moving to next");
       next;
     }
   }
-  foreach $aHost (@{$OvomExtractor::inventory{'hosts'}}) {
+  foreach $aHost (@{$OvomExtractor::inventory{'HostSystem'}}) {
     if(getHostPerfs($aHost)) {
-      OvomExtractor::log(3, "Errors getting performance from Host $aHost, moving to next");
+      OvomExtractor::log(3, "Errors getting performance from Host $aHost, "
+                          . "moving to next");
       next;
     }
   }
@@ -1045,12 +698,12 @@ sub createFoldersIfNeeded {
     OvomExtractor::log(1, "Creating perfDataRoot folder for the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
-  $folder = $vCenterFolder . "/hosts";
+  $folder = $vCenterFolder . "/HostSystem";
   if(! -d $folder) {
     OvomExtractor::log(1, "Creating perfDataRoot folder for hosts of the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
-  $folder = $vCenterFolder . "/vms";
+  $folder = $vCenterFolder . "/VirtualMachine";
   if(! -d $folder) {
     OvomExtractor::log(1, "Creating perfDataRoot folder for VMs of the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
