@@ -2,17 +2,45 @@ package OvomDao;
 use strict;
 use warnings;
 use DBI;
+use Time::HiRes; ## gettimeofday
+use Carp;
+
 
 our $dbh;
+our $sqlFolderSelectAll = 'SELECT a.name, a.moref, b.moref, a.enabled '
+                          . 'FROM folder as a '
+                          . 'inner join folder as b where a.parent = b.id';
 
 #
 # Connect to DataBAse
 #
-#
+# @return: 1 (ok), 0 (errors)
 #
 sub connect {
-  my $driver   = "mysql";
-  my $connStr  = "dbi:$driver:dbname=" . $OvomExtractor::configuration{'db.name'} . ";host=" . $OvomExtractor::configuration{'db.hostname'};
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $c = 0;
+
+  ## Let's test before if this handle is already active:
+  OvomExtractor::log(0, "Testing if the db handle "
+                      . "is already active before connecting to DB");
+  eval {
+    if($dbh && $dbh->{Active}) {
+      $c = 1;
+    }
+  };
+  if($@) {
+    OvomExtractor::log(3, "Errors checking if handle active "
+                        . "before connecting to database: $@");
+    return -1;
+  }
+  if($c == 1) {
+    OvomExtractor::log(3, "BUG! Handle already active before connecting to DB");
+    return -1;
+  }
+
+  my $connStr  = "dbi:mysql:dbname=" . $OvomExtractor::configuration{'db.name'}
+               . ";host=" . $OvomExtractor::configuration{'db.hostname'};
   my $username = $OvomExtractor::configuration{'db.username'};
   my $passwd   = $OvomExtractor::configuration{'db.password'};
   OvomExtractor::log(0, "Connecting to database with connection string: '$connStr'");
@@ -31,8 +59,10 @@ sub connect {
     return 1;
   }
 
-  OvomExtractor::log(1, "Successfully connected to database "
-                      . "with connection string: '$connStr'");
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: Connecting to DB "
+                        . "with connection string: '$connStr' took "
+                        . sprintf("%.3f", $eTime) . " s");
   return 0;
 }
 
@@ -59,7 +89,7 @@ sub disconnect {
 #
 sub connected {
   my $r = -1;
-  OvomExtractor::log(0, "Checking if connecte to database");
+  OvomExtractor::log(0, "Checking if connected to database");
 
   eval {
     if($dbh && $dbh->{Active}) {
@@ -165,5 +195,121 @@ sub select {
   return 0;
 }
 
+
+#
+# Get all folders from DB.
+#
+# @return undef (if errors), or a reference to array of OFolder objects (if ok)
+#
+sub getAllFolders {
+  my @r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+
+  eval {
+    $dbh->commit();
+    my $sth = $dbh->prepare($sqlFolderSelectAll)
+                or die "Can't prepare statement for all Folders: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr;
+    $sth->execute();
+    while (@data = $sth->fetchrow_array()) {
+      push @r, OFolder->new(\@data);
+    }
+    $sth->finish;
+  };
+
+  if($@) {
+    OvomExtractor::log(3, "Errors selecting all Folders from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: select all Folders took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return \@r;
+}
+
+#
+# Update objects on database if needed.
+#
+# Inserts the new objects,
+# updates the existing with changes,
+# noops on the unchanged existing
+# and deletes the ones that aren't available.
+#
+# @arg ref to array of objects found on vCenter
+# @arg ref to array of objects read on database
+# @return 1 if something changed, 0 if nothing changed, -1 if errors.
+#
+sub updateAsNeeded {
+  my ($discovered, $loadedFromDb) = @_;
+  my @toUpdate;
+  my @toInsert;
+  my @toDelete;
+  if( !defined($discovered) || !defined($loadedFromDb)) {
+    Carp::croack("updateAsNeeded needs a reference to 2 entities as argument");
+    return -1;
+  }
+  foreach my $aLoadedFromDb (@$loadedFromDb) {
+    push @toDelete, $aLoadedFromDb;
+  }
+
+  print "INITIALLY:\n";
+  print "DEBUG: discovered   = " . $#$discovered . "\n";
+  print "DEBUG: loadedFromDb = " . $#$loadedFromDb . "\n";
+  print "DEBUG: to insert    = " . $#toInsert . "\n";
+  print "DEBUG: to update    = " . $#toUpdate . "\n";
+  print "DEBUG: to delete    = " . $#toDelete . "\n";
+
+
+  foreach my $aDiscovered (@$discovered) {
+    my $found = 0;
+    my $j = -1;
+    foreach my $aLoadedFromDb (@$loadedFromDb) {
+      $j++;
+      print "DEBUG: ($j) comparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+      my $r = $aDiscovered->compare($aLoadedFromDb);
+      print "DEBUG: ($j) compared r = $r\n";
+      if ($r == -2) {
+        # Errors
+        return -1;
+      }
+      elsif ($r == 1) {
+        # Equal
+print "DEBUG: Let's delte the component $j of toDelete, that has $#toDelete components\n";
+print "DEBUG: previously contains:\n";
+foreach my $k (@toDelete) {
+  print "DEBUG: name = " . $k->{name} . "\n";
+}
+        splice @toDelete, $j, 1;
+        $j--;
+        $found = 1;
+        last;
+      }
+      elsif ($r == 0) {
+        # Changed (same mo_ref but some other attribute differs)
+        push @toUpdate, $aDiscovered;
+        splice @toDelete, $j, 1;
+        $j--;
+        $found = 1;
+        last;
+      }
+      # $r == -1  =>  differ, next
+    }
+    if ($found == 0) {
+      push @toInsert, $aDiscovered;
+    }
+  }
+
+  print "DEBUG: discovered   = " . $#$discovered . "\n";
+  print "DEBUG: loadedFromDb = " . $#$loadedFromDb . "\n";
+  print "DEBUG: to insert    = " . $#toInsert . "\n";
+  print "DEBUG: to update    = " . $#toUpdate . "\n";
+  print "DEBUG: to delete    = " . $#toDelete . "\n";
+
+  return 1 if($#toInsert == -1 && $#toUpdate == -1 && $#toDelete == -1);
+  return 0;
+}
 
 1;

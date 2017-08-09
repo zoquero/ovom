@@ -3,7 +3,7 @@
 -- http://www.phpmyadmin.net
 --
 -- Host: localhost
--- Generation Time: Aug 08, 2017 at 10:53 PM
+-- Generation Time: Aug 09, 2017 at 04:54 PM
 -- Server version: 5.7.19-0ubuntu0.16.04.1
 -- PHP Version: 7.0.18-0ubuntu0.16.04.1
 
@@ -53,19 +53,6 @@ CREATE TABLE `datacenter` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `host`
---
-
-CREATE TABLE `host` (
-  `id` int(11) UNSIGNED NOT NULL,
-  `name` varchar(255) NOT NULL,
-  `moref` varchar(255) NOT NULL,
-  `parent` int(11) UNSIGNED NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `folder`
 --
 
@@ -73,7 +60,8 @@ CREATE TABLE `folder` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
   `moref` varchar(255) NOT NULL,
-  `parent` int(10) UNSIGNED NOT NULL
+  `parent` int(10) UNSIGNED NOT NULL,
+  `enabled` tinyint(4) NOT NULL DEFAULT '0' COMMENT '1 enabled, 0 disabled'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -86,6 +74,19 @@ CREATE TABLE `folderparent` (
   `id` int(10) UNSIGNED NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL,
   `child` int(10) UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `host`
+--
+
+CREATE TABLE `host` (
+  `id` int(11) UNSIGNED NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `moref` varchar(255) NOT NULL,
+  `parent` int(11) UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -124,19 +125,13 @@ ALTER TABLE `datacenter`
   ADD KEY `network_folder` (`network_folder`);
 
 --
--- Indexes for table `host`
---
-ALTER TABLE `host`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `parent` (`parent`);
-
---
 -- Indexes for table `folder`
 --
 ALTER TABLE `folder`
   ADD PRIMARY KEY (`id`),
   ADD KEY `folder_name_idx` (`name`),
-  ADD KEY `folder_moref_idx` (`moref`);
+  ADD KEY `folder_moref_idx` (`moref`),
+  ADD KEY `folder_enabled_idx` (`enabled`);
 
 --
 -- Indexes for table `folderparent`
@@ -145,6 +140,13 @@ ALTER TABLE `folderparent`
   ADD PRIMARY KEY (`id`),
   ADD KEY `folderparent_parent_idx` (`parent`),
   ADD KEY `folderparent_child_idx` (`child`);
+
+--
+-- Indexes for table `host`
+--
+ALTER TABLE `host`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `parent` (`parent`);
 
 --
 -- Indexes for table `virtualmachine`
@@ -168,20 +170,20 @@ ALTER TABLE `cluster`
 ALTER TABLE `datacenter`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 --
--- AUTO_INCREMENT for table `host`
---
-ALTER TABLE `host`
-  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT;
---
 -- AUTO_INCREMENT for table `folder`
 --
 ALTER TABLE `folder`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 --
 -- AUTO_INCREMENT for table `folderparent`
 --
 ALTER TABLE `folderparent`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+--
+-- AUTO_INCREMENT for table `host`
+--
+ALTER TABLE `host`
+  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT;
 --
 -- AUTO_INCREMENT for table `virtualmachine`
 --
@@ -207,17 +209,17 @@ ALTER TABLE `datacenter`
   ADD CONSTRAINT `datastore_vm_fk` FOREIGN KEY (`vm_folder`) REFERENCES `folder` (`id`);
 
 --
--- Constraints for table `host`
---
-ALTER TABLE `host`
-  ADD CONSTRAINT `host_parent_fk` FOREIGN KEY (`parent`) REFERENCES `folder` (`id`);
-
---
 -- Constraints for table `folderparent`
 --
 ALTER TABLE `folderparent`
   ADD CONSTRAINT `child_fk` FOREIGN KEY (`child`) REFERENCES `folder` (`id`),
   ADD CONSTRAINT `parent_fk` FOREIGN KEY (`parent`) REFERENCES `folder` (`id`);
+
+--
+-- Constraints for table `host`
+--
+ALTER TABLE `host`
+  ADD CONSTRAINT `host_parent_fk` FOREIGN KEY (`parent`) REFERENCES `folder` (`id`);
 
 --
 -- Constraints for table `virtualmachine`

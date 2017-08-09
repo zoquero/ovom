@@ -146,7 +146,7 @@ sub pushToInventory {
       $aEntity = OCluster->new($aEntityView);
     }
     elsif($type eq 'Folder') {
-      $aEntity = OFolder->new($aEntityView);
+      $aEntity = OFolder->newFromView($aEntityView);
     }
     else {
       OvomExtractor::log(3, "Unexpected type '$type' in pushToInventory");
