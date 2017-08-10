@@ -14,46 +14,58 @@ use OCluster;
 print "Testing DBI\n";
 OvomExtractor::collectorInit();
 
-my @foundDataCenters;
-my @foundVirtualMachines;
-my @foundHosts;
-my @foundClusters;
-my @foundFolders;
+if(OvomExtractor::updateInventory()) {
+  OvomExtractor::log(2, "Errors updating inventory");
+}
+else {
+  OvomExtractor::log(2, "The inventory has been updated");
+}
 
-my $someDataCenterViews     = OvomExtractor::getViewsFromCsv('Datacenter');
-my $someVirtualMachineViews = OvomExtractor::getViewsFromCsv('VirtualMachine');
-my $someHostViews           = OvomExtractor::getViewsFromCsv('HostSystem');
-my $someClusterViews        = OvomExtractor::getViewsFromCsv('ClusterComputeResource');
-my $someFolderViews         = OvomExtractor::getViewsFromCsv('Folder');
+#print "Show Folders::\n";
+#foreach my $aEntity (@{$OvomExtractor::inventory{'Folder'}}) {
+#  print "a Folder = " . $$aEntity->toCsvRow() . "\n";
+#}
 
-foreach my $aView (@$someDataCenterViews) {
-  my $aEntity = ODataCenter->new($aView);
-  push @foundDataCenters, $aEntity;
-# print "vDC : name = "            . $aEntity->{name}            . " mo_ref = "         . $aEntity->{mo_ref}        . " parent = " . $aEntity->{parent}
-#          . " datastoreFolder = " . $aEntity->{datastoreFolder} . " vmFolder = "      . $aEntity->{vmFolder}
-#          . " hostFolder = "      . $aEntity->{hostFolder}      . " networkFolder = " . $aEntity->{networkFolder} . "\n";
-}
-foreach my $aView (@$someVirtualMachineViews) {
-  my $aEntity = OVirtualMachine->new($aView);
-  push @foundVirtualMachines, $aEntity;
-# print "VM : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
-}
-foreach my $aView (@$someHostViews) {
-  my $aEntity = OHost->new($aView);
-  push @foundHosts, $aEntity;
-# print "Host : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
-}
-foreach my $aView (@$someClusterViews) {
-  my $aEntity = OCluster->new($aView);
-  push @foundClusters, $aEntity;
-# print "Cluster : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
-}
-foreach my $aView (@$someFolderViews) {
-  my $aEntity = OFolder->newFromView($aView);
-  push @foundFolders, $aEntity;
-# my $parent = defined($aEntity->{parent}) ? $aEntity->{parent} : '';
-# print "Folder : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = $parent\n";
-}
+# my @foundDataCenters;
+# my @foundVirtualMachines;
+# my @foundHosts;
+# my @foundClusters;
+# my @foundFolders;
+# 
+# my $someDataCenterViews     = OvomExtractor::getViewsFromCsv('Datacenter');
+# my $someVirtualMachineViews = OvomExtractor::getViewsFromCsv('VirtualMachine');
+# my $someHostViews           = OvomExtractor::getViewsFromCsv('HostSystem');
+# my $someClusterViews        = OvomExtractor::getViewsFromCsv('ClusterComputeResource');
+# my $someFolderViews         = OvomExtractor::getViewsFromCsv('Folder');
+# 
+# foreach my $aView (@$someDataCenterViews) {
+#   my $aEntity = ODataCenter->new($aView);
+#   push @foundDataCenters, $aEntity;
+# # print "vDC : name = "            . $aEntity->{name}            . " mo_ref = "         . $aEntity->{mo_ref}        . " parent = " . $aEntity->{parent}
+# #          . " datastoreFolder = " . $aEntity->{datastoreFolder} . " vmFolder = "      . $aEntity->{vmFolder}
+# #          . " hostFolder = "      . $aEntity->{hostFolder}      . " networkFolder = " . $aEntity->{networkFolder} . "\n";
+# }
+# foreach my $aView (@$someVirtualMachineViews) {
+#   my $aEntity = OVirtualMachine->new($aView);
+#   push @foundVirtualMachines, $aEntity;
+# # print "VM : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
+# }
+# foreach my $aView (@$someHostViews) {
+#   my $aEntity = OHost->new($aView);
+#   push @foundHosts, $aEntity;
+# # print "Host : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
+# }
+# foreach my $aView (@$someClusterViews) {
+#   my $aEntity = OCluster->new($aView);
+#   push @foundClusters, $aEntity;
+# # print "Cluster : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
+# }
+# foreach my $aView (@$someFolderViews) {
+#   my $aEntity = OFolder->newFromView($aView);
+#   push @foundFolders, $aEntity;
+#   my $parent = defined($aEntity->{parent}) ? $aEntity->{parent} : '';
+#   print "Folder : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = $parent\n";
+# }
 
 my $r;
 OvomDao::connect();
@@ -85,8 +97,7 @@ if (! defined($allFoldersFromDB) ) {
 # OvomExtractor::collectorStop();
 # exit(1);
 
-
-$r = OvomDao::updateAsNeeded(\@foundFolders, $allFoldersFromDB);
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Folder'}}, $allFoldersFromDB);
 if($r == -1) {
   OvomDao::transactionRollback();
   OvomDao::disconnect();

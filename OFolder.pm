@@ -43,6 +43,11 @@ sub newWithId {
 sub newFromView {
   my ($class, $view) = @_;
   Carp::croack("OFolder constructor requires a View") unless (defined($view));
+#  my $p;
+#  if ( ! defined($view->{parent}->{value}) && $view->{name} eq 'Datacenters') {
+#    $p = 0;
+#    die "newFromView, no té parent i és name Datacenter";
+#  }
   my $self = bless {
     id              => undef,
     oclass_name     => 'OFolder',
@@ -91,7 +96,7 @@ sub compare {
   }
   elsif ( ( $self->{name}    eq $other->{name}
          && $self->{name}    eq 'Datacenters' )
-       && ( $self->{parent}  eq '' 
+       && ( ( ! defined($self->{parent}) || $self->{parent}  eq '' )
          && $other->{parent} eq 'group-d1' )) {
     #
     # It's the special root folder that has:

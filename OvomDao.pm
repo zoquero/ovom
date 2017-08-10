@@ -243,7 +243,7 @@ sub getAllFolders {
 # noops on the unchanged existing
 # and deletes the ones that aren't available.
 #
-# @arg ref to array of objects found on vCenter
+# @arg ref to array of references to objects found on vCenter
 # @arg ref to array of objects read on database
 # @return 1 if something changed, 0 if nothing changed, -1 if errors.
 #
@@ -253,7 +253,7 @@ sub updateAsNeeded {
   my @toInsert;
   my @toDelete;
   my @loadedPositionsNotTobeDeleted;
-## splice @toDelete, $j, 1;
+
   if( !defined($discovered) || !defined($loadedFromDb)) {
     Carp::croack("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
     return -1;
@@ -267,9 +267,16 @@ sub updateAsNeeded {
   foreach my $aDiscovered (@$discovered) {
     my $j = -1;
     foreach my $aLoadedFromDb (@$loadedFromDb) {
+
+my $oClassName = $aLoadedFromDb->{oclass_name};
+if($oClassName ne 'OFolder') {
+  die "By now just implmented for OFolder";
+}
+
       $j++;
-      my $r = $aDiscovered->compare($aLoadedFromDb);
-#print "DEBUG: (j=$j) r=$r \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+      my $r;
+      $r = $$aDiscovered->compare($aLoadedFromDb);
+#print "DEBUG: (j=$j) r=$r \tcomparing " . $$aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
       if ($r == -2) {
         # Errors
         return -1;
@@ -283,7 +290,7 @@ sub updateAsNeeded {
       elsif ($r == 0) {
         # Changed (same mo_ref but some other attribute differs)
 #print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
-        push @toUpdate, $aDiscovered;
+        push @toUpdate, $$aDiscovered;
         push @loadedPositionsNotTobeDeleted, $j;
         last;
       }
@@ -291,7 +298,7 @@ sub updateAsNeeded {
         # $r == -1  =>  differ
         if ($j == $#$loadedFromDb) {
 #print "DEBUG: It has to be INSERTED into DB.\n";
-          push @toInsert, $aDiscovered;
+          push @toInsert, $$aDiscovered;
         }
       }
     }
@@ -311,7 +318,8 @@ sub updateAsNeeded {
   OvomExtractor::log(0, "updateAsNeeded: $str");
 
   # Let's work:
-  if($$discovered[0]->{oclass_name} eq 'OFolder') {
+  OvomExtractor::log(0, "updateAsNeeded: Inserting") if $#toInsert >= 0;
+  if(${$$discovered[0]}->{oclass_name} eq 'OFolder') {
     # Let's keep parental integrity
     while (my $aEntity = popNextFolderWithParent(\@toInsert)) {
       insert($aEntity);
@@ -323,10 +331,12 @@ sub updateAsNeeded {
     }
   }
 
+  OvomExtractor::log(0, "updateAsNeeded: Updating") if $#toUpdate >= 0;
   foreach my $aEntity (@toUpdate) {
     OvomDao::update($aEntity);
   }
 
+  OvomExtractor::log(0, "updateAsNeeded: Deleting") if $#toDelete >= 0;
   foreach my $aEntity (@toDelete) {
     OvomDao::delete($aEntity);
   }
@@ -337,16 +347,13 @@ sub updateAsNeeded {
 
 sub popNextFolderWithParent {
   my $entities = shift;
-#print "DEBUG: popNextFolderWithParent : INIT\n";
   for(my $i = 0; $i <= $#$entities; $i++) {
     my $aParent = OvomDao::loadFolderByMoRef($$entities[$i]->{parent});
     if (defined $aParent) {
-#print "DEBUG: popNextFolderWithParent : [$i] (" . $$entities[$i]->{name} . ") has parent with name: " . $aParent->{name} . "\n";
       my $r = $$entities[$i];
       splice @$entities, $i, 1;
       return $r;
     }
-#print "DEBUG: popNextFolderWithParent : [$i] (" . $$entities[$i]->{name} . ") hasn't parent\n";
   }
 }
 
@@ -387,7 +394,8 @@ sub update {
     return 0;
   }
 
-# print "DEBUG: Dao.update: updating a $oClassName : " . $entity->toCsvRow() . "\n";
+#print "DEBUG: Dao.update: updating a $oClassName : " . $entity->toCsvRow() . "\n";
+  OvomExtractor::log(0, "Updating into db a $oClassName with mo_ref " . $entity->{mo_ref});
 
   my $r;
   my @data;
@@ -396,7 +404,15 @@ sub update {
 
   eval {
     my $parentFolder   = OvomDao::loadFolderByMoRef($entity->{parent});
+    if(! defined($parentFolder)) {
+      Carp::croack("Can't load the parent of a $oClassName."
+                 . " Child's  mo_ref = " . $entity->{mo_ref}
+                 . " parent's mo_ref = " . $entity->{parent});
+      return 0;
+    }
+#print "DEBUG: Dao.update: after loading parent, parent = " . $parentFolder->toCsvRow() . "\n";
     my $loadedParentId = $parentFolder->{id};
+#print "DEBUG: Dao.update: loadedParentId = $loadedParentId \n";
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
       Carp::croack("Can't prepare statement for updating a $oClassName: "
@@ -463,10 +479,11 @@ sub delete {
     $stmt = $sqlFolderDelete;
   }
   else {
-    Carp::croack("Statement stil unimplemente in OvomDao.delete");
+    Carp::croack("Statement stil unimplemented in OvomDao.delete");
     return 0;
   }
 
+  OvomExtractor::log(0, "deleting from db a $oClassName with mo_ref " . $entity->{mo_ref});
   my $r;
   my @data;
   my ($timeBefore, $eTime);
@@ -520,29 +537,37 @@ sub loadFolderByMoRef {
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
 
+  if (! defined ($folderMoRef)) {
+    Carp::croack("Got an undefined mo_ref");
+    return undef;
+  }
+
+  my $entityName = "OFolder";
+  OvomExtractor::log(0, "selecting from db a ${entityName} with mo_ref = " . $folderMoRef);
+
   eval {
     my $sth = $dbh->prepare_cached($sqlFolderSelectByMoref)
-                or die "Can't prepare statement for all Folders: "
+                or die "Can't prepare statement for all ${entityName}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     $sth->execute($folderMoRef);
     my $found = 0;
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
-        Carp::croack("Found more than one Folder "
+        Carp::croack("Found more than one ${entityName} "
                    . "when looking for the one with mo_ref $folderMoRef");
-        return -1;
+        return undef;
       }
       $r = OFolder->newWithId(\@data);
     }
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors getting a Folder from DB: $@");
+    OvomExtractor::log(3, "Errors getting a ${entityName} from DB: $@");
     return undef;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: select a Folder took "
+  OvomExtractor::log(1, "Profiling: select a ${entityName} took "
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
 }
@@ -583,6 +608,7 @@ sub insert {
     return 0;
   }
 
+  OvomExtractor::log(0, "insert into db a $oClassName with name " . $entity->{name});
   my $r;
   my @data;
   my ($timeBefore, $eTime);
