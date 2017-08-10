@@ -16,7 +16,6 @@ sub new {
     name            => shift @$args,
     mo_ref          => shift @$args,
     parent          => shift @$args,
-    enabled         => shift @$args,
   }, $class;
   return $self;
 }
@@ -36,7 +35,6 @@ sub newWithId {
     name            => shift @$args,
     mo_ref          => shift @$args,
     parent          => shift @$args,
-    enabled         => shift @$args,
   }, $class;
   return $self;
 }
@@ -56,7 +54,6 @@ sub newFromView {
     ##
     parent          => defined($view->{parent}->{value}) ?
                                $view->{parent}->{value} : undef,
-    enabled         => 1,
   }, $class;
   return $self;
 }
@@ -66,8 +63,7 @@ sub toCsvRow {
   my $self = shift;
   my $csvRow = $self->{name}                                     . $csvSep;
   $csvRow   .= $self->{mo_ref}                                   . $csvSep;
-  $csvRow   .= (defined($self->{parent}) ? $self->{parent} : '') . $csvSep;
-  $csvRow   .= $self->{enabled};
+  $csvRow   .= (defined($self->{parent}) ? $self->{parent} : '');
   return $csvRow;
 }
 
@@ -85,7 +81,7 @@ sub compare {
     Carp::croack("Compare requires other entity as argument");
     return -2;
   }
-  if( !defined($other->{name}) || !defined($other->{parent}) || !defined($other->{mo_ref}) || !defined($other->{enabled})) {
+  if( !defined($other->{name}) || !defined($other->{parent}) || !defined($other->{mo_ref})) {
     Carp::croack("The argument doesn't look like an entity in 'compare'");
     return -2;
   }
@@ -108,8 +104,7 @@ sub compare {
     return 1;
   }
   elsif ( $self->{name}    ne $other->{name}
-       || $self->{parent}  ne $other->{parent}
-       || $self->{enabled} ne $other->{enabled} ) {
+       || $self->{parent}  ne $other->{parent} ) {
     # Same folder (equal mo_ref), but name or parent has changed
     return 0;
   }

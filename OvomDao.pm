@@ -7,17 +7,17 @@ use Carp;
 
 
 our $dbh;
-our $sqlFolderSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref, a.enabled '
+our $sqlFolderSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
-our $sqlFolderSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref, a.enabled '
+our $sqlFolderSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b '
                               . 'where a.parent = b.id and a.moref = ?';
-our $sqlFolderInsert = 'INSERT INTO folder (name, moref, parent, enabled) '
-                          . 'VALUES (?, ?, ?, ?)';
+our $sqlFolderInsert = 'INSERT INTO folder (name, moref, parent) '
+                          . 'VALUES (?, ?, ?)';
                                                 # moref is immutable
-our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ?, enabled = ? where moref = ?';
+our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ? where moref = ?';
 our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
 
 #
@@ -406,7 +406,7 @@ sub update {
 
     my $sthRes;
     if($oClassName eq 'OFolder') {
-      $sthRes = $sth->execute($entity->{name}, $loadedParentId, $entity->{enabled}, $entity->{mo_ref});
+      $sthRes = $sth->execute($entity->{name}, $loadedParentId, $entity->{mo_ref});
     }
     else {
       Carp::croack("Statement execution stil unimplemented in OvomDao.update");
@@ -600,7 +600,7 @@ sub insert {
 
     my $sthRes;
     if($oClassName eq 'OFolder') {
-      $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId, $entity->{enabled});
+      $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
     else {
       Carp::croack("Statement execution stil unimplemente in OvomDao.insert");
