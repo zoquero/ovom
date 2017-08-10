@@ -264,9 +264,8 @@ sub updateAsNeeded {
     my $j = -1;
     foreach my $aLoadedFromDb (@$loadedFromDb) {
       $j++;
-      print "DEBUG: ($j) comparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
       my $r = $aDiscovered->compare($aLoadedFromDb);
-      print "DEBUG: ($j) compared r = $r\n";
+      print "DEBUG: (j=$j) r=$r \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
       if ($r == -2) {
         # Errors
         return -1;

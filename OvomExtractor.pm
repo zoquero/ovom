@@ -123,6 +123,15 @@ sub pushToInventory {
     my $aEntity;
     if($type eq 'Datacenter') {
       $aEntity = ODataCenter->new($aEntityView);
+
+      #
+      # The parent for the base folders for hosts, networks, VMs
+      # and datastores are not folders, are its datacenters.
+      # So let's create a Folder object also for each Datacenter
+      #
+      $aEntity = OFolder->newFromView($aEntityView);
+      push @{$inventory{'Folder'}}, \$aEntity;
+      OvomExtractor::log(0, "Pushed an unexisting Folder for Datacenter " . $aEntityView->{name} . " with same mo_ref as a workaround for base Folders that have its Datacenter as parent");
     }
     elsif($type eq 'VirtualMachine') {
       $aEntity = OVirtualMachine->new($aEntityView);
