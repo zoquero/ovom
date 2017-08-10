@@ -7,9 +7,18 @@ use Carp;
 
 
 our $dbh;
-our $sqlFolderSelectAll = 'SELECT a.name, a.moref, b.moref, a.enabled '
-                          . 'FROM folder as a '
-                          . 'inner join folder as b where a.parent = b.id';
+our $sqlFolderSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref, a.enabled '
+                              . 'FROM folder as a '
+                              . 'inner join folder as b where a.parent = b.id';
+our $sqlFolderSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref, a.enabled '
+                              . 'FROM folder as a '
+                              . 'inner join folder as b '
+                              . 'where a.parent = b.id and a.moref = ?';
+our $sqlFolderInsert = 'INSERT INTO folder (name, moref, parent, enabled) '
+                          . 'VALUES (?, ?, ?, ?)';
+                                                # moref is immutable
+our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ?, enabled = ? where moref = ?';
+our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
 
 #
 # Connect to DataBAse
@@ -182,12 +191,10 @@ sub select {
     if ($sth->rows == 0) {
       print "No names matched\n\n";
     }
-
-    $sth->finish;
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors selecting from DB: $@");
+    OvomExtractor::log(3, "Errors getting from DB: $@");
     return 1;
   }
 
@@ -208,19 +215,17 @@ sub getAllFolders {
   $timeBefore=Time::HiRes::time;
 
   eval {
-    $dbh->commit();
-    my $sth = $dbh->prepare($sqlFolderSelectAll)
+    my $sth = $dbh->prepare_cached($sqlFolderSelectAll)
                 or die "Can't prepare statement for all Folders: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     $sth->execute();
     while (@data = $sth->fetchrow_array()) {
-      push @r, OFolder->new(\@data);
+      push @r, OFolder->newWithId(\@data);
     }
-    $sth->finish;
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors selecting all Folders from DB: $@");
+    OvomExtractor::log(3, "Errors getting all Folders from DB: $@");
     return undef;
   }
 
@@ -250,33 +255,34 @@ sub updateAsNeeded {
   my @loadedPositionsNotTobeDeleted;
 ## splice @toDelete, $j, 1;
   if( !defined($discovered) || !defined($loadedFromDb)) {
-    Carp::croack("updateAsNeeded needs a reference to 2 entities as argument");
+    Carp::croack("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
     return -1;
   }
 
-  print "INITIALLY:\n";
-  print "DEBUG: discovered   = " . $#$discovered . "\n";
-  print "DEBUG: loadedFromDb = " . $#$loadedFromDb . "\n";
-  print "DEBUG: to insert    = " . $#toInsert . "\n";
-  print "DEBUG: to update    = " . $#toUpdate . "\n";
+  if( $#$discovered == -1 || $#$loadedFromDb == -1 ) {
+    OvomExtractor::log(2, "updateAsNeeded: Got 0 discovered and 0 loadedFromDb entities");
+    return 0;
+  }
 
   foreach my $aDiscovered (@$discovered) {
     my $j = -1;
     foreach my $aLoadedFromDb (@$loadedFromDb) {
       $j++;
       my $r = $aDiscovered->compare($aLoadedFromDb);
-      print "DEBUG: (j=$j) r=$r \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+#print "DEBUG: (j=$j) r=$r \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
       if ($r == -2) {
         # Errors
         return -1;
       }
       elsif ($r == 1) {
+#print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
         # Equal
         push @loadedPositionsNotTobeDeleted, $j;
         last;
       }
       elsif ($r == 0) {
         # Changed (same mo_ref but some other attribute differs)
+#print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
         push @toUpdate, $aDiscovered;
         push @loadedPositionsNotTobeDeleted, $j;
         last;
@@ -284,27 +290,340 @@ sub updateAsNeeded {
       else {
         # $r == -1  =>  differ
         if ($j == $#$loadedFromDb) {
-print "DEBUG: Differs and $j looks like last component. Has to be inserted into DB.\n";
+#print "DEBUG: It has to be INSERTED into DB.\n";
           push @toInsert, $aDiscovered;
-          push @loadedPositionsNotTobeDeleted, $j;
         }
       }
     }
   }
   for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
-    if ( grep /^$i$/, @loadedPositionsNotTobeDeleted ) {
+    if ( ! grep /^$i$/, @loadedPositionsNotTobeDeleted ) {
       push @toDelete, $$loadedFromDb[$i];
     }
   }
 
-  print "DEBUG: discovered   = " . $#$discovered . "\n";
-  print "DEBUG: loadedFromDb = " . $#$loadedFromDb . "\n";
-  print "DEBUG: to insert    = " . $#toInsert . "\n";
-  print "DEBUG: to update    = " . $#toUpdate . "\n";
-  print "DEBUG: to delete    = " . $#toDelete . "\n";
+  my $str = ($#$discovered + 1)   . " entities discovered, "
+          . ($#$loadedFromDb + 1) . " entities loadedFromDb, "
+          . ($#toInsert + 1)      . " entities toInsert, "
+          . ($#toUpdate + 1)      . " entities toUpdate, "
+          . ($#toDelete + 1)      . " entities toDelete";
+
+  OvomExtractor::log(0, "updateAsNeeded: $str");
+
+  # Let's work:
+  if($$discovered[0]->{oclass_name} eq 'OFolder') {
+    # Let's keep parental integrity
+    while (my $aEntity = popNextFolderWithParent(\@toInsert)) {
+      insert($aEntity);
+    }
+  }
+  else {
+    foreach my $aEntity (@toInsert) {
+      OvomDao::insert($aEntity);
+    }
+  }
+
+  foreach my $aEntity (@toUpdate) {
+    OvomDao::update($aEntity);
+  }
+
+  foreach my $aEntity (@toDelete) {
+    OvomDao::delete($aEntity);
+  }
 
   return 1 if($#toInsert == -1 && $#toUpdate == -1 && $#toDelete == -1);
   return 0;
+}
+
+sub popNextFolderWithParent {
+  my $entities = shift;
+#print "DEBUG: popNextFolderWithParent : INIT\n";
+  for(my $i = 0; $i <= $#$entities; $i++) {
+    my $aParent = OvomDao::loadFolderByMoRef($$entities[$i]->{parent});
+    if (defined $aParent) {
+#print "DEBUG: popNextFolderWithParent : [$i] (" . $$entities[$i]->{name} . ") has parent with name: " . $aParent->{name} . "\n";
+      my $r = $$entities[$i];
+      splice @$entities, $i, 1;
+      return $r;
+    }
+#print "DEBUG: popNextFolderWithParent : [$i] (" . $$entities[$i]->{name} . ") hasn't parent\n";
+  }
+}
+
+#
+# Update an entity
+#
+# @return 1 (if ok), or 0 (if errors)
+#
+sub update {
+  my $entity = shift;
+
+  # Pre-conditions
+  if (! defined ($entity)) {
+    Carp::croack("OvomDao.update needs an entity");
+    return 0;
+  }
+  if (! defined ($entity->{oclass_name})) {
+    Carp::croack("OvomDao.update: the parameter doesn't look like an entity");
+    return 0;
+  }
+  my $oClassName = $entity->{oclass_name};
+  if($oClassName ne 'OCluster'
+  && $oClassName ne 'ODataCenter'
+  && $oClassName ne 'OFolder'
+  && $oClassName ne 'OHost'
+  && $oClassName ne 'OVirtualMachine') {
+    Carp::croack("OvomDao.update needs an entity");
+    return 0;
+  }
+
+
+  my $stmt;
+  if($oClassName eq 'OFolder') {
+    $stmt = $sqlFolderUpdate;
+  }
+  else {
+    Carp::croack("Statement stil unimplemente in OvomDao.update");
+    return 0;
+  }
+
+# print "DEBUG: Dao.update: updating a $oClassName : " . $entity->toCsvRow() . "\n";
+
+  my $r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+
+  eval {
+    my $parentFolder   = OvomDao::loadFolderByMoRef($entity->{parent});
+    my $loadedParentId = $parentFolder->{id};
+    my $sth = $dbh->prepare_cached($stmt);
+    if(! $sth) {
+      Carp::croack("Can't prepare statement for updating a $oClassName: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+
+    my $sthRes;
+    if($oClassName eq 'OFolder') {
+      $sthRes = $sth->execute($entity->{name}, $loadedParentId, $entity->{enabled}, $entity->{mo_ref});
+    }
+    else {
+      Carp::croack("Statement execution stil unimplemented in OvomDao.update");
+      return 0;
+    }
+
+    if(! $sthRes) {
+      Carp::croack("Can't execute the statement for updating a $oClassName: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+  };
+
+  if($@) {
+    OvomExtractor::log(3, "Errors updating a $oClassName into DB: $@");
+    return 0;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: updating a $oClassName took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return $r;
+}
+
+#
+# Delete an entity from DB
+#
+# @return 1 (if ok), or 0 (if errors)
+#
+sub delete {
+  my $entity = shift;
+
+  # Pre-conditions
+  if (! defined ($entity)) {
+    Carp::croack("OvomDao.delete needs an entity");
+    return 0;
+  }
+  if (! defined ($entity->{oclass_name})) {
+    Carp::croack("OvomDao.delete: the parameter doesn't look like an entity");
+    return 0;
+  }
+  my $oClassName = $entity->{oclass_name};
+  if($oClassName ne 'OCluster'
+  && $oClassName ne 'ODataCenter'
+  && $oClassName ne 'OFolder'
+  && $oClassName ne 'OHost'
+  && $oClassName ne 'OVirtualMachine') {
+    Carp::croack("OvomDao.delete needs an entity");
+    return 0;
+  }
+
+  my $stmt;
+  if($oClassName eq 'OFolder') {
+    $stmt = $sqlFolderDelete;
+  }
+  else {
+    Carp::croack("Statement stil unimplemente in OvomDao.delete");
+    return 0;
+  }
+
+  my $r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt);
+    if(! $sth) {
+      Carp::croack("Can't prepare statement for deleting a $oClassName: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+
+    my $sthRes;
+    if($oClassName eq 'OFolder') {
+      $sthRes = $sth->execute($entity->{mo_ref});
+    }
+    else {
+      Carp::croack("Statement execution stil unimplemented in OvomDao.delete");
+      return 0;
+    }
+
+    if(! $sthRes) {
+      Carp::croack("Can't execute the statement for deleting a $oClassName: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+  };
+
+  if($@) {
+    OvomExtractor::log(3, "Errors deleting a $oClassName into DB: $@");
+    return 0;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: deleting a $oClassName took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return $r;
+}
+
+
+#
+# Get a Folder from DB by mo_ref.
+#
+# @return undef (if errors), or a reference to OFolder object (if ok)
+#
+sub loadFolderByMoRef {
+  my $folderMoRef = shift;
+  my $r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+
+  eval {
+    my $sth = $dbh->prepare_cached($sqlFolderSelectByMoref)
+                or die "Can't prepare statement for all Folders: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr;
+    $sth->execute($folderMoRef);
+    my $found = 0;
+    while (@data = $sth->fetchrow_array()) {
+      if ($found++ > 0) {
+        Carp::croack("Found more than one Folder "
+                   . "when looking for the one with mo_ref $folderMoRef");
+        return -1;
+      }
+      $r = OFolder->newWithId(\@data);
+    }
+  };
+
+  if($@) {
+    OvomExtractor::log(3, "Errors getting a Folder from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: select a Folder took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return $r;
+}
+
+#
+# Insert an object into DB
+#
+# @return 1 (if ok), or 0 (if errors)
+#
+sub insert {
+  my $entity = shift;
+
+  # Pre-conditions
+  if (! defined ($entity)) {
+    Carp::croack("OvomDao.insert needs an entity");
+    return 0;
+  }
+  if (! defined ($entity->{oclass_name})) {
+    Carp::croack("OvomDao.insert: the parameter doesn't look like an entity");
+    return 0;
+  }
+  my $oClassName = $entity->{oclass_name};
+  if($oClassName ne 'OCluster'
+  && $oClassName ne 'ODataCenter'
+  && $oClassName ne 'OFolder'
+  && $oClassName ne 'OHost'
+  && $oClassName ne 'OVirtualMachine') {
+    Carp::croack("OvomDao.insert needs an entity");
+    return 0;
+  }
+
+  my $stmt;
+  if($oClassName eq 'OFolder') {
+    $stmt = $sqlFolderInsert;
+  }
+  else {
+    Carp::croack("Statement stil unimplemente in OvomDao.insert");
+    return 0;
+  }
+
+  my $r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+
+  eval {
+    my $parentFolder   = OvomDao::loadFolderByMoRef($entity->{parent});
+    my $loadedParentId = $parentFolder->{id};
+    my $sth = $dbh->prepare_cached($stmt);
+    if(! $sth) {
+      Carp::croack("Can't prepare statement for inserting a $oClassName: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+
+    my $sthRes;
+    if($oClassName eq 'OFolder') {
+      $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId, $entity->{enabled});
+    }
+    else {
+      Carp::croack("Statement execution stil unimplemente in OvomDao.insert");
+      return 0;
+    }
+
+
+    if(! $sthRes) {
+      Carp::croack("Can't execute the statement for inserting a $oClassName: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+  };
+
+  if($@) {
+    OvomExtractor::log(3, "Errors inserting a $oClassName into DB: $@");
+    return 0;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: insert a $oClassName took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return $r;
 }
 
 1;

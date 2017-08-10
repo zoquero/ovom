@@ -65,12 +65,31 @@ OvomDao::connect();
 my $allFoldersFromDB = OvomDao::getAllFolders();
 if (! defined($allFoldersFromDB) ) {
   OvomDao::transactionRollback();
+  OvomDao::disconnect();
   OvomExtractor::collectorStop();
   exit(1);
 }
+
+# my $folderMoRef = 'group-d1';
+# my $aFolderFromDB = OvomDao::loadFolderByMoRef($folderMoRef);
+# if (! defined($aFolderFromDB) ) {
+#   print "Can't find the folder with mo_ref = $folderMoRef\n";
+#   OvomDao::transactionRollback();
+#   OvomDao::disconnect();
+#   OvomExtractor::collectorStop();
+#   exit(1);
+# }
+# print "Found the folder " . $aFolderFromDB->toCsvRow() . "\n";
+# OvomDao::transactionRollback();
+# OvomDao::disconnect();
+# OvomExtractor::collectorStop();
+# exit(1);
+
+
 $r = OvomDao::updateAsNeeded(\@foundFolders, $allFoldersFromDB);
 if($r == -1) {
   OvomDao::transactionRollback();
+  OvomDao::disconnect();
   OvomExtractor::collectorStop();
   exit(1);
 }

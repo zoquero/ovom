@@ -10,6 +10,28 @@ sub new {
   Carp::croack("OFolder constructor requires args")
     unless (defined($args) && $#$args > 1);
   my $self = bless {
+    id              => undef,
+    oclass_name     => 'OFolder',
+    view            => undef,
+    name            => shift @$args,
+    mo_ref          => shift @$args,
+    parent          => shift @$args,
+    enabled         => shift @$args,
+  }, $class;
+  return $self;
+}
+
+
+#
+# Just like 'new' but adding a first component with the id in the args
+#
+sub newWithId {
+  my ($class, $args) = @_;
+  Carp::croack("OFolder constructor requires args")
+    unless (defined($args) && $#$args > 1);
+  my $self = bless {
+    id              => shift @$args,
+    oclass_name     => 'OFolder',
     view            => undef,
     name            => shift @$args,
     mo_ref          => shift @$args,
@@ -24,6 +46,8 @@ sub newFromView {
   my ($class, $view) = @_;
   Carp::croack("OFolder constructor requires a View") unless (defined($view));
   my $self = bless {
+    id              => undef,
+    oclass_name     => 'OFolder',
     view            => $view,
     name            => $view->{name},
     mo_ref          => $view->{mo_ref}{value},
@@ -37,6 +61,7 @@ sub newFromView {
   return $self;
 }
 
+
 sub toCsvRow {
   my $self = shift;
   my $csvRow = $self->{name}                                     . $csvSep;
@@ -45,6 +70,7 @@ sub toCsvRow {
   $csvRow   .= $self->{enabled};
   return $csvRow;
 }
+
 
 #
 # Compare this object with other object of the same type
