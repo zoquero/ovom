@@ -39,7 +39,7 @@ else {
 # my $someFolderViews         = OvomExtractor::getViewsFromCsv('Folder');
 # 
 # foreach my $aView (@$someDataCenterViews) {
-#   my $aEntity = ODataCenter->new($aView);
+#   my $aEntity = ODataCenter->newFromView($aView);
 #   push @foundDataCenters, $aEntity;
 # # print "vDC : name = "            . $aEntity->{name}            . " mo_ref = "         . $aEntity->{mo_ref}        . " parent = " . $aEntity->{parent}
 # #          . " datastoreFolder = " . $aEntity->{datastoreFolder} . " vmFolder = "      . $aEntity->{vmFolder}

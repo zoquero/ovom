@@ -132,7 +132,7 @@ sub pushToInventory {
       OvomExtractor::log(0, "Pushed an unexisting Folder for Datacenter " . $aEntityView->{name} . " with same mo_ref as a workaround for base Folders that have its Datacenter as parent");
 
       ## regular push of ODataCenter object
-      $aEntity = ODataCenter->new($aEntityView);
+      $aEntity = ODataCenter->newFromView($aEntityView);
     }
     elsif($type eq 'VirtualMachine') {
       $aEntity = OVirtualMachine->new($aEntityView);
