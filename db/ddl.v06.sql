@@ -3,7 +3,7 @@
 -- http://www.phpmyadmin.net
 --
 -- Host: localhost
--- Generation Time: Aug 09, 2017 at 08:05 PM
+-- Generation Time: Aug 10, 2017 at 04:34 PM
 -- Server version: 5.7.19-0ubuntu0.16.04.1
 -- PHP Version: 7.0.18-0ubuntu0.16.04.1
 
@@ -31,7 +31,7 @@ CREATE TABLE `cluster` (
   `name` varchar(255) NOT NULL,
   `moref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
 -- --------------------------------------------------------
 
@@ -48,7 +48,7 @@ CREATE TABLE `datacenter` (
   `vm_folder` int(10) UNSIGNED NOT NULL,
   `host_folder` int(10) UNSIGNED NOT NULL,
   `network_folder` int(10) UNSIGNED NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
 -- --------------------------------------------------------
 
@@ -62,7 +62,7 @@ CREATE TABLE `folder` (
   `moref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL,
   `enabled` tinyint(4) NOT NULL DEFAULT '0' COMMENT '1 enabled, 0 disabled'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
 -- --------------------------------------------------------
 
@@ -75,7 +75,7 @@ CREATE TABLE `host` (
   `name` varchar(255) NOT NULL,
   `moref` varchar(255) NOT NULL,
   `parent` int(11) UNSIGNED NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
 -- --------------------------------------------------------
 
@@ -88,7 +88,7 @@ CREATE TABLE `virtualmachine` (
   `name` varchar(255) NOT NULL,
   `moref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
 --
 -- Indexes for dumped tables
@@ -159,7 +159,7 @@ ALTER TABLE `datacenter`
 -- AUTO_INCREMENT for table `folder`
 --
 ALTER TABLE `folder`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 --
 -- AUTO_INCREMENT for table `host`
 --

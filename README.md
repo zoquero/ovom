@@ -62,7 +62,8 @@ mysql> flush privileges;
 
 * Creation of tables and initial data from scripts **`db/ddl.sql`** and **`db/data.sql`** :
 ```
-$ mysql -u root       -prootpassword        < db/db_and_grants.sql
+$ mysql -u root       -prootpassword        < db/create_db.sql
+$ mysql -u root       -prootpassword        < db/grants.sql
 $ mysql -u root       -prootpassword ovomdb < db/ddl.sql
 $ mysql -u ovomdbuser -povomdbpass   ovomdb < db/data.sql
 ```
