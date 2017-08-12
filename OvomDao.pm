@@ -255,7 +255,7 @@ sub updateAsNeeded {
   my @loadedPositionsNotTobeDeleted;
 
   if( !defined($discovered) || !defined($loadedFromDb)) {
-    Carp::croack("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
+    Carp::croak("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
     return -1;
   }
 
@@ -367,11 +367,11 @@ sub update {
 
   # Pre-conditions
   if (! defined ($entity)) {
-    Carp::croack("OvomDao.update needs an entity");
+    Carp::croak("OvomDao.update needs an entity");
     return 0;
   }
   if (! defined ($entity->{oclass_name})) {
-    Carp::croack("OvomDao.update: the parameter doesn't look like an entity");
+    Carp::croak("OvomDao.update: the parameter doesn't look like an entity");
     return 0;
   }
   my $oClassName = $entity->{oclass_name};
@@ -380,7 +380,7 @@ sub update {
   && $oClassName ne 'OFolder'
   && $oClassName ne 'OHost'
   && $oClassName ne 'OVirtualMachine') {
-    Carp::croack("OvomDao.update needs an entity");
+    Carp::croak("OvomDao.update needs an entity");
     return 0;
   }
 
@@ -390,7 +390,7 @@ sub update {
     $stmt = $sqlFolderUpdate;
   }
   else {
-    Carp::croack("Statement stil unimplemente in OvomDao.update");
+    Carp::croak("Statement stil unimplemente in OvomDao.update");
     return 0;
   }
 
@@ -405,7 +405,7 @@ sub update {
   eval {
     my $parentFolder   = OvomDao::loadFolderByMoRef($entity->{parent});
     if(! defined($parentFolder)) {
-      Carp::croack("Can't load the parent of a $oClassName."
+      Carp::croak("Can't load the parent of a $oClassName."
                  . " Child's  mo_ref = " . $entity->{mo_ref}
                  . " parent's mo_ref = " . $entity->{parent});
       return 0;
@@ -415,7 +415,7 @@ sub update {
 #print "DEBUG: Dao.update: loadedParentId = $loadedParentId \n";
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croack("Can't prepare statement for updating a $oClassName: "
+      Carp::croak("Can't prepare statement for updating a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -425,12 +425,12 @@ sub update {
       $sthRes = $sth->execute($entity->{name}, $loadedParentId, $entity->{mo_ref});
     }
     else {
-      Carp::croack("Statement execution stil unimplemented in OvomDao.update");
+      Carp::croak("Statement execution stil unimplemented in OvomDao.update");
       return 0;
     }
 
     if(! $sthRes) {
-      Carp::croack("Can't execute the statement for updating a $oClassName: "
+      Carp::croak("Can't execute the statement for updating a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -457,11 +457,11 @@ sub delete {
 
   # Pre-conditions
   if (! defined ($entity)) {
-    Carp::croack("OvomDao.delete needs an entity");
+    Carp::croak("OvomDao.delete needs an entity");
     return 0;
   }
   if (! defined ($entity->{oclass_name})) {
-    Carp::croack("OvomDao.delete: the parameter doesn't look like an entity");
+    Carp::croak("OvomDao.delete: the parameter doesn't look like an entity");
     return 0;
   }
   my $oClassName = $entity->{oclass_name};
@@ -470,7 +470,7 @@ sub delete {
   && $oClassName ne 'OFolder'
   && $oClassName ne 'OHost'
   && $oClassName ne 'OVirtualMachine') {
-    Carp::croack("OvomDao.delete needs an entity");
+    Carp::croak("OvomDao.delete needs an entity");
     return 0;
   }
 
@@ -479,7 +479,7 @@ sub delete {
     $stmt = $sqlFolderDelete;
   }
   else {
-    Carp::croack("Statement stil unimplemented in OvomDao.delete");
+    Carp::croak("Statement stil unimplemented in OvomDao.delete");
     return 0;
   }
 
@@ -492,7 +492,7 @@ sub delete {
   eval {
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croack("Can't prepare statement for deleting a $oClassName: "
+      Carp::croak("Can't prepare statement for deleting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -502,12 +502,12 @@ sub delete {
       $sthRes = $sth->execute($entity->{mo_ref});
     }
     else {
-      Carp::croack("Statement execution stil unimplemented in OvomDao.delete");
+      Carp::croak("Statement execution stil unimplemented in OvomDao.delete");
       return 0;
     }
 
     if(! $sthRes) {
-      Carp::croack("Can't execute the statement for deleting a $oClassName: "
+      Carp::croak("Can't execute the statement for deleting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -538,7 +538,7 @@ sub loadFolderByMoRef {
   $timeBefore=Time::HiRes::time;
 
   if (! defined ($folderMoRef)) {
-    Carp::croack("Got an undefined mo_ref");
+    Carp::croak("Got an undefined mo_ref");
     return undef;
   }
 
@@ -553,7 +553,7 @@ sub loadFolderByMoRef {
     my $found = 0;
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
-        Carp::croack("Found more than one ${entityName} "
+        Carp::croak("Found more than one ${entityName} "
                    . "when looking for the one with mo_ref $folderMoRef");
         return undef;
       }
@@ -582,11 +582,11 @@ sub insert {
 
   # Pre-conditions
   if (! defined ($entity)) {
-    Carp::croack("OvomDao.insert needs an entity");
+    Carp::croak("OvomDao.insert needs an entity");
     return 0;
   }
   if (! defined ($entity->{oclass_name})) {
-    Carp::croack("OvomDao.insert: the parameter doesn't look like an entity");
+    Carp::croak("OvomDao.insert: the parameter doesn't look like an entity");
     return 0;
   }
   my $oClassName = $entity->{oclass_name};
@@ -595,7 +595,7 @@ sub insert {
   && $oClassName ne 'OFolder'
   && $oClassName ne 'OHost'
   && $oClassName ne 'OVirtualMachine') {
-    Carp::croack("OvomDao.insert needs an entity");
+    Carp::croak("OvomDao.insert needs an entity");
     return 0;
   }
 
@@ -604,7 +604,7 @@ sub insert {
     $stmt = $sqlFolderInsert;
   }
   else {
-    Carp::croack("Statement stil unimplemente in OvomDao.insert");
+    Carp::croak("Statement stil unimplemente in OvomDao.insert");
     return 0;
   }
 
@@ -619,7 +619,7 @@ sub insert {
     my $loadedParentId = $parentFolder->{id};
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croack("Can't prepare statement for inserting a $oClassName: "
+      Carp::croak("Can't prepare statement for inserting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -629,13 +629,13 @@ sub insert {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
     else {
-      Carp::croack("Statement execution stil unimplemente in OvomDao.insert");
+      Carp::croak("Statement execution stil unimplemente in OvomDao.insert");
       return 0;
     }
 
 
     if(! $sthRes) {
-      Carp::croack("Can't execute the statement for inserting a $oClassName: "
+      Carp::croak("Can't execute the statement for inserting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }

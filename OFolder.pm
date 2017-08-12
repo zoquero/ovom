@@ -7,7 +7,7 @@ our $csvSep = ";";
 
 sub new {
   my ($class, $args) = @_;
-  Carp::croack("OFolder constructor requires args")
+  Carp::croak("OFolder constructor requires args")
     unless (defined($args) && $#$args > 1);
   my $self = bless {
     id              => undef,
@@ -26,7 +26,7 @@ sub new {
 #
 sub newWithId {
   my ($class, $args) = @_;
-  Carp::croack("OFolder constructor requires args")
+  Carp::croak("OFolder constructor requires args")
     unless (defined($args) && $#$args > 1);
   my $self = bless {
     id              => shift @$args,
@@ -42,7 +42,7 @@ sub newWithId {
 
 sub newFromView {
   my ($class, $view) = @_;
-  Carp::croack("OFolder constructor requires a View") unless (defined($view));
+  Carp::croak("OFolder constructor requires a View") unless (defined($view));
   my $self = bless {
     id              => undef,
     oclass_name     => 'OFolder',
@@ -78,11 +78,11 @@ sub compare {
   my $self  = shift;
   my $other = shift;
   if(! defined($other)) {
-    Carp::croack("Compare requires other entity as argument");
+    Carp::croak("Compare requires other entity as argument");
     return -2;
   }
   if( !defined($other->{name}) || !defined($other->{parent}) || !defined($other->{mo_ref})) {
-    Carp::croack("The argument doesn't look like an entity in 'compare'");
+    Carp::croak("The argument doesn't look like an entity in 'compare'");
     return -2;
   }
   elsif ( $self->{mo_ref} ne $other->{mo_ref} ) {
@@ -110,7 +110,7 @@ sub compare {
   }
   elsif ($self->{parent} eq '') {
     # Same folder (equal mo_ref), but name or parent has changed
-    Carp::croack("vCenter shows a Folder with empty parent "
+    Carp::croak("vCenter shows a Folder with empty parent "
                . "and doesn't look like to be the root");
     return -2;
   }

@@ -7,7 +7,7 @@ our $csvSep = ";";
 
 sub new {
   my ($class, $args) = @_;
-  Carp::croack("ODataCenter constructor requires a View")
+  Carp::croak("ODataCenter constructor requires a View")
     unless (defined($args) && $#$args > 1);
   my $self = bless {
     id              => undef,
@@ -29,7 +29,7 @@ sub new {
 #
 sub newWithId {
   my ($class, $args) = @_;
-  Carp::croack("ODataCenter constructor requires a View")
+  Carp::croak("ODataCenter constructor requires a View")
     unless (defined($args) && $#$args > 1);
   my $self = bless {
     id              => shift @$args,
@@ -48,7 +48,7 @@ sub newWithId {
 
 sub newFromView {
   my ($class, $view) = @_;
-  Carp::croack("ODataCenter constructor requires a View") unless (defined($view));
+  Carp::croak("ODataCenter constructor requires a View") unless (defined($view));
   my $self = bless {
     id              => undef,
     oclass_name     => 'ODataCenter',
@@ -86,11 +86,11 @@ sub compare {
   my $self  = shift;
   my $other = shift;
   if(! defined($other)) {
-    Carp::croack("Compare requires other entity of the same type as argument");
+    Carp::croak("Compare requires other entity of the same type as argument");
     return -2;
   }
   if( !defined($other->{name}) || !defined($other->{parent}) || !defined($other->{mo_ref})) {
-    Carp::croack("compare: The argument doesn't look like an entity");
+    Carp::croak("compare: The argument doesn't look like an entity");
     return -2;
   }
   elsif ( $self->{mo_ref} ne $other->{mo_ref} ) {

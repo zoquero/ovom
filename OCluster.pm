@@ -7,7 +7,7 @@ our $csvSep = ";";
 
 sub new {
   my ($class, $view) = @_;
-  Carp::croack("OCluster constructor requires a View") unless (defined($view));
+  Carp::croak("OCluster constructor requires a View") unless (defined($view));
   my $self = bless {
     view            => $view,
     name            => $view->{name},
