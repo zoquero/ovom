@@ -5,63 +5,74 @@ use Carp;
 
 our $csvSep = ";";
 
+#
+# Constructor with args array
+#
 sub new {
   my ($class, $args) = @_;
-  Carp::croak("ODataCenter constructor requires a View")
-    unless (defined($args) && $#$args > 1);
-  my $self = bless {
-    id              => undef,
-    oclass_name     => 'ODataCenter',
-    view            => undef,
-    name            => shift @$args,
-    mo_ref          => shift @$args,
-    parent          => shift @$args,
-    datastoreFolder => shift @$args,
-    vmFolder        => shift @$args,
-    hostFolder      => shift @$args,
-    networkFolder   => shift @$args,
-  }, $class;
-  return $self;
+
+  # Preconditions
+  Carp::croak("ODataCenter constructor requires args")
+    if (! defined($args) || $#$args < 0);
+
+  my $a = { 'id'              => shift @$args,
+            'name'            => shift @$args,
+            'mo_ref'          => shift @$args,
+            'parent'          => shift @$args,
+            'datastoreFolder' => shift @$args,
+            'vmFolder'        => shift @$args,
+            'hostFolder'      => shift @$args,
+            'networkFolder'   => shift @$args };
+  return ODataCenter->newWithArgsHash(\$a);
 }
 
 #
-# Just like 'new' but adding a first component with the id in the args
+# Constructor with args hash
 #
-sub newWithId {
+sub newWithArgsHash {
   my ($class, $args) = @_;
+
+  # Preconditions
   Carp::croak("ODataCenter constructor requires a View")
-    unless (defined($args) && $#$args > 1);
+    if (! defined($args));
+  Carp::croak("args{'name'} isn't defined at ODataCenter constructor")
+    if (! defined($args->{'name'}));
+  Carp::croak("args{'mo_ref'} isn't defined at ODataCenter constructor")
+    if (! defined($args->{'mo_ref'}));
+
   my $self = bless {
-    id              => shift @$args,
-    oclass_name     => 'ODataCenter',
+    id              => $args->{'id'},
+    oclass_name     => 'OFolder',
     view            => undef,
-    name            => shift @$args,
-    mo_ref          => shift @$args,
-    parent          => shift @$args,
-    datastoreFolder => shift @$args,
-    vmFolder        => shift @$args,
-    hostFolder      => shift @$args,
-    networkFolder   => shift @$args,
+    name            => $args->{'name'},
+    mo_ref          => $args->{'mo_ref'},
+    parent          => $args->{'parent'},
+    datastoreFolder => $args->{'datastoreFolder'},
+    vmFolder        => $args->{'vmFolder'},
+    hostFolder      => $args->{'hostFolder'},
+    networkFolder   => $args->{'networkFolder'},
   }, $class;
   return $self;
 }
 
+#
+# Constructor with view
+#
 sub newFromView {
   my ($class, $view) = @_;
-  Carp::croak("ODataCenter constructor requires a View") unless (defined($view));
-  my $self = bless {
-    id              => undef,
-    oclass_name     => 'ODataCenter',
-    view            => $view,
-    name            => $view->{name},
-    mo_ref          => $view->{mo_ref}{value},
-    parent          => $view->{parent}->{value},
-    datastoreFolder => $view->{datastoreFolder}->{value},
-    vmFolder        => $view->{vmFolder}->{value},
-    hostFolder      => $view->{hostFolder}->{value},
-    networkFolder   => $view->{networkFolder}->{value},
-  }, $class;
-  return $self;
+  
+  Carp::croak("ODataCenter constructor requires a View")
+    if (! defined($view));
+
+  my $a = { 'id'              => undef,
+            'name'            => $view->{name},
+            'mo_ref'          => $view->{mo_ref}{value},
+            'parent'          => $view->{parent}->{value},
+            'datastoreFolder' => $view->{datastoreFolder}->{value},
+            'vmFolder'        => $view->{vmFolder}->{value},
+            'hostFolder'      => $view->{hostFolder}->{value},
+            'networkFolder'   => $view->{networkFolder}->{value}, };
+  return ODataCenter->newWithArgsHash($a);
 }
 
 sub toCsvRow {

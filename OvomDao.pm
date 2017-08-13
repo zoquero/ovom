@@ -220,7 +220,7 @@ sub getAllFolders {
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     $sth->execute();
     while (@data = $sth->fetchrow_array()) {
-      push @r, OFolder->newWithId(\@data);
+      push @r, OFolder->new(\@data);
     }
   };
 
@@ -557,7 +557,7 @@ sub loadFolderByMoRef {
                    . "when looking for the one with mo_ref $folderMoRef");
         return undef;
       }
-      $r = OFolder->newWithId(\@data);
+      $r = OFolder->new(\@data);
     }
   };
 

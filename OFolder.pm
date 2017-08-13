@@ -5,57 +5,66 @@ use Carp;
 
 our $csvSep = ";";
 
+#
+# Constructor with args array
+#
 sub new {
   my ($class, $args) = @_;
+
+  # Preconditions
   Carp::croak("OFolder constructor requires args")
-    unless (defined($args) && $#$args > 1);
-  my $self = bless {
-    id              => undef,
-    oclass_name     => 'OFolder',
-    view            => undef,
-    name            => shift @$args,
-    mo_ref          => shift @$args,
-    parent          => shift @$args,
-  }, $class;
-  return $self;
+    if (! defined($args) || $#$args < 0);
+
+  my $a = { 'id'     => shift @$args,
+            'name'   => shift @$args,
+            'mo_ref' => shift @$args,
+            'parent' => shift @$args };
+  return OFolder->newWithArgsHash(\$a);
 }
 
-
 #
-# Just like 'new' but adding a first component with the id in the args
+# Constructor with args hash
 #
-sub newWithId {
+sub newWithArgsHash {
   my ($class, $args) = @_;
+
+  # Preconditions
   Carp::croak("OFolder constructor requires args")
-    unless (defined($args) && $#$args > 1);
+    if (! defined($args));
+  Carp::croak("args{'name'} isn't defined at OFolder constructor")
+    if (! defined($args->{'name'}));
+  Carp::croak("args{'mo_ref'} isn't defined at OFolder constructor")
+    if (! defined($args->{'mo_ref'}));
+
   my $self = bless {
-    id              => shift @$args,
+    id              => $args->{'id'},
     oclass_name     => 'OFolder',
     view            => undef,
-    name            => shift @$args,
-    mo_ref          => shift @$args,
-    parent          => shift @$args,
+    name            => $args->{'name'},
+    mo_ref          => $args->{'mo_ref'},
+    parent          => $args->{'parent'},
   }, $class;
   return $self;
 }
 
-
+#
+# Constructor with view
+#
 sub newFromView {
   my ($class, $view) = @_;
-  Carp::croak("OFolder constructor requires a View") unless (defined($view));
-  my $self = bless {
-    id              => undef,
-    oclass_name     => 'OFolder',
-    view            => $view,
-    name            => $view->{name},
-    mo_ref          => $view->{mo_ref}{value},
-    ##
-    ## The root folder "Datacenters" hasn't parent
-    ##
-    parent          => defined($view->{parent}->{value}) ?
-                               $view->{parent}->{value} : undef,
-  }, $class;
-  return $self;
+
+  Carp::croak("OFolder constructor requires a View")
+    if (! defined($view));
+
+  my $a = { 'id'     => undef,
+            'name'   => $view->{name},
+            'mo_ref' => $view->{mo_ref}{value},
+            ##
+            ## The root Folder "Datacenters" hasn't parent
+            ##
+            'parent' => defined($view->{parent}->{value}) ?
+                                $view->{parent}->{value}  : undef, };
+  return OFolder->newWithArgsHash($a);
 }
 
 
