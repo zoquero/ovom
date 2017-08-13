@@ -389,7 +389,6 @@ sub update {
     return 0;
   }
 
-
   my $stmt;
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderUpdate;

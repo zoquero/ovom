@@ -135,10 +135,10 @@ sub pushToInventory {
       $aEntity = ODataCenter->newFromView($aEntityView);
     }
     elsif($type eq 'VirtualMachine') {
-      $aEntity = OVirtualMachine->new($aEntityView);
+      $aEntity = OVirtualMachine->newFromView($aEntityView);
     }
     elsif($type eq 'HostSystem') {
-      $aEntity = OHost->new($aEntityView);
+      $aEntity = OHost->newFromView($aEntityView);
 
 # parent 
 # runtime.standbyMode
@@ -153,7 +153,7 @@ sub pushToInventory {
 #      $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
     }
     elsif($type eq 'ClusterComputeResource') {
-      $aEntity = OCluster->new($aEntityView);
+      $aEntity = OCluster->newFromView($aEntityView);
     }
     elsif($type eq 'Folder') {
       $aEntity = OFolder->newFromView($aEntityView);
