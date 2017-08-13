@@ -21,7 +21,7 @@ our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ? where moref = ?';
 our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
 
 #
-# Connect to DataBAse
+# Connect to DataBase
 #
 # @return: 1 (ok), 0 (errors)
 #
@@ -41,11 +41,11 @@ sub connect {
   if($@) {
     OvomExtractor::log(3, "Errors checking if handle active "
                         . "before connecting to database: $@");
-    return -1;
+    return 0;
   }
   if($c == 1) {
     OvomExtractor::log(3, "BUG! Handle already active before connecting to DB");
-    return -1;
+    return 0;
   }
 
   my $connStr  = "dbi:mysql:dbname=" . $OvomExtractor::configuration{'db.name'}
@@ -65,16 +65,21 @@ sub connect {
 
   if($@) {
     OvomExtractor::log(3, "Errors connecting to Database: $@");
-    return 1;
+    return 0
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
   OvomExtractor::log(1, "Profiling: Connecting to DB "
                         . "with connection string: '$connStr' took "
                         . sprintf("%.3f", $eTime) . " s");
-  return 0;
+  return 1;
 }
 
+#
+# Disconnect to DataBase
+#
+# @return: 1 (ok), 0 (errors)
+#
 sub disconnect {
   OvomExtractor::log(0, "Disconnecting from database");
 
@@ -84,11 +89,11 @@ sub disconnect {
 
   if($@) {
     OvomExtractor::log(3, "Errors disconnecting from Database: $@");
-    return 1;
+    return 0;
   }
 
   OvomExtractor::log(1, "Successfully disconnected from database");
-  return 0;
+  return 1;
 }
 
 #

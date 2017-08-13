@@ -68,10 +68,10 @@ else {
 # }
 
 my $r;
-OvomDao::connect();
-# $r = OvomDao::connected();
-# OvomDao::transactionBegin();
-# OvomDao::transactionRollback();
+if(OvomDao::connect() != 1) {
+  OvomExtractor::collectorStop();
+  die "Cannot connect to DataBase\n";
+}
 # $r = OvomDao::connected();
 
 my $allFoldersFromDB = OvomDao::getAllFolders();
@@ -105,7 +105,10 @@ if($r == -1) {
   exit(1);
 }
 OvomDao::transactionCommit();
-OvomDao::disconnect();
+if( OvomDao::disconnect() != 1 ) {
+  OvomExtractor::collectorStop();
+  die "Cannot disconnect to DataBase\n";
+}
 
 OvomExtractor::collectorStop();
 

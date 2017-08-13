@@ -19,7 +19,7 @@ sub new {
             'name'   => shift @$args,
             'mo_ref' => shift @$args,
             'parent' => shift @$args };
-  return OFolder->newWithArgsHash(\$a);
+  return OFolder->newWithArgsHash($a);
 }
 
 #
