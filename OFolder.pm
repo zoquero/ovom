@@ -81,7 +81,10 @@ sub toCsvRow {
 # Compare this object with other object of the same type
 #
 # @arg reference to the other object of the same type
-# @return 1 (if equal), 0 (if different but equal mo_ref), -1 if different, -2 if error
+# @return  1 (if equal),
+#          0 (if different but equal mo_ref),
+#         -1 if different,
+#         -2 if error
 #
 sub compare {
   my $self  = shift;
@@ -90,18 +93,20 @@ sub compare {
     Carp::croak("Compare requires other entity as argument");
     return -2;
   }
-  if( !defined($other->{name}) || !defined($other->{parent}) || !defined($other->{mo_ref})) {
+  if( !defined(${$other}->{name})
+   || !defined(${$other}->{parent})
+   || !defined(${$other}->{mo_ref})) {
     Carp::croak("The argument doesn't look like an entity in 'compare'");
     return -2;
   }
-  elsif ( $self->{mo_ref} ne $other->{mo_ref} ) {
+  elsif ( $self->{mo_ref} ne ${$other}->{mo_ref} ) {
     # Different folder (mo_ref differs)
     return -1;
   }
-  elsif ( ( $self->{name}    eq $other->{name}
+  elsif ( ( $self->{name}    eq ${$other}->{name}
          && $self->{name}    eq 'Datacenters' )
        && ( ( ! defined($self->{parent}) || $self->{parent}  eq '' )
-         && $other->{parent} eq 'group-d1' )) {
+         && ${$other}->{parent} eq 'group-d1' )) {
     #
     # It's the special root folder that has:
     # name   == 'Datacenters'
@@ -112,8 +117,8 @@ sub compare {
     #
     return 1;
   }
-  elsif ( $self->{name}    ne $other->{name}
-       || $self->{parent}  ne $other->{parent} ) {
+  elsif ( $self->{name}    ne ${$other}->{name}
+       || $self->{parent}  ne ${$other}->{parent} ) {
     # Same folder (equal mo_ref), but name or parent has changed
     return 0;
   }

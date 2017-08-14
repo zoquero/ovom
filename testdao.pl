@@ -3,7 +3,7 @@ use warnings;
 use strict;
 use OvomExtractor;
 use OvomDao;
-use ODataCenter;
+use ODatacenter;
 use OvomExtractor;
 use OVirtualMachine;
 use OFolder;
@@ -26,21 +26,21 @@ else {
 #  print "a Folder = " . $$aEntity->toCsvRow() . "\n";
 #}
 
-# my @foundDataCenters;
+# my @foundDatacenters;
 # my @foundVirtualMachines;
 # my @foundHosts;
 # my @foundClusters;
 # my @foundFolders;
 # 
-# my $someDataCenterViews     = OvomExtractor::getViewsFromCsv('Datacenter');
+# my $someDatacenterViews     = OvomExtractor::getViewsFromCsv('Datacenter');
 # my $someVirtualMachineViews = OvomExtractor::getViewsFromCsv('VirtualMachine');
 # my $someHostViews           = OvomExtractor::getViewsFromCsv('HostSystem');
 # my $someClusterViews        = OvomExtractor::getViewsFromCsv('ClusterComputeResource');
 # my $someFolderViews         = OvomExtractor::getViewsFromCsv('Folder');
 # 
-# foreach my $aView (@$someDataCenterViews) {
-#   my $aEntity = ODataCenter->newFromView($aView);
-#   push @foundDataCenters, $aEntity;
+# foreach my $aView (@$someDatacenterViews) {
+#   my $aEntity = ODatacenter->newFromView($aView);
+#   push @foundDatacenters, $aEntity;
 # # print "vDC : name = "            . $aEntity->{name}            . " mo_ref = "         . $aEntity->{mo_ref}        . " parent = " . $aEntity->{parent}
 # #          . " datastoreFolder = " . $aEntity->{datastoreFolder} . " vmFolder = "      . $aEntity->{vmFolder}
 # #          . " hostFolder = "      . $aEntity->{hostFolder}      . " networkFolder = " . $aEntity->{networkFolder} . "\n";
@@ -74,6 +74,10 @@ if(OvomDao::connect() != 1) {
 }
 # $r = OvomDao::connected();
 
+#########################
+# OFolder
+#########################
+print "getAll OFolder\n";
 my $allFoldersFromDB = OvomDao::getAllEntitiesOfType('OFolder');
 if (! defined($allFoldersFromDB) ) {
   OvomDao::transactionRollback();
@@ -82,21 +86,6 @@ if (! defined($allFoldersFromDB) ) {
   exit(1);
 }
 
-# my $folderMoRef = 'group-d1';
-# my $aFolderFromDB = OvomDao::loadFolderByMoRef($folderMoRef);
-# if (! defined($aFolderFromDB) ) {
-#   print "Can't find the folder with mo_ref = $folderMoRef\n";
-#   OvomDao::transactionRollback();
-#   OvomDao::disconnect();
-#   OvomExtractor::collectorStop();
-#   exit(1);
-# }
-# print "Found the folder " . $aFolderFromDB->toCsvRow() . "\n";
-# OvomDao::transactionRollback();
-# OvomDao::disconnect();
-# OvomExtractor::collectorStop();
-# exit(1);
-
 $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Folder'}}, $allFoldersFromDB);
 if($r == -1) {
   OvomDao::transactionRollback();
@@ -104,10 +93,51 @@ if($r == -1) {
   OvomExtractor::collectorStop();
   exit(1);
 }
+
+
+
+#########################
+# ODatacenter
+#########################
+print "getAll ODatacenter\n";
+my $allDatacentersFromDB = OvomDao::getAllEntitiesOfType('ODatacenter');
+print "getAll ODatacenter: DONE\n";
+if (! defined($allDatacentersFromDB) ) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
+
+
+print "DEBUG: %inventory:\n";
+foreach my $k (@{$OvomExtractor::inventory{'Datacenter'}}) {
+  print "DEBUG: %inventory: Un DataCenter = " . ${$k}->toCsvRow() . "\n";
+}
+print "DEBUG: %db:\n";
+foreach my $k (@$allDatacentersFromDB) {
+  print "DEBUG: %db       : Un DataCenter = " . ${$k}->toCsvRow() . "\n";
+}
+
+print "DEBUG: call to updateAsNeeded for Datacenter:\n";
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Datacenter'}}, $allDatacentersFromDB);
+if($r == -1) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
+
+
+
+
+
+
+# Ok
 OvomDao::transactionCommit();
 if( OvomDao::disconnect() != 1 ) {
   OvomExtractor::collectorStop();
-  die "Cannot disconnect to DataBase\n";
+  die "Cannot disconnect from DataBase\n";
 }
 
 OvomExtractor::collectorStop();

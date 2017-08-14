@@ -1,4 +1,4 @@
-package ODataCenter;
+package ODatacenter;
 use strict;
 use warnings;
 use Carp;
@@ -12,7 +12,7 @@ sub new {
   my ($class, $args) = @_;
 
   # Preconditions
-  Carp::croak("ODataCenter constructor requires args")
+  Carp::croak("ODatacenter constructor requires args")
     if (! defined($args) || $#$args < 0);
 
   my $a = { 'id'              => shift @$args,
@@ -23,7 +23,7 @@ sub new {
             'vmFolder'        => shift @$args,
             'hostFolder'      => shift @$args,
             'networkFolder'   => shift @$args };
-  return ODataCenter->newWithArgsHash(\$a);
+  return ODatacenter->newWithArgsHash(\$a);
 }
 
 #
@@ -33,16 +33,16 @@ sub newWithArgsHash {
   my ($class, $args) = @_;
 
   # Preconditions
-  Carp::croak("ODataCenter constructor requires a View")
+  Carp::croak("ODatacenter constructor requires a View")
     if (! defined($args));
-  Carp::croak("args{'name'} isn't defined at ODataCenter constructor")
+  Carp::croak("args{'name'} isn't defined at ODatacenter constructor")
     if (! defined($args->{'name'}));
-  Carp::croak("args{'mo_ref'} isn't defined at ODataCenter constructor")
+  Carp::croak("args{'mo_ref'} isn't defined at ODatacenter constructor")
     if (! defined($args->{'mo_ref'}));
 
   my $self = bless {
     id              => $args->{'id'},
-    oclass_name     => 'OFolder',
+    oclass_name     => 'ODatacenter',
     view            => undef,
     name            => $args->{'name'},
     mo_ref          => $args->{'mo_ref'},
@@ -61,7 +61,7 @@ sub newWithArgsHash {
 sub newFromView {
   my ($class, $view) = @_;
   
-  Carp::croak("ODataCenter constructor requires a View")
+  Carp::croak("ODatacenter constructor requires a View")
     if (! defined($view));
 
   my $a = { 'id'              => undef,
@@ -72,7 +72,7 @@ sub newFromView {
             'vmFolder'        => $view->{vmFolder}->{value},
             'hostFolder'      => $view->{hostFolder}->{value},
             'networkFolder'   => $view->{networkFolder}->{value}, };
-  return ODataCenter->newWithArgsHash($a);
+  return ODatacenter->newWithArgsHash($a);
 }
 
 sub toCsvRow {
@@ -91,7 +91,10 @@ sub toCsvRow {
 # Compare this object with other object of the same type
 #
 # @arg reference to the other object of the same type
-# @return 1 (if equal), 0 (if different but equal mo_ref), -1 if different, -2 if error
+# @return  1 (if equal),
+#          0 (if different but equal mo_ref),
+#         -1 if different,
+#         -2 if error
 #
 sub compare {
   my $self  = shift;
@@ -100,16 +103,18 @@ sub compare {
     Carp::croak("Compare requires other entity of the same type as argument");
     return -2;
   }
-  if( !defined($other->{name}) || !defined($other->{parent}) || !defined($other->{mo_ref})) {
+  if( !defined(${$other}->{name})
+   || !defined(${$other}->{parent})
+   || !defined(${$other}->{mo_ref})) {
     Carp::croak("compare: The argument doesn't look like an entity");
     return -2;
   }
-  elsif ( $self->{mo_ref} ne $other->{mo_ref} ) {
+  elsif ( $self->{mo_ref} ne ${$other}->{mo_ref} ) {
     # Different folder (mo_ref differs)
     return -1;
   }
-  elsif ( $self->{name}    ne $other->{name}
-       || $self->{parent}  ne $other->{parent} ) {
+  elsif ( $self->{name}    ne ${$other}->{name}
+       || $self->{parent}  ne ${$other}->{parent} ) {
     # Same folder (equal mo_ref), but name or parent has changed
     return 0;
   }

@@ -8,37 +8,118 @@ use Carp;
 
 our $dbh;
 
-#
+###########################
 # SQL Statements for Folder
-#
-our $sqlFolderSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+###########################
+our $sqlFolderSelectAll       = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
-our $sqlFolderSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlFolderSelectById      = 'SELECT a.id, a.name, a.moref, b.moref '
+                              . 'FROM folder as a '
+                              . 'inner join folder as b '
+                              . 'where a.parent = b.id and a.id = ?';
+our $sqlFolderSelectByMoref   = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b '
                               . 'where a.parent = b.id and a.moref = ?';
-our $sqlFolderInsert = 'INSERT INTO folder (name, moref, parent) '
-                          . 'VALUES (?, ?, ?)';
+our $sqlFolderInsert          = 'INSERT INTO folder (name, moref, parent) '
+                              . 'VALUES (?, ?, ?)';
                                                 # moref is immutable
 our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ? where moref = ?';
 our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
 
-#
-# SQL Statements for DataCenter
-#
-our $sqlDataCenterSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+###############################
+# SQL Statements for Datacenter
+###############################
+our $sqlDatacenterSelectAll   = 'SELECT a.id, a.name, a.moref, b.moref, '
+                              . 'a.datastore_folder, a.vm_folder, '
+                              . 'a.host_folder,      a.network_folder '
                               . 'FROM datacenter as a '
                               . 'inner join folder as b where a.parent = b.id';
-our $sqlDataCenterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
-                              . 'FROM datacenter as a '
-                              . 'inner join folder as b '
-                              . 'where a.parent = b.id and a.moref = ?';
-our $sqlDataCenterInsert = 'INSERT INTO datacenter (name, moref, parent) '
+our $sqlDatacenterSelectById    = 'SELECT a.id, a.name, a.moref, b.moref, '
+                                . 'a.datastore_folder, a.vm_folder, '
+                                . 'a.host_folder,      a.network_folder '
+                                . 'FROM datacenter as a '
+                                . 'inner join folder as b '
+                                . 'where a.parent = b.id and a.id = ?';
+our $sqlDatacenterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref, '
+                                . 'a.datastore_folder, a.vm_folder, '
+                                . 'a.host_folder,      a.network_folder '
+                                . 'FROM datacenter as a '
+                                . 'inner join folder as b '
+                                . 'where a.parent = b.id and a.moref = ?';
+our $sqlDatacenterInsert = 'INSERT INTO datacenter (name, moref, parent, '
+                         . 'datastore_folder, vm_folder, '
+                         . 'host_folder, network_folder) '
+                         . 'VALUES (?, ?, ?, ?, ?, ?, ?)';
+                                                # moref is immutable
+our $sqlDatacenterUpdate = 'UPDATE datacenter '
+                         . 'set name = ?, parent = ?, datastore_folder = ?, '
+                         . 'vm_folder = ?, host_folder = ?, '
+                         . 'network_folder = ? where moref = ?';
+our $sqlDatacenterDelete = 'DELETE FROM datacenter where moref = ?';
+
+#########################
+# SQL Statements for Host
+#########################
+our $sqlHostSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+                          . 'FROM host as a '
+                          . 'inner join folder as b where a.parent = b.id';
+our $sqlHostSelectById    = 'SELECT a.id, a.name, a.moref, b.moref '
+                          . 'FROM host as a '
+                          . 'inner join folder as b '
+                          . 'where a.parent = b.id and a.id = ?';
+our $sqlHostSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+                          . 'FROM host as a '
+                          . 'inner join folder as b '
+                          . 'where a.parent = b.id and a.moref = ?';
+our $sqlHostInsert        = 'INSERT INTO host (name, moref, parent) '
                           . 'VALUES (?, ?, ?)';
                                                 # moref is immutable
-our $sqlDataCenterUpdate = 'UPDATE datacenter set name = ?, parent = ? where moref = ?';
-our $sqlDataCenterDelete = 'DELETE FROM datacenter where moref = ?';
+our $sqlHostUpdate = 'UPDATE host set name = ?, parent = ? where moref = ?';
+our $sqlHostDelete = 'DELETE FROM host where moref = ?';
+
+############################
+# SQL Statements for Cluster
+############################
+our $sqlClusterSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+                             . 'FROM cluster as a '
+                             . 'inner join folder as b where a.parent = b.id';
+our $sqlClusterSelectById = 'SELECT a.id, a.name, a.moref, b.moref '
+                             . 'FROM cluster as a '
+                             . 'inner join folder as b '
+                             . 'where a.parent = b.id and a.id = ?';
+our $sqlClusterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+                             . 'FROM cluster as a '
+                             . 'inner join folder as b '
+                             . 'where a.parent = b.id and a.moref = ?';
+our $sqlClusterInsert        = 'INSERT INTO cluster (name, moref, parent) '
+                             . 'VALUES (?, ?, ?)';
+                                                # moref is immutable
+our $sqlClusterUpdate = 'UPDATE cluster '
+                      . 'set name = ?, parent = ? where moref = ?';
+our $sqlClusterDelete = 'DELETE FROM cluster where moref = ?';
+
+###################################
+# SQL Statements for VirtualMachine
+###################################
+our $sqlVirtualMachineSelectAll = 'SELECT a.id, a.name, a.moref, b.moref '
+                                . 'FROM virtualmachine as a '
+                                . 'inner join folder as b where a.parent = b.id';
+our $sqlVirtualMachineSelectById    = 'SELECT a.id, a.name, a.moref, b.moref '
+                                    . 'FROM virtualmachine as a '
+                                    . 'inner join folder as b '
+                                    . 'where a.parent = b.id and a.id = ?';
+our $sqlVirtualMachineSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+                                    . 'FROM virtualmachine as a '
+                                    . 'inner join folder as b '
+                                    . 'where a.parent = b.id and a.moref = ?';
+our $sqlVirtualMachineInsert = 'INSERT INTO virtualmachine (name, moref, parent) '
+                             . 'VALUES (?, ?, ?)';
+                                                # moref is immutable
+our $sqlVirtualMachineUpdate = 'UPDATE virtualmachine '
+                             . 'set name = ?, parent = ? where moref = ?';
+our $sqlVirtualMachineDelete = 'DELETE FROM virtualmachine where moref = ?';
 
 
 #
@@ -199,6 +280,7 @@ sub transactionRollback {
 }
 
 sub select {
+die "deprecated method, must be deleted";
   OvomExtractor::log(0, "Selecting from DB");
 
   eval {
@@ -232,7 +314,8 @@ sub select {
 #
 # Get all folders from DB.
 #
-# @return undef (if errors), or a reference to array of entity objects (if ok)
+# @return undef (if errors),
+#         or a reference to array of references to entity objects (if ok)
 #
 sub getAllEntitiesOfType {
   my $entityType = shift;
@@ -241,30 +324,36 @@ sub getAllEntitiesOfType {
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
   my $stmt;
+print "DEBUG DAO: getAllEntitiesOfType type $entityType\n";
 
   if($entityType eq 'OFolder') {
     $stmt = $sqlFolderSelectAll;
   }
-  elsif($entityType eq 'ODataCenter') {
-    $stmt = $sqlDataCenterSelectAll;
+  elsif($entityType eq 'ODatacenter') {
+    $stmt = $sqlDatacenterSelectAll;
   }
   else {
     Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
     return 0;
   }
 
-
+print "DEBUG DAO: getAllEntitiesOfType stmt $stmt\n";
   eval {
     my $sth = $dbh->prepare_cached($stmt)
                 or die "Can't prepare statement for all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     $sth->execute();
     while (@data = $sth->fetchrow_array()) {
+      my $e;
       if($entityType eq 'OFolder') {
-        push @r, OFolder->new(\@data);
+        $e = OFolder->new(\@data);
+        push @r, \$e;
       }
-      elsif($entityType eq 'ODataCenter') {
-        push @r, ODataCenter->new(\@data);
+      elsif($entityType eq 'ODatacenter') {
+print "DEBUG DAO: Found a ODatacenter.\n";
+        $e = ODatacenter->new(\@data);
+print "DEBUG DAO: Found the ODatacenter: " . $e->toCsvRow() . "\n";
+        push @r, \$e;
       }
       else {
         Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
@@ -285,15 +374,15 @@ sub getAllEntitiesOfType {
 }
 
 #
-# Update objects on database if needed.
+# Insert, update or delete objects on database as needed.
 #
 # Inserts the new objects,
 # updates the existing with changes,
 # noops on the unchanged existing
 # and deletes the ones that aren't available.
 #
-# @arg ref to array of references to objects found on vCenter
-# @arg ref to array of objects read on database
+# @arg ref to array of references to objects found on vCenter (source)
+# @arg ref to array of references to objects read on database (destination)
 # @return 1 if something changed, 0 if nothing changed, -1 if errors.
 #
 sub updateAsNeeded {
@@ -303,53 +392,63 @@ sub updateAsNeeded {
   my @toDelete;
   my @loadedPositionsNotTobeDeleted;
 
+
+print "DEBUG.updateAsNeeded: %inventory:\n";
+foreach my $k (@$discovered) {
+  print "DEBUG.updateAsNeeded: %inventory: Un = " . ${$k}->toCsvRow() . "\n";
+}
+print "DEBUG.updateAsNeeded: %db:\n";
+foreach my $k (@$loadedFromDb) {
+  print "DEBUG.updateAsNeeded: %db\n";
+  print "DEBUG.updateAsNeeded: %db       : Un = " . ${$k}->toCsvRow() . "\n";
+}
+
+
   if( !defined($discovered) || !defined($loadedFromDb)) {
     Carp::croak("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
     return -1;
   }
 
-  if( $#$discovered == -1 || $#$loadedFromDb == -1 ) {
-    OvomExtractor::log(2, "updateAsNeeded: Got 0 discovered and 0 loadedFromDb entities");
+  if( $#$discovered == -1 && $#$loadedFromDb == -1 ) {
+    OvomExtractor::log(2, "updateAsNeeded: NOP: Got 0 discovered and 0 loadedFromDb entities");
     return 0;
   }
 
   foreach my $aDiscovered (@$discovered) {
+    my $found = 0;
     my $j = -1;
     foreach my $aLoadedFromDb (@$loadedFromDb) {
-
-my $oClassName = $aLoadedFromDb->{oclass_name};
-if($oClassName ne 'OFolder') {
-  die "By now just implmented for OFolder";
-}
-
       $j++;
       my $r;
       $r = $$aDiscovered->compare($aLoadedFromDb);
-#print "DEBUG: (j=$j) r=$r \tcomparing " . $$aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+print "DEBUG: (j=$j) r=$r \tcomparing " . $$aDiscovered->toCsvRow() . " with " . $$aLoadedFromDb->toCsvRow() . "\n";
       if ($r == -2) {
         # Errors
         return -1;
       }
       elsif ($r == 1) {
-#print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
+print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
         # Equal
         push @loadedPositionsNotTobeDeleted, $j;
+        $found = 1;
         last;
       }
       elsif ($r == 0) {
         # Changed (same mo_ref but some other attribute differs)
-#print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
+print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
         push @toUpdate, $$aDiscovered;
         push @loadedPositionsNotTobeDeleted, $j;
+        $found = 1;
         last;
       }
       else {
         # $r == -1  =>  differ
-        if ($j == $#$loadedFromDb) {
-#print "DEBUG: It has to be INSERTED into DB.\n";
-          push @toInsert, $$aDiscovered;
-        }
       }
+    }
+
+    if (! $found) {
+print "DEBUG: It has to be INSERTED into DB.\n";
+      push @toInsert, $$aDiscovered;
     }
   }
   for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
@@ -359,7 +458,7 @@ if($oClassName ne 'OFolder') {
   }
 
   my $str = ($#$discovered + 1)   . " entities discovered, "
-          . ($#$loadedFromDb + 1) . " entities loadedFromDb, "
+          . ($#$loadedFromDb + 1) . " entities loadedFromDb: "
           . ($#toInsert + 1)      . " entities toInsert, "
           . ($#toUpdate + 1)      . " entities toUpdate, "
           . ($#toDelete + 1)      . " entities toDelete";
@@ -425,7 +524,7 @@ sub update {
   }
   my $oClassName = $entity->{oclass_name};
   if($oClassName ne 'OCluster'
-  && $oClassName ne 'ODataCenter'
+  && $oClassName ne 'ODatacenter'
   && $oClassName ne 'OFolder'
   && $oClassName ne 'OHost'
   && $oClassName ne 'OVirtualMachine') {
@@ -437,8 +536,8 @@ sub update {
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderUpdate;
   }
-  elsif($oClassName eq 'ODataCenter') {
-    $stmt = $sqlDataCenterUpdate;
+  elsif($oClassName eq 'ODatacenter') {
+    $stmt = $sqlDatacenterUpdate;
   }
   else {
     Carp::croak("Statement stil unimplemente in OvomDao.update");
@@ -476,7 +575,7 @@ sub update {
       $sthRes = $sth->execute($entity->{name}, $loadedParentId,
                               $entity->{mo_ref});
     }
-    elsif($oClassName eq 'ODataCenter') {
+    elsif($oClassName eq 'ODatacenter') {
       $sthRes = $sth->execute($entity->{name}, $loadedParentId,
                               $entity->{mo_ref}, $entity->{datastoreFolder},
                               $entity->{vmFolder}, $entity->{hostFolder},
@@ -524,7 +623,7 @@ sub delete {
   }
   my $oClassName = $entity->{oclass_name};
   if($oClassName ne 'OCluster'
-  && $oClassName ne 'ODataCenter'
+  && $oClassName ne 'ODatacenter'
   && $oClassName ne 'OFolder'
   && $oClassName ne 'OHost'
   && $oClassName ne 'OVirtualMachine') {
@@ -536,8 +635,8 @@ sub delete {
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderDelete;
   }
-  elsif($oClassName eq 'ODataCenter') {
-    $stmt = $sqlDataCenterDelete;
+  elsif($oClassName eq 'ODatacenter') {
+    $stmt = $sqlDatacenterDelete;
   }
   else {
     Carp::croak("Statement stil unimplemented in OvomDao.delete");
@@ -579,12 +678,11 @@ sub delete {
   return $r;
 }
 
-
 #
 # Get an Entity from DB by mo_ref.
 #
 # @arg mo_ref
-# @arg entity type (OFolder | ODataCenter | OCluster | OHost | OVirtualMachine)
+# @arg entity type (OFolder | ODatacenter | OCluster | OHost | OVirtualMachine)
 # @return undef (if errors), or a reference to an Entity object (if ok)
 #
 sub loadEntityByMoRef {
@@ -608,8 +706,8 @@ sub loadEntityByMoRef {
   if ($entityType eq 'OFolder') {
     $stmt = $sqlFolderSelectByMoref;
   }
-  elsif($entityType eq 'ODataCenter') {
-    $stmt = $sqlDataCenterSelectByMoref;
+  elsif($entityType eq 'ODatacenter') {
+    $stmt = $sqlDatacenterSelectByMoref;
   }
   else {
     Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
@@ -627,15 +725,91 @@ sub loadEntityByMoRef {
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
         Carp::croak("Found more than one ${entityType} "
-                   . "when looking for the one with mo_ref $moRef");
+                   . "when looking for the one with mo_ref = $moRef");
         return undef;
       }
 
       if ($entityType eq 'OFolder') {
         $r = OFolder->new(\@data);
       }
-      elsif($entityType eq 'ODataCenter') {
-        $r = ODataCenter->new(\@data);
+      elsif($entityType eq 'ODatacenter') {
+        $r = ODatacenter->new(\@data);
+      }
+      else {
+        Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
+        return 0;
+      }
+    }
+  };
+
+  if($@) {
+    OvomExtractor::log(3, "Errors getting a ${entityType} from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OvomExtractor::log(1, "Profiling: select a ${entityType} took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return $r;
+}
+
+
+#
+# Get an Entity from DB by id.
+#
+# @arg id
+# @arg entity type (OFolder | ODatacenter | OCluster | OHost | OVirtualMachine)
+# @return undef (if errors), or a reference to an Entity object (if ok)
+#
+sub loadEntityById {
+  my $id      = shift;
+  my $entityType = shift;
+  my $stmt;
+  my $r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+
+  if (! defined ($id)) {
+    Carp::croak("Got an undefined id");
+    return undef;
+  }
+  if (! defined ($entityType)) {
+    Carp::croak("Got an undefined entity type");
+    return undef;
+  }
+
+  if ($entityType eq 'OFolder') {
+    $stmt = $sqlFolderSelectById;
+  }
+  elsif($entityType eq 'ODatacenter') {
+    $stmt = $sqlDatacenterSelectById;
+  }
+  else {
+    Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
+    return 0;
+  }
+
+  OvomExtractor::log(0, "selecting from db a ${entityType} with id = " . $id);
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement for all ${entityType}s: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr;
+    $sth->execute($id);
+    my $found = 0;
+    while (@data = $sth->fetchrow_array()) {
+      if ($found++ > 0) {
+        Carp::croak("Found more than one ${entityType} "
+                   . "when looking for the one with id = $id");
+        return undef;
+      }
+
+      if ($entityType eq 'OFolder') {
+        $r = OFolder->new(\@data);
+      }
+      elsif($entityType eq 'ODatacenter') {
+        $r = ODatacenter->new(\@data);
       }
       else {
         Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
@@ -674,7 +848,7 @@ sub insert {
   }
   my $oClassName = $entity->{oclass_name};
   if($oClassName ne 'OCluster'
-  && $oClassName ne 'ODataCenter'
+  && $oClassName ne 'ODatacenter'
   && $oClassName ne 'OFolder'
   && $oClassName ne 'OHost'
   && $oClassName ne 'OVirtualMachine') {
@@ -686,8 +860,8 @@ sub insert {
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderInsert;
   }
-  if($oClassName eq 'ODataCenter') {
-    $stmt = $sqlFolderInsert;
+  if($oClassName eq 'ODatacenter') {
+    $stmt = $sqlDatacenterInsert;
   }
   else {
     Carp::croak("Statement stil unimplemente in OvomDao.insert");
@@ -714,10 +888,28 @@ sub insert {
     if($oClassName eq 'OFolder') {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
-    if($oClassName eq 'ODataCenter') {
-      $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId,
-                $entity->{datastoreFolder}, $entity->{vmFolder},
-                $entity->{hostFolder}, $entity->{networkFolder});
+    if($oClassName eq 'ODatacenter') {
+      #
+      # First have to extract the folder id
+      # for datastoreFolder, vmFolder, hostFolder and networkFolder
+      #
+      my $e;
+      my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
+      $e   = OvomDao::loadEntityById($entity->{datastoreFolder}, 'OFolder');
+      $datastoreFolderPid = $e->{id};
+      $e   = OvomDao::loadEntityById($entity->{vmFolder},        'OFolder');
+      $vmFolderPid        = $e->{id};
+      $e   = OvomDao::loadEntityById($entity->{hostFolder},      'OFolder');
+      $hostFolderPid      = $e->{id};
+      $e   = OvomDao::loadEntityById($entity->{networkFolder},   'OFolder');
+      $networkFolderPid   = $e->{id};
+
+print "DEBUG: insert: dataCenter has datastoreFolderPid=$datastoreFolderPid vmFolderPid=$vmFolderPid hostFolderPid=$hostFolderPid networkFolderPid=$networkFolderPid\n";
+
+      $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref},
+                              $loadedParentId,
+                              $datastoreFolderPid, $vmFolderPid,
+                              $hostFolderPid, $networkFolderPid);
     }
     else {
       Carp::croak("Statement execution stil unimplemente in OvomDao.insert");

@@ -39,7 +39,7 @@ sub newWithArgsHash {
 
   my $self = bless {
     id              => $args->{'id'},
-    oclass_name     => 'OFolder',
+    oclass_name     => 'OCluster',
     view            => undef,
     name            => $args->{'name'},
     mo_ref          => $args->{'mo_ref'},

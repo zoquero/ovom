@@ -11,7 +11,7 @@ use VMware::VIRuntime;
 use Time::HiRes; ## gettimeofday
 
 # Our entities:
-use ODataCenter;
+use ODatacenter;
 use OFolder;
 use OCluster;
 use OHost;
@@ -21,7 +21,7 @@ use OVirtualMachine;
 use OMockVirtualMachineView;
 use OMockClusterView;
 use OMockHostView;
-use OMockDataCenterView;
+use OMockDatacenterView;
 use OMockFolderView;
 use OMockVirtualMachineView;
 
@@ -131,8 +131,8 @@ sub pushToInventory {
       push @{$inventory{'Folder'}}, \$extraFolderEntity;
       OvomExtractor::log(0, "Pushed an unexisting Folder for Datacenter " . $aEntityView->{name} . " with same mo_ref as a workaround for base Folders that have its Datacenter as parent");
 
-      ## regular push of ODataCenter object
-      $aEntity = ODataCenter->newFromView($aEntityView);
+      ## regular push of ODatacenter object
+      $aEntity = ODatacenter->newFromView($aEntityView);
     }
     elsif($type eq 'VirtualMachine') {
       $aEntity = OVirtualMachine->newFromView($aEntityView);
@@ -211,7 +211,7 @@ sub getViewsFromCsv {
         return undef;
       }
       if( $entityType eq "Datacenter") {
-        push @entities, OMockDataCenterView->new(@parts);
+        push @entities, OMockDatacenterView->new(@parts);
       }
       elsif( $entityType eq "VirtualMachine") {
         push @entities, OMockVirtualMachineView->new(@parts);

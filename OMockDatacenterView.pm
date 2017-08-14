@@ -1,4 +1,4 @@
-package OMockDataCenterView;
+package OMockDatacenterView;
 use strict;
 use warnings;
 use Carp;
