@@ -7,6 +7,10 @@ use Carp;
 
 
 our $dbh;
+
+#
+# SQL Statements for Folder
+#
 our $sqlFolderSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
@@ -19,6 +23,23 @@ our $sqlFolderInsert = 'INSERT INTO folder (name, moref, parent) '
                                                 # moref is immutable
 our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ? where moref = ?';
 our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
+
+#
+# SQL Statements for DataCenter
+#
+our $sqlDataCenterSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+                              . 'FROM datacenter as a '
+                              . 'inner join folder as b where a.parent = b.id';
+our $sqlDataCenterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+                              . 'FROM datacenter as a '
+                              . 'inner join folder as b '
+                              . 'where a.parent = b.id and a.moref = ?';
+our $sqlDataCenterInsert = 'INSERT INTO datacenter (name, moref, parent) '
+                          . 'VALUES (?, ?, ?)';
+                                                # moref is immutable
+our $sqlDataCenterUpdate = 'UPDATE datacenter set name = ?, parent = ? where moref = ?';
+our $sqlDataCenterDelete = 'DELETE FROM datacenter where moref = ?';
+
 
 #
 # Connect to DataBase
@@ -211,31 +232,54 @@ sub select {
 #
 # Get all folders from DB.
 #
-# @return undef (if errors), or a reference to array of OFolder objects (if ok)
+# @return undef (if errors), or a reference to array of entity objects (if ok)
 #
-sub getAllFolders {
+sub getAllEntitiesOfType {
+  my $entityType = shift;
   my @r;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
+  my $stmt;
+
+  if($entityType eq 'OFolder') {
+    $stmt = $sqlFolderSelectAll;
+  }
+  elsif($entityType eq 'ODataCenter') {
+    $stmt = $sqlDataCenterSelectAll;
+  }
+  else {
+    Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
+    return 0;
+  }
+
 
   eval {
-    my $sth = $dbh->prepare_cached($sqlFolderSelectAll)
-                or die "Can't prepare statement for all Folders: "
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement for all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     $sth->execute();
     while (@data = $sth->fetchrow_array()) {
-      push @r, OFolder->new(\@data);
+      if($entityType eq 'OFolder') {
+        push @r, OFolder->new(\@data);
+      }
+      elsif($entityType eq 'ODataCenter') {
+        push @r, ODataCenter->new(\@data);
+      }
+      else {
+        Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
+        return 0;
+      }
     }
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors getting all Folders from DB: $@");
+    OvomExtractor::log(3, "Errors getting all ${entityType}s from DB: $@");
     return undef;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: select all Folders took "
+  OvomExtractor::log(1, "Profiling: select all ${entityType}s took "
                         . sprintf("%.3f", $eTime) . " s");
   return \@r;
 }
@@ -353,7 +397,7 @@ if($oClassName ne 'OFolder') {
 sub popNextFolderWithParent {
   my $entities = shift;
   for(my $i = 0; $i <= $#$entities; $i++) {
-    my $aParent = OvomDao::loadFolderByMoRef($$entities[$i]->{parent});
+    my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent}, 'OFolder');
     if (defined $aParent) {
       my $r = $$entities[$i];
       splice @$entities, $i, 1;
@@ -393,6 +437,9 @@ sub update {
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderUpdate;
   }
+  elsif($oClassName eq 'ODataCenter') {
+    $stmt = $sqlDataCenterUpdate;
+  }
   else {
     Carp::croak("Statement stil unimplemente in OvomDao.update");
     return 0;
@@ -407,7 +454,7 @@ sub update {
   $timeBefore=Time::HiRes::time;
 
   eval {
-    my $parentFolder   = OvomDao::loadFolderByMoRef($entity->{parent});
+    my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
     if(! defined($parentFolder)) {
       Carp::croak("Can't load the parent of a $oClassName."
                  . " Child's  mo_ref = " . $entity->{mo_ref}
@@ -426,7 +473,14 @@ sub update {
 
     my $sthRes;
     if($oClassName eq 'OFolder') {
-      $sthRes = $sth->execute($entity->{name}, $loadedParentId, $entity->{mo_ref});
+      $sthRes = $sth->execute($entity->{name}, $loadedParentId,
+                              $entity->{mo_ref});
+    }
+    elsif($oClassName eq 'ODataCenter') {
+      $sthRes = $sth->execute($entity->{name}, $loadedParentId,
+                              $entity->{mo_ref}, $entity->{datastoreFolder},
+                              $entity->{vmFolder}, $entity->{hostFolder},
+                              $entity->{networkFolder});
     }
     else {
       Carp::croak("Statement execution stil unimplemented in OvomDao.update");
@@ -482,6 +536,9 @@ sub delete {
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderDelete;
   }
+  elsif($oClassName eq 'ODataCenter') {
+    $stmt = $sqlDataCenterDelete;
+  }
   else {
     Carp::croak("Statement stil unimplemented in OvomDao.delete");
     return 0;
@@ -502,13 +559,7 @@ sub delete {
     }
 
     my $sthRes;
-    if($oClassName eq 'OFolder') {
-      $sthRes = $sth->execute($entity->{mo_ref});
-    }
-    else {
-      Carp::croak("Statement execution stil unimplemented in OvomDao.delete");
-      return 0;
-    }
+    $sthRes = $sth->execute($entity->{mo_ref});
 
     if(! $sthRes) {
       Carp::croak("Can't execute the statement for deleting a $oClassName: "
@@ -530,48 +581,76 @@ sub delete {
 
 
 #
-# Get a Folder from DB by mo_ref.
+# Get an Entity from DB by mo_ref.
 #
-# @return undef (if errors), or a reference to OFolder object (if ok)
+# @arg mo_ref
+# @arg entity type (OFolder | ODataCenter | OCluster | OHost | OVirtualMachine)
+# @return undef (if errors), or a reference to an Entity object (if ok)
 #
-sub loadFolderByMoRef {
-  my $folderMoRef = shift;
+sub loadEntityByMoRef {
+  my $moRef      = shift;
+  my $entityType = shift;
+  my $stmt;
   my $r;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
 
-  if (! defined ($folderMoRef)) {
+  if (! defined ($moRef)) {
     Carp::croak("Got an undefined mo_ref");
     return undef;
   }
+  if (! defined ($entityType)) {
+    Carp::croak("Got an undefined entity type");
+    return undef;
+  }
 
-  my $entityName = "OFolder";
-  OvomExtractor::log(0, "selecting from db a ${entityName} with mo_ref = " . $folderMoRef);
+  if ($entityType eq 'OFolder') {
+    $stmt = $sqlFolderSelectByMoref;
+  }
+  elsif($entityType eq 'ODataCenter') {
+    $stmt = $sqlDataCenterSelectByMoref;
+  }
+  else {
+    Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
+    return 0;
+  }
+
+  OvomExtractor::log(0, "selecting from db a ${entityType} with mo_ref = " . $moRef);
 
   eval {
-    my $sth = $dbh->prepare_cached($sqlFolderSelectByMoref)
-                or die "Can't prepare statement for all ${entityName}s: "
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement for all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
-    $sth->execute($folderMoRef);
+    $sth->execute($moRef);
     my $found = 0;
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
-        Carp::croak("Found more than one ${entityName} "
-                   . "when looking for the one with mo_ref $folderMoRef");
+        Carp::croak("Found more than one ${entityType} "
+                   . "when looking for the one with mo_ref $moRef");
         return undef;
       }
-      $r = OFolder->new(\@data);
+
+      if ($entityType eq 'OFolder') {
+        $r = OFolder->new(\@data);
+      }
+      elsif($entityType eq 'ODataCenter') {
+        $r = ODataCenter->new(\@data);
+      }
+      else {
+        Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
+        return 0;
+      }
     }
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors getting a ${entityName} from DB: $@");
+    OvomExtractor::log(3, "Errors getting a ${entityType} from DB: $@");
     return undef;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: select a ${entityName} took "
+  OvomExtractor::log(1, "Profiling: select a ${entityType} took "
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
 }
@@ -607,6 +686,9 @@ sub insert {
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderInsert;
   }
+  if($oClassName eq 'ODataCenter') {
+    $stmt = $sqlFolderInsert;
+  }
   else {
     Carp::croak("Statement stil unimplemente in OvomDao.insert");
     return 0;
@@ -619,7 +701,7 @@ sub insert {
   $timeBefore=Time::HiRes::time;
 
   eval {
-    my $parentFolder   = OvomDao::loadFolderByMoRef($entity->{parent});
+    my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
     my $loadedParentId = $parentFolder->{id};
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
@@ -631,6 +713,11 @@ sub insert {
     my $sthRes;
     if($oClassName eq 'OFolder') {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
+    }
+    if($oClassName eq 'ODataCenter') {
+      $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId,
+                $entity->{datastoreFolder}, $entity->{vmFolder},
+                $entity->{hostFolder}, $entity->{networkFolder});
     }
     else {
       Carp::croak("Statement execution stil unimplemente in OvomDao.insert");

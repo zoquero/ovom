@@ -74,7 +74,7 @@ if(OvomDao::connect() != 1) {
 }
 # $r = OvomDao::connected();
 
-my $allFoldersFromDB = OvomDao::getAllFolders();
+my $allFoldersFromDB = OvomDao::getAllEntitiesOfType('OFolder');
 if (! defined($allFoldersFromDB) ) {
   OvomDao::transactionRollback();
   OvomDao::disconnect();
