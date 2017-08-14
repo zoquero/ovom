@@ -23,7 +23,7 @@ sub new {
             'vmFolder'        => shift @$args,
             'hostFolder'      => shift @$args,
             'networkFolder'   => shift @$args };
-  return ODatacenter->newWithArgsHash(\$a);
+  return ODatacenter->newWithArgsHash($a);
 }
 
 #

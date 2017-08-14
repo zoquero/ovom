@@ -14,10 +14,6 @@ our $dbh;
 our $sqlFolderSelectAll       = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
-our $sqlFolderSelectById      = 'SELECT a.id, a.name, a.moref, b.moref '
-                              . 'FROM folder as a '
-                              . 'inner join folder as b '
-                              . 'where a.parent = b.id and a.id = ?';
 our $sqlFolderSelectByMoref   = 'SELECT a.id, a.name, a.moref, b.moref '
                               . 'FROM folder as a '
                               . 'inner join folder as b '
@@ -32,16 +28,15 @@ our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
 # SQL Statements for Datacenter
 ###############################
 our $sqlDatacenterSelectAll   = 'SELECT a.id, a.name, a.moref, b.moref, '
-                              . 'a.datastore_folder, a.vm_folder, '
-                              . 'a.host_folder,      a.network_folder '
-                              . 'FROM datacenter as a '
-                              . 'inner join folder as b where a.parent = b.id';
-our $sqlDatacenterSelectById    = 'SELECT a.id, a.name, a.moref, b.moref, '
-                                . 'a.datastore_folder, a.vm_folder, '
-                                . 'a.host_folder,      a.network_folder '
-                                . 'FROM datacenter as a '
-                                . 'inner join folder as b '
-                                . 'where a.parent = b.id and a.id = ?';
+                              . 'c.moref, d.moref, e.moref, f.moref '
+                              . 'FROM datacenter as a  '
+                              . 'inner join folder as b, folder as c, '
+                              . 'folder as d, folder as e, folder as f '
+                              . 'where a.parent = b.id '
+                              . 'and a.datastore_folder = c.id '
+                              . 'and a.vm_folder = d.id '
+                              . 'and a.host_folder = e.id '
+                              . 'and a.network_folder = f.id ';
 our $sqlDatacenterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref, '
                                 . 'a.datastore_folder, a.vm_folder, '
                                 . 'a.host_folder,      a.network_folder '
@@ -65,10 +60,6 @@ our $sqlDatacenterDelete = 'DELETE FROM datacenter where moref = ?';
 our $sqlHostSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
                           . 'FROM host as a '
                           . 'inner join folder as b where a.parent = b.id';
-our $sqlHostSelectById    = 'SELECT a.id, a.name, a.moref, b.moref '
-                          . 'FROM host as a '
-                          . 'inner join folder as b '
-                          . 'where a.parent = b.id and a.id = ?';
 our $sqlHostSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
                           . 'FROM host as a '
                           . 'inner join folder as b '
@@ -85,10 +76,6 @@ our $sqlHostDelete = 'DELETE FROM host where moref = ?';
 our $sqlClusterSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
                              . 'FROM cluster as a '
                              . 'inner join folder as b where a.parent = b.id';
-our $sqlClusterSelectById = 'SELECT a.id, a.name, a.moref, b.moref '
-                             . 'FROM cluster as a '
-                             . 'inner join folder as b '
-                             . 'where a.parent = b.id and a.id = ?';
 our $sqlClusterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
                              . 'FROM cluster as a '
                              . 'inner join folder as b '
@@ -106,10 +93,6 @@ our $sqlClusterDelete = 'DELETE FROM cluster where moref = ?';
 our $sqlVirtualMachineSelectAll = 'SELECT a.id, a.name, a.moref, b.moref '
                                 . 'FROM virtualmachine as a '
                                 . 'inner join folder as b where a.parent = b.id';
-our $sqlVirtualMachineSelectById    = 'SELECT a.id, a.name, a.moref, b.moref '
-                                    . 'FROM virtualmachine as a '
-                                    . 'inner join folder as b '
-                                    . 'where a.parent = b.id and a.id = ?';
 our $sqlVirtualMachineSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
                                     . 'FROM virtualmachine as a '
                                     . 'inner join folder as b '
@@ -324,7 +307,7 @@ sub getAllEntitiesOfType {
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
   my $stmt;
-print "DEBUG DAO: getAllEntitiesOfType type $entityType\n";
+  OvomExtractor::log(0, "Getting all entities of type $entityType");
 
   if($entityType eq 'OFolder') {
     $stmt = $sqlFolderSelectAll;
@@ -337,7 +320,6 @@ print "DEBUG DAO: getAllEntitiesOfType type $entityType\n";
     return 0;
   }
 
-print "DEBUG DAO: getAllEntitiesOfType stmt $stmt\n";
   eval {
     my $sth = $dbh->prepare_cached($stmt)
                 or die "Can't prepare statement for all ${entityType}s: "
@@ -350,9 +332,7 @@ print "DEBUG DAO: getAllEntitiesOfType stmt $stmt\n";
         push @r, \$e;
       }
       elsif($entityType eq 'ODatacenter') {
-print "DEBUG DAO: Found a ODatacenter.\n";
         $e = ODatacenter->new(\@data);
-print "DEBUG DAO: Found the ODatacenter: " . $e->toCsvRow() . "\n";
         push @r, \$e;
       }
       else {
@@ -392,17 +372,7 @@ sub updateAsNeeded {
   my @toDelete;
   my @loadedPositionsNotTobeDeleted;
 
-
-print "DEBUG.updateAsNeeded: %inventory:\n";
-foreach my $k (@$discovered) {
-  print "DEBUG.updateAsNeeded: %inventory: Un = " . ${$k}->toCsvRow() . "\n";
-}
-print "DEBUG.updateAsNeeded: %db:\n";
-foreach my $k (@$loadedFromDb) {
-  print "DEBUG.updateAsNeeded: %db\n";
-  print "DEBUG.updateAsNeeded: %db       : Un = " . ${$k}->toCsvRow() . "\n";
-}
-
+  OvomExtractor::log(0, "Running updateAsNeeded");
 
   if( !defined($discovered) || !defined($loadedFromDb)) {
     Carp::croak("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
@@ -421,13 +391,13 @@ foreach my $k (@$loadedFromDb) {
       $j++;
       my $r;
       $r = $$aDiscovered->compare($aLoadedFromDb);
-print "DEBUG: (j=$j) r=$r \tcomparing " . $$aDiscovered->toCsvRow() . " with " . $$aLoadedFromDb->toCsvRow() . "\n";
+#print "DEBUG: (j=$j) r=$r \tcomparing " . $$aDiscovered->toCsvRow() . " with " . $$aLoadedFromDb->toCsvRow() . "\n";
       if ($r == -2) {
         # Errors
         return -1;
       }
       elsif ($r == 1) {
-print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
+#print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
         # Equal
         push @loadedPositionsNotTobeDeleted, $j;
         $found = 1;
@@ -435,7 +405,7 @@ print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to b
       }
       elsif ($r == 0) {
         # Changed (same mo_ref but some other attribute differs)
-print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
+#print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
         push @toUpdate, $$aDiscovered;
         push @loadedPositionsNotTobeDeleted, $j;
         $found = 1;
@@ -447,7 +417,7 @@ print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted
     }
 
     if (! $found) {
-print "DEBUG: It has to be INSERTED into DB.\n";
+#print "DEBUG: It has to be INSERTED into DB.\n";
       push @toInsert, $$aDiscovered;
     }
   }
@@ -755,81 +725,6 @@ sub loadEntityByMoRef {
 
 
 #
-# Get an Entity from DB by id.
-#
-# @arg id
-# @arg entity type (OFolder | ODatacenter | OCluster | OHost | OVirtualMachine)
-# @return undef (if errors), or a reference to an Entity object (if ok)
-#
-sub loadEntityById {
-  my $id      = shift;
-  my $entityType = shift;
-  my $stmt;
-  my $r;
-  my @data;
-  my ($timeBefore, $eTime);
-  $timeBefore=Time::HiRes::time;
-
-  if (! defined ($id)) {
-    Carp::croak("Got an undefined id");
-    return undef;
-  }
-  if (! defined ($entityType)) {
-    Carp::croak("Got an undefined entity type");
-    return undef;
-  }
-
-  if ($entityType eq 'OFolder') {
-    $stmt = $sqlFolderSelectById;
-  }
-  elsif($entityType eq 'ODatacenter') {
-    $stmt = $sqlDatacenterSelectById;
-  }
-  else {
-    Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
-    return 0;
-  }
-
-  OvomExtractor::log(0, "selecting from db a ${entityType} with id = " . $id);
-
-  eval {
-    my $sth = $dbh->prepare_cached($stmt)
-                or die "Can't prepare statement for all ${entityType}s: "
-                     . "(" . $dbh->err . ") :" . $dbh->errstr;
-    $sth->execute($id);
-    my $found = 0;
-    while (@data = $sth->fetchrow_array()) {
-      if ($found++ > 0) {
-        Carp::croak("Found more than one ${entityType} "
-                   . "when looking for the one with id = $id");
-        return undef;
-      }
-
-      if ($entityType eq 'OFolder') {
-        $r = OFolder->new(\@data);
-      }
-      elsif($entityType eq 'ODatacenter') {
-        $r = ODatacenter->new(\@data);
-      }
-      else {
-        Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
-        return 0;
-      }
-    }
-  };
-
-  if($@) {
-    OvomExtractor::log(3, "Errors getting a ${entityType} from DB: $@");
-    return undef;
-  }
-
-  $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: select a ${entityType} took "
-                        . sprintf("%.3f", $eTime) . " s");
-  return $r;
-}
-
-#
 # Insert an object into DB
 #
 # @return 1 (if ok), or 0 (if errors)
@@ -895,16 +790,16 @@ sub insert {
       #
       my $e;
       my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
-      $e   = OvomDao::loadEntityById($entity->{datastoreFolder}, 'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'OFolder');
       $datastoreFolderPid = $e->{id};
-      $e   = OvomDao::loadEntityById($entity->{vmFolder},        'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'OFolder');
       $vmFolderPid        = $e->{id};
-      $e   = OvomDao::loadEntityById($entity->{hostFolder},      'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'OFolder');
       $hostFolderPid      = $e->{id};
-      $e   = OvomDao::loadEntityById($entity->{networkFolder},   'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'OFolder');
       $networkFolderPid   = $e->{id};
 
-print "DEBUG: insert: dataCenter has datastoreFolderPid=$datastoreFolderPid vmFolderPid=$vmFolderPid hostFolderPid=$hostFolderPid networkFolderPid=$networkFolderPid\n";
+#print "DEBUG: insert: dataCenter has datastoreFolderPid=$datastoreFolderPid vmFolderPid=$vmFolderPid hostFolderPid=$hostFolderPid networkFolderPid=$networkFolderPid\n";
 
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref},
                               $loadedParentId,
