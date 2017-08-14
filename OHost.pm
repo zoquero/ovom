@@ -20,7 +20,7 @@ sub new {
             'mo_ref'          => shift @$args,
             'parent'          => shift @$args,
             'hostFolder'      => shift @$args };
-  return OHost->newWithArgsHash(\$a);
+  return OHost->newWithArgsHash($a);
 }
 
 #
