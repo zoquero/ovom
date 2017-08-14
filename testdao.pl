@@ -18,7 +18,7 @@ if(OvomExtractor::updateInventory()) {
   OvomExtractor::log(2, "Errors updating inventory");
 }
 else {
-  OvomExtractor::log(2, "The inventory has been updated");
+  OvomExtractor::log(2, "The inventory has been updated on memory");
 }
 
 #print "Show Folders::\n";

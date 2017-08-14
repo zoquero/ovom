@@ -37,12 +37,16 @@ our $sqlDatacenterSelectAll   = 'SELECT a.id, a.name, a.moref, b.moref, '
                               . 'and a.vm_folder = d.id '
                               . 'and a.host_folder = e.id '
                               . 'and a.network_folder = f.id ';
-our $sqlDatacenterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref, '
-                                . 'a.datastore_folder, a.vm_folder, '
-                                . 'a.host_folder,      a.network_folder '
-                                . 'FROM datacenter as a '
-                                . 'inner join folder as b '
-                                . 'where a.parent = b.id and a.moref = ?';
+our $sqlDatacenterSelectByMoref  = 'SELECT a.id, a.name, a.moref, b.moref, '
+                                 . 'c.moref, d.moref, e.moref, f.moref '
+                                 . 'FROM datacenter as a  '
+                                 . 'inner join folder as b, folder as c, '
+                                 . 'folder as d, folder as e, folder as f '
+                                 . 'where a.parent = b.id and a.moref = ?'
+                                 . 'and a.datastore_folder = c.id '
+                                 . 'and a.vm_folder = d.id '
+                                 . 'and a.host_folder = e.id '
+                                 . 'and a.network_folder = f.id ';
 our $sqlDatacenterInsert = 'INSERT INTO datacenter (name, moref, parent, '
                          . 'datastore_folder, vm_folder, '
                          . 'host_folder, network_folder) '
@@ -427,8 +431,8 @@ sub updateAsNeeded {
     }
   }
 
-  my $str = ($#$discovered + 1)   . " entities discovered, "
-          . ($#$loadedFromDb + 1) . " entities loadedFromDb: "
+  my $str = ($#$discovered + 1)   . " entities discovered (mem inventory), "
+          . ($#$loadedFromDb + 1) . " entities on inventory DB, "
           . ($#toInsert + 1)      . " entities toInsert, "
           . ($#toUpdate + 1)      . " entities toUpdate, "
           . ($#toDelete + 1)      . " entities toDelete";
@@ -515,9 +519,11 @@ sub update {
   }
 
 #print "DEBUG: Dao.update: updating a $oClassName : " . $entity->toCsvRow() . "\n";
-  OvomExtractor::log(0, "Updating into db a $oClassName with mo_ref " . $entity->{mo_ref});
+  OvomExtractor::log(0, "Updating into db a $oClassName with mo_ref "
+                        . $entity->{mo_ref});
 
   my $r;
+  my $sthRes;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -530,9 +536,7 @@ sub update {
                  . " parent's mo_ref = " . $entity->{parent});
       return 0;
     }
-#print "DEBUG: Dao.update: after loading parent, parent = " . $parentFolder->toCsvRow() . "\n";
     my $loadedParentId = $parentFolder->{id};
-#print "DEBUG: Dao.update: loadedParentId = $loadedParentId \n";
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
       Carp::croak("Can't prepare statement for updating a $oClassName: "
@@ -540,16 +544,45 @@ sub update {
       return 0;
     }
 
-    my $sthRes;
     if($oClassName eq 'OFolder') {
       $sthRes = $sth->execute($entity->{name}, $loadedParentId,
                               $entity->{mo_ref});
     }
     elsif($oClassName eq 'ODatacenter') {
+      #
+      # First have to extract the folder id
+      # for datastoreFolder, vmFolder, hostFolder and networkFolder
+      #
+      my $e;
+      my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
+      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'OFolder');
+      die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
+        . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
+      $datastoreFolderPid = $e->{id};
+      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'OFolder');
+      die "Can't load the vmFolder with id " . $entity->{datastoreFolder}
+        . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
+      $vmFolderPid        = $e->{id};
+      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'OFolder');
+      die "Can't load the hostFolder with id " . $entity->{datastoreFolder}
+        . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
+      $hostFolderPid      = $e->{id};
+      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'OFolder');
+      die "Can't load the networkFolder with id " . $entity->{datastoreFolder}
+        . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
+      $networkFolderPid   = $e->{id};
+
+      #
+      # Now we can update
+      #
       $sthRes = $sth->execute($entity->{name}, $loadedParentId,
-                              $entity->{mo_ref}, $entity->{datastoreFolder},
-                              $entity->{vmFolder}, $entity->{hostFolder},
-                              $entity->{networkFolder});
+                              $datastoreFolderPid, $vmFolderPid,
+                              $hostFolderPid, $networkFolderPid,
+                              $entity->{mo_ref});
     }
     else {
       Carp::croak("Statement execution stil unimplemented in OvomDao.update");
@@ -561,6 +594,11 @@ sub update {
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
+    if(! $sthRes > 0 || $sthRes eq "0E0") {
+      Carp::croak("Didn't updated any $oClassName, "
+                . "trying to update the one with mo_ref " . $entity->{mo_ref});
+      return 0;
+    }
   };
 
   if($@) {
@@ -569,7 +607,7 @@ sub update {
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: updating a $oClassName took "
+  OvomExtractor::log(1, "Profiling: updating " . $sthRes . " $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
 }
@@ -635,6 +673,11 @@ sub delete {
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
+    if(! $sthRes > 0 || $sthRes eq "0E0") {
+      Carp::croak("Didn't deleted any $oClassName, "
+                . "trying to delete the one with mo_ref " . $entity->{mo_ref});
+      return 0;
+    }
   };
 
   if($@) {
@@ -681,7 +724,7 @@ sub loadEntityByMoRef {
   }
   else {
     Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
-    return 0;
+    return undef;
   }
 
   OvomExtractor::log(0, "selecting from db a ${entityType} with mo_ref = " . $moRef);
@@ -707,7 +750,7 @@ sub loadEntityByMoRef {
       }
       else {
         Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
-        return 0;
+        return undef;
       }
     }
   };
@@ -722,7 +765,6 @@ sub loadEntityByMoRef {
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
 }
-
 
 #
 # Insert an object into DB
@@ -763,7 +805,7 @@ sub insert {
     return 0;
   }
 
-  OvomExtractor::log(0, "insert into db a $oClassName with name " . $entity->{name});
+  OvomExtractor::log(0, "inserting into db a $oClassName with mo_ref " . $entity->{mo_ref});
   my $r;
   my @data;
   my ($timeBefore, $eTime);
@@ -791,16 +833,31 @@ sub insert {
       my $e;
       my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
       $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'OFolder');
+      die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
+        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
       $datastoreFolderPid = $e->{id};
       $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'OFolder');
+      die "Can't load the vmFolder with id " . $entity->{datastoreFolder}
+        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
       $vmFolderPid        = $e->{id};
       $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'OFolder');
+      die "Can't load the hostFolder with id " . $entity->{datastoreFolder}
+        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
       $hostFolderPid      = $e->{id};
       $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'OFolder');
+      die "Can't load the networkFolder with id " . $entity->{datastoreFolder}
+        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        if (!defined($e));
       $networkFolderPid   = $e->{id};
 
 #print "DEBUG: insert: dataCenter has datastoreFolderPid=$datastoreFolderPid vmFolderPid=$vmFolderPid hostFolderPid=$hostFolderPid networkFolderPid=$networkFolderPid\n";
 
+      #
+      # Now we can update
+      #
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref},
                               $loadedParentId,
                               $datastoreFolderPid, $vmFolderPid,
@@ -815,6 +872,11 @@ sub insert {
     if(! $sthRes) {
       Carp::croak("Can't execute the statement for inserting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+    if(! $sthRes > 0 || $sthRes eq "0E0") {
+      Carp::croak("Didn't inserted any $oClassName, "
+                . "trying to insert the one with mo_ref " . $entity->{mo_ref});
       return 0;
     }
   };
