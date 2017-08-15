@@ -128,7 +128,7 @@ if (! defined($allClustersFromDB) ) {
 }
 
 print "call to updateAsNeeded for Cluster.\n";
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Cluster'}}, $allClustersFromDB);
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'ClusterComputeResource'}}, $allClustersFromDB);
 if($r == -1) {
   OvomDao::transactionRollback();
   OvomDao::disconnect();
@@ -150,7 +150,7 @@ if (! defined($allHostsFromDB) ) {
 }
 
 print "call to updateAsNeeded for Host.\n";
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Host'}}, $allHostsFromDB);
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'HostSystem'}}, $allHostsFromDB);
 if($r == -1) {
   OvomDao::transactionRollback();
   OvomDao::disconnect();

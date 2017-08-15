@@ -917,6 +917,10 @@ sub insert {
   eval {
     my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
     my $loadedParentId = $parentFolder->{id};
+    if( ! defined($loadedParentId) ) {
+      Carp::croak("Can't find the parent for the $oClassName with mo_ref " . $entity->{mo_ref});
+      return 0;
+    }
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
       Carp::croak("Can't prepare statement for inserting a $oClassName: "

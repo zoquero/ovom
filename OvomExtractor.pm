@@ -318,6 +318,12 @@ sub updateInventory {
 
     if($configuration{'debug.mock.enabled'}) {
       $entityViews = getViewsFromCsv($aEntityType);
+      if( ! defined($entityViews) ) {
+        OvomExtractor::log(3, "Can't get $aEntityType list from CSV files");
+        return 1;
+      }
+      OvomExtractor::log(0, "Found " . ($#$entityViews + 1)
+                            . " ${aEntityType}s on CSV files");
     }
     else {
       if ($aEntityType eq 'Datacenter') {
