@@ -129,9 +129,13 @@ sub pushToInventory {
       #
       my $extraFolderEntity = OFolder->newFromView($aEntityView);
       push @{$inventory{'Folder'}}, \$extraFolderEntity;
-      OvomExtractor::log(0, "Pushed an unexisting Folder for Datacenter " . $aEntityView->{name} . " with same mo_ref as a workaround for base Folders that have its Datacenter as parent");
-
-      ## regular push of ODatacenter object
+      OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Datacenter "
+                            . $aEntityView->{name} . " with same mo_ref as a "
+                            . " workaround for base Folders that have its "
+                            . "Datacenter as parent");
+      #
+      # Now let's create the regular ODatacenter object
+      #
       $aEntity = ODatacenter->newFromView($aEntityView);
     }
     elsif($type eq 'VirtualMachine') {
@@ -153,6 +157,19 @@ sub pushToInventory {
 #      $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
     }
     elsif($type eq 'ClusterComputeResource') {
+      #
+      # The parent for the hosts of a cluster is its cluster.
+      # So let's create a Folder object also for each ClusterComputeResource
+      #
+      my $extraFolderEntity = OFolder->newFromView($aEntityView);
+      push @{$inventory{'Folder'}}, \$extraFolderEntity;
+      OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Cluster "
+                            . $aEntityView->{name} . " with same mo_ref as a "
+                            . " workaround for hosts of a cluster that have its "
+                            . "cluster as parent");
+      #
+      # Now let's create the regular OCluster object
+      #
       $aEntity = OCluster->newFromView($aEntityView);
     }
     elsif($type eq 'Folder') {
