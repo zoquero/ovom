@@ -469,23 +469,39 @@ sub updateAsNeeded {
   if(${$$discovered[0]}->{oclass_name} eq 'OFolder') {
     # Let's keep parental integrity
     while (my $aEntity = popNextFolderWithParent(\@toInsert)) {
-      insert($aEntity);
+      if( ! OvomDao::insert($aEntity) ) {
+        Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+                    . $aEntity->{mo_ref} );
+        return -1;
+      }
     }
   }
   else {
     foreach my $aEntity (@toInsert) {
-      OvomDao::insert($aEntity);
+      if( ! OvomDao::insert($aEntity) ) {
+        Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+                    . $aEntity->{mo_ref} );
+        return -1;
+      }
     }
   }
 
   OvomExtractor::log(0, "updateAsNeeded: Updating") if $#toUpdate >= 0;
   foreach my $aEntity (@toUpdate) {
-    OvomDao::update($aEntity);
+    if( ! OvomDao::update($aEntity) ) {
+      Carp::croak("updateAsNeeded can't update the entity with mo_ref "
+                  . $aEntity->{mo_ref} );
+      return -1;
+    }
   }
 
   OvomExtractor::log(0, "updateAsNeeded: Deleting") if $#toDelete >= 0;
   foreach my $aEntity (@toDelete) {
-    OvomDao::delete($aEntity);
+    if( ! OvomDao::delete($aEntity) ) {
+      Carp::croak("updateAsNeeded can't delete the entity with mo_ref "
+                  . $aEntity->{mo_ref} );
+      return -1;
+    }
   }
 
   return 1 if($#toInsert == -1 && $#toUpdate == -1 && $#toDelete == -1);
