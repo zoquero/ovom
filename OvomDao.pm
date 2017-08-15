@@ -311,6 +311,7 @@ sub getAllEntitiesOfType {
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
   my $stmt;
+  my $sthRes;
   OvomExtractor::log(0, "Getting all entities of type $entityType");
 
   if($entityType eq 'OFolder') {
@@ -335,9 +336,16 @@ sub getAllEntitiesOfType {
 
   eval {
     my $sth = $dbh->prepare_cached($stmt)
-                or die "Can't prepare statement for all ${entityType}s: "
+                or die "Can't prepare statement to get all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
-    $sth->execute();
+    $sthRes = $sth->execute();
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get all ${entityType}s.");
+      $sth->finish();
+      return undef;
+    }
+
     while (@data = $sth->fetchrow_array()) {
       my $e;
       if($entityType eq 'OFolder') {
@@ -641,6 +649,7 @@ sub update {
     if(! $sthRes) {
       Carp::croak("Can't execute the statement for updating a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
+      $sth->finish();
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
@@ -728,6 +737,7 @@ sub delete {
     if(! $sthRes) {
       Carp::croak("Can't execute the statement for deleting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
+      $sth->finish();
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
@@ -799,12 +809,21 @@ sub loadEntityByMoRef {
     my $sth = $dbh->prepare_cached($stmt)
                 or die "Can't prepare statement for all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
-    $sth->execute($moRef);
+    my $sthRes = $sth->execute($moRef);
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get the ${entityType} "
+                . "with mo_ref = " . $moRef);
+      $sth->finish();
+      return undef;
+    }
+
     my $found = 0;
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
         Carp::croak("Found more than one ${entityType} "
                    . "when looking for the one with mo_ref = $moRef");
+        $sth->finish();
         return undef;
       }
 
@@ -955,6 +974,7 @@ sub insert {
     if(! $sthRes) {
       Carp::croak("Can't execute the statement for inserting a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
+      $sth->finish();
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
