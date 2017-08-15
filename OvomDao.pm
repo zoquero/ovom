@@ -319,9 +319,18 @@ sub getAllEntitiesOfType {
   elsif($entityType eq 'ODatacenter') {
     $stmt = $sqlDatacenterSelectAll;
   }
+  elsif($entityType eq 'OCluster') {
+    $stmt = $sqlClusterSelectAll;
+  }
+  elsif($entityType eq 'OHost') {
+    $stmt = $sqlHostSelectAll;
+  }
+  elsif($entityType eq 'OVirtualMachine') {
+    $stmt = $sqlVirtualMachineSelectAll;
+  }
   else {
     Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
-    return 0;
+    return undef;
   }
 
   eval {
@@ -339,9 +348,22 @@ sub getAllEntitiesOfType {
         $e = ODatacenter->new(\@data);
         push @r, \$e;
       }
+      elsif($entityType eq 'OCluster') {
+        $e = OCluster->new(\@data);
+        push @r, \$e;
+      }
+      elsif($entityType eq 'OHost') {
+        $e = OHost->new(\@data);
+        push @r, \$e;
+      }
+      elsif($entityType eq 'OVirtualMachine') {
+        $e = OVirtualMachine->new(\@data);
+        push @r, \$e;
+      }
       else {
-        Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
-        return 0;
+        Carp::croak("Not implemented for $entityType "
+                  . "in OvomDao.getAllEntitiesOfType");
+        return undef;
       }
     }
   };
@@ -384,7 +406,10 @@ sub updateAsNeeded {
   }
 
   if( $#$discovered == -1 && $#$loadedFromDb == -1 ) {
-    OvomExtractor::log(2, "updateAsNeeded: NOP: Got 0 discovered and 0 loadedFromDb entities");
+    OvomExtractor::log(2, "updateAsNeeded: NOP: "
+                        . "Got 0 entities discovered (mem inventory) "
+                        . "and 0 entities in inventory DB. "
+                        . "Is there anybody out there?");
     return 0;
   }
 
@@ -432,7 +457,7 @@ sub updateAsNeeded {
   }
 
   my $str = ($#$discovered + 1)   . " entities discovered (mem inventory), "
-          . ($#$loadedFromDb + 1) . " entities on inventory DB, "
+          . ($#$loadedFromDb + 1) . " entities in inventory DB, "
           . ($#toInsert + 1)      . " entities toInsert, "
           . ($#toUpdate + 1)      . " entities toUpdate, "
           . ($#toDelete + 1)      . " entities toDelete";
@@ -513,8 +538,17 @@ sub update {
   elsif($oClassName eq 'ODatacenter') {
     $stmt = $sqlDatacenterUpdate;
   }
+  elsif($oClassName eq 'OCluster') {
+    $stmt = $sqlClusterUpdate;
+  }
+  elsif($oClassName eq 'OHost') {
+    $stmt = $sqlHostUpdate;
+  }
+  elsif($oClassName eq 'OVirtualMachine') {
+    $stmt = $sqlVirtualMachineUpdate;
+  }
   else {
-    Carp::croak("Statement stil unimplemente in OvomDao.update");
+    Carp::croak("Statement unimplemented for $oClassName in OvomDao.update");
     return 0;
   }
 
@@ -522,7 +556,6 @@ sub update {
   OvomExtractor::log(0, "Updating into db a $oClassName with mo_ref "
                         . $entity->{mo_ref});
 
-  my $r;
   my $sthRes;
   my @data;
   my ($timeBefore, $eTime);
@@ -544,7 +577,7 @@ sub update {
       return 0;
     }
 
-    if($oClassName eq 'OFolder') {
+    if($oClassName eq 'OFolder' || $oClassName eq 'OHost' || $oClassName eq 'OCluster' || $oClassName eq 'OVirtualMachine') {
       $sthRes = $sth->execute($entity->{name}, $loadedParentId,
                               $entity->{mo_ref});
     }
@@ -609,7 +642,7 @@ sub update {
   $eTime=Time::HiRes::time - $timeBefore;
   OvomExtractor::log(1, "Profiling: updating " . $sthRes . " $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
-  return $r;
+  return 1;
 }
 
 #
@@ -646,13 +679,21 @@ sub delete {
   elsif($oClassName eq 'ODatacenter') {
     $stmt = $sqlDatacenterDelete;
   }
+  elsif($oClassName eq 'OCluster') {
+    $stmt = $sqlClusterDelete;
+  }
+  elsif($oClassName eq 'OHost') {
+    $stmt = $sqlHostDelete;
+  }
+  elsif($oClassName eq 'OVirtualMachine') {
+    $stmt = $sqlVirtualMachineDelete;
+  }
   else {
     Carp::croak("Statement stil unimplemented in OvomDao.delete");
     return 0;
   }
 
   OvomExtractor::log(0, "deleting from db a $oClassName with mo_ref " . $entity->{mo_ref});
-  my $r;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -688,7 +729,7 @@ sub delete {
   $eTime=Time::HiRes::time - $timeBefore;
   OvomExtractor::log(1, "Profiling: deleting a $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
-  return $r;
+  return 1;
 }
 
 #
@@ -722,6 +763,15 @@ sub loadEntityByMoRef {
   elsif($entityType eq 'ODatacenter') {
     $stmt = $sqlDatacenterSelectByMoref;
   }
+  elsif($entityType eq 'OCluster') {
+    $stmt = $sqlClusterSelectByMoref;
+  }
+  elsif($entityType eq 'OHost') {
+    $stmt = $sqlHostSelectByMoref;
+  }
+  elsif($entityType eq 'OVirtualMachine') {
+    $stmt = $sqlVirtualMachineSelectByMoref;
+  }
   else {
     Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
     return undef;
@@ -748,8 +798,18 @@ sub loadEntityByMoRef {
       elsif($entityType eq 'ODatacenter') {
         $r = ODatacenter->new(\@data);
       }
+      elsif($entityType eq 'OCluster') {
+        $r = OCluster->new(\@data);
+      }
+      elsif($entityType eq 'OHost') {
+        $r = OHost->new(\@data);
+      }
+      elsif($entityType eq 'OVirtualMachine') {
+        $r = OVirtualMachine->new(\@data);
+      }
       else {
-        Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
+        Carp::croak("Not implemented for $entityType "
+                  . "in OvomDao.loadEntityByMoRef");
         return undef;
       }
     }
@@ -794,19 +854,27 @@ sub insert {
   }
 
   my $stmt;
-  if($oClassName eq 'OFolder') {
+  if($oClassName    eq 'OFolder') {
     $stmt = $sqlFolderInsert;
   }
-  if($oClassName eq 'ODatacenter') {
+  elsif($oClassName eq 'ODatacenter') {
     $stmt = $sqlDatacenterInsert;
   }
+  elsif($oClassName eq 'OHost') {
+    $stmt = $sqlHostInsert;
+  }
+  elsif($oClassName eq 'OCluster') {
+    $stmt = $sqlClusterInsert;
+  }
+  elsif($oClassName eq 'OVirtualMachine') {
+    $stmt = $sqlVirtualMachineInsert;
+  }
   else {
-    Carp::croak("Statement stil unimplemente in OvomDao.insert");
+    Carp::croak("Statement unimplemented for $oClassName in OvomDao.insert");
     return 0;
   }
 
   OvomExtractor::log(0, "inserting into db a $oClassName with mo_ref " . $entity->{mo_ref});
-  my $r;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -822,10 +890,10 @@ sub insert {
     }
 
     my $sthRes;
-    if($oClassName eq 'OFolder') {
+    if($oClassName eq 'OFolder' || $oClassName eq 'OHost' || $oClassName eq 'OCluster' || $oClassName eq 'OVirtualMachine') {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
-    if($oClassName eq 'ODatacenter') {
+    elsif($oClassName eq 'ODatacenter') {
       #
       # First have to extract the folder id
       # for datastoreFolder, vmFolder, hostFolder and networkFolder
@@ -864,10 +932,9 @@ sub insert {
                               $hostFolderPid, $networkFolderPid);
     }
     else {
-      Carp::croak("Statement execution stil unimplemente in OvomDao.insert");
+      Carp::croak("Statement unimplemented for $oClassName in OvomDao.insert");
       return 0;
     }
-
 
     if(! $sthRes) {
       Carp::croak("Can't execute the statement for inserting a $oClassName: "
@@ -889,7 +956,7 @@ sub insert {
   $eTime=Time::HiRes::time - $timeBefore;
   OvomExtractor::log(1, "Profiling: insert a $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
-  return $r;
+  return 1;
 }
 
 1;

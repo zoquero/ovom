@@ -94,14 +94,11 @@ if($r == -1) {
   exit(1);
 }
 
-
-
 #########################
 # ODatacenter
 #########################
 print "getAll ODatacenter\n";
 my $allDatacentersFromDB = OvomDao::getAllEntitiesOfType('ODatacenter');
-print "getAll ODatacenter: DONE\n";
 if (! defined($allDatacentersFromDB) ) {
   OvomDao::transactionRollback();
   OvomDao::disconnect();
@@ -109,17 +106,7 @@ if (! defined($allDatacentersFromDB) ) {
   exit(1);
 }
 
-
-print "DEBUG: %inventory:\n";
-foreach my $k (@{$OvomExtractor::inventory{'Datacenter'}}) {
-  print "DEBUG: %inventory: Un DataCenter = " . ${$k}->toCsvRow() . "\n";
-}
-print "DEBUG: %db:\n";
-foreach my $k (@$allDatacentersFromDB) {
-  print "DEBUG: %db       : Un DataCenter = " . ${$k}->toCsvRow() . "\n";
-}
-
-print "DEBUG: call to updateAsNeeded for Datacenter:\n";
+print "call to updateAsNeeded for Datacenter.\n";
 $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Datacenter'}}, $allDatacentersFromDB);
 if($r == -1) {
   OvomDao::transactionRollback();
@@ -128,10 +115,70 @@ if($r == -1) {
   exit(1);
 }
 
+#########################
+# OCluster
+#########################
+print "getAll OCluster\n";
+my $allClustersFromDB = OvomDao::getAllEntitiesOfType('OCluster');
+if (! defined($allClustersFromDB) ) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
+
+print "call to updateAsNeeded for Cluster.\n";
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Cluster'}}, $allClustersFromDB);
+if($r == -1) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
 
 
+#########################
+# OHost
+#########################
+print "getAll OHost\n";
+my $allHostsFromDB = OvomDao::getAllEntitiesOfType('OHost');
+if (! defined($allHostsFromDB) ) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
+
+print "call to updateAsNeeded for Host.\n";
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Host'}}, $allHostsFromDB);
+if($r == -1) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
 
 
+#########################
+# OVirtualMachine
+#########################
+print "getAll OVirtualMachine\n";
+my $allVirtualMachinesFromDB = OvomDao::getAllEntitiesOfType('OVirtualMachine');
+if (! defined($allVirtualMachinesFromDB) ) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
+
+print "call to updateAsNeeded for VirtualMachine.\n";
+$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'VirtualMachine'}}, $allVirtualMachinesFromDB);
+if($r == -1) {
+  OvomDao::transactionRollback();
+  OvomDao::disconnect();
+  OvomExtractor::collectorStop();
+  exit(1);
+}
 
 # Ok
 OvomDao::transactionCommit();
