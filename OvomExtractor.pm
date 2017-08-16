@@ -128,10 +128,10 @@ sub pushToInventory {
       # So let's create a Folder object also for each Datacenter
       #
       my $extraFolderEntity = OFolder->newFromView($aEntityView);
-      push @{$inventory{'Folder'}}, \$extraFolderEntity;
+      push @{$inventory{'Folder'}}, $extraFolderEntity;
       OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Datacenter "
                             . $aEntityView->{name} . " with same mo_ref as a "
-                            . " workaround for base Folders that have its "
+                            . "workaround for base Folders that have its "
                             . "Datacenter as parent");
       #
       # Now let's create the regular ODatacenter object
@@ -162,10 +162,10 @@ sub pushToInventory {
       # So let's create a Folder object also for each ClusterComputeResource
       #
       my $extraFolderEntity = OFolder->newFromView($aEntityView);
-      push @{$inventory{'Folder'}}, \$extraFolderEntity;
+      push @{$inventory{'Folder'}}, $extraFolderEntity;
       OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Cluster "
                             . $aEntityView->{name} . " with same mo_ref as a "
-                            . " workaround for hosts of a cluster that have its "
+                            . "workaround for hosts of a cluster that have its "
                             . "cluster as parent");
       #
       # Now let's create the regular OCluster object
@@ -174,12 +174,26 @@ sub pushToInventory {
     }
     elsif($type eq 'Folder') {
       $aEntity = OFolder->newFromView($aEntityView);
+
+      if(! defined($aEntity->{parent})
+         && $aEntity->{name}
+            eq $OvomExtractor::configuration{'root_folder.name'}
+         && $aEntity->{mo_ref}
+            eq $OvomExtractor::configuration{'root_folder.mo_ref'} ) {
+        OvomExtractor::log(1, "pushToInventory: The $type with name '"
+          . $aEntity->{name} . "' and mo_ref '" . $aEntity->{mo_ref}
+          . "' seems to be the root for Datacenters. It hasn't parent "
+          . "and it's a known problem for the parentage of our hierarchy. "
+          . "Let's set it parent=0 as a workaround.");
+        $aEntity->{parent} =
+          $OvomExtractor::configuration{'root_folder.mo_ref'};
+      }
     }
     else {
       OvomExtractor::log(3, "Unexpected type '$type' in pushToInventory");
     }
 
-    push @{$inventory{$type}}, \$aEntity;
+    push @{$inventory{$type}}, $aEntity;
   }
 }
 
@@ -291,7 +305,7 @@ sub inventory2Csv {
       return 1;
     }
     foreach my $aEntity (@{$inventory{$aEntityType}}) {
-      print $csvHandler $$aEntity->toCsvRow() . "\n";
+      print $csvHandler $aEntity->toCsvRow() . "\n";
     }
     if( ! close($csvHandler) ) {
       OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
@@ -374,7 +388,7 @@ sub updateInventory {
       OvomExtractor::log(3, "Can't find ${aEntityType}s in the vCenter");
     }
   
-    # load the entity object and pushe it to $inventory{$aEntityType}
+    # load the entity object and push it to $inventory{$aEntityType}
     @{$inventory{$aEntityType}} = (); # Let's clean it before
     pushToInventory($entityViews, $aEntityType);
   }
@@ -394,7 +408,21 @@ sub updateInventory {
   ###############################
   return 1 if(inventory2Csv());
   return 0;
+}
 
+#
+# Printt inventory to stdOut.
+# Just for debugging purposes
+#
+sub printInventoryForDebug {
+  print "DEBUG: Let's print inventory contents:\n";
+  foreach my $aEntityType (@entityTypes) {
+    my @ents = @{$inventory{$aEntityType}};
+    print "DEBUG: " . ($#ents + 1) . " ${aEntityType}s:\n";
+    foreach my $aCom (@ents) {
+      print "DEBUG:   " . $aCom->toCsvRow() . "\n";
+    }
+  }
 }
 
 

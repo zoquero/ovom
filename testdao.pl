@@ -21,6 +21,8 @@ else {
   OvomExtractor::log(2, "The inventory has been updated on memory");
 }
 
+# OvomExtractor::printInventoryForDebug();
+
 #print "Show Folders::\n";
 #foreach my $aEntity (@{$OvomExtractor::inventory{'Folder'}}) {
 #  print "a Folder = " . $$aEntity->toCsvRow() . "\n";

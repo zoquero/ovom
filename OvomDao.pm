@@ -306,7 +306,7 @@ die "deprecated method, must be deleted";
 #
 sub getAllEntitiesOfType {
   my $entityType = shift;
-  my @r;
+  my @r = ();
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -350,23 +350,23 @@ sub getAllEntitiesOfType {
       my $e;
       if($entityType eq 'OFolder') {
         $e = OFolder->new(\@data);
-        push @r, \$e;
+        push @r, $e;
       }
       elsif($entityType eq 'ODatacenter') {
         $e = ODatacenter->new(\@data);
-        push @r, \$e;
+        push @r, $e;
       }
       elsif($entityType eq 'OCluster') {
         $e = OCluster->new(\@data);
-        push @r, \$e;
+        push @r, $e;
       }
       elsif($entityType eq 'OHost') {
         $e = OHost->new(\@data);
-        push @r, \$e;
+        push @r, $e;
       }
       elsif($entityType eq 'OVirtualMachine') {
         $e = OVirtualMachine->new(\@data);
-        push @r, \$e;
+        push @r, $e;
       }
       else {
         Carp::croak("Not implemented for $entityType "
@@ -427,8 +427,8 @@ sub updateAsNeeded {
     foreach my $aLoadedFromDb (@$loadedFromDb) {
       $j++;
       my $r;
-      $r = $$aDiscovered->compare($aLoadedFromDb);
-#print "DEBUG: (j=$j) r=$r \tcomparing " . $$aDiscovered->toCsvRow() . " with " . $$aLoadedFromDb->toCsvRow() . "\n";
+#print "DEBUG: (j=$j)      \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+      $r = $aDiscovered->compare($aLoadedFromDb);
       if ($r == -2) {
         # Errors
         return -1;
@@ -443,7 +443,7 @@ sub updateAsNeeded {
       elsif ($r == 0) {
         # Changed (same mo_ref but some other attribute differs)
 #print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
-        push @toUpdate, $$aDiscovered;
+        push @toUpdate, $aDiscovered;
         push @loadedPositionsNotTobeDeleted, $j;
         $found = 1;
         last;
@@ -454,8 +454,8 @@ sub updateAsNeeded {
     }
 
     if (! $found) {
-#print "DEBUG: It has to be INSERTED into DB.\n";
-      push @toInsert, $$aDiscovered;
+#print "DEBUG: It has to be INSERTED into DB: " .  $aDiscovered->toCsvRow() . "\n";
+      push @toInsert, $aDiscovered;
     }
   }
   for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
@@ -473,8 +473,10 @@ sub updateAsNeeded {
   OvomExtractor::log(0, "updateAsNeeded: $str");
 
   # Let's work:
-  OvomExtractor::log(0, "updateAsNeeded: Inserting") if $#toInsert >= 0;
-  if(${$$discovered[0]}->{oclass_name} eq 'OFolder') {
+  OvomExtractor::log(0, "updateAsNeeded: Inserting "
+                        . ($#toInsert + 1) . " entities") if $#toInsert >= 0;
+#    ${$$discovered[0]}->{oclass_name}
+  if($$discovered[0]->{oclass_name} eq 'OFolder') {
     # Let's keep parental integrity
     while (my $aEntity = popNextFolderWithParent(\@toInsert)) {
       if( ! OvomDao::insert($aEntity) ) {
@@ -483,9 +485,18 @@ sub updateAsNeeded {
         return -1;
       }
     }
+    if($#toInsert != -1) {
+      my $s = "Something went wrong and couldn't get next "
+            . "Folder with parent. Did you created "
+            . "the initial root Folder? Read install instructions.";
+      OvomExtractor::log(3, "$s");
+      Carp::croak($s);
+      return -1;
+    }
   }
   else {
     foreach my $aEntity (@toInsert) {
+#print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::insert($aEntity) ) {
         Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
                     . $aEntity->{mo_ref} );
@@ -494,8 +505,10 @@ sub updateAsNeeded {
     }
   }
 
-  OvomExtractor::log(0, "updateAsNeeded: Updating") if $#toUpdate >= 0;
+  OvomExtractor::log(0, "updateAsNeeded: Updating "
+                        . ($#toUpdate + 1) . " entities") if $#toUpdate >= 0;
   foreach my $aEntity (@toUpdate) {
+#print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
     if( ! OvomDao::update($aEntity) ) {
       Carp::croak("updateAsNeeded can't update the entity with mo_ref "
                   . $aEntity->{mo_ref} );
@@ -503,8 +516,10 @@ sub updateAsNeeded {
     }
   }
 
-  OvomExtractor::log(0, "updateAsNeeded: Deleting") if $#toDelete >= 0;
+  OvomExtractor::log(0, "updateAsNeeded: Deleting "
+                        . ($#toDelete + 1) . " entities") if $#toDelete >= 0;
   foreach my $aEntity (@toDelete) {
+#print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
     if( ! OvomDao::delete($aEntity) ) {
       Carp::croak("updateAsNeeded can't delete the entity with mo_ref "
                   . $aEntity->{mo_ref} );
@@ -516,9 +531,22 @@ sub updateAsNeeded {
   return 0;
 }
 
+#
+# Get next Folder that has parent and remove it from the array.
+#
+# @arg Reference to the array of references to entities
+# @return a reference to the first entity with parent in the array (if ok)
+#         undef (if errors)
+#
 sub popNextFolderWithParent {
   my $entities = shift;
   for(my $i = 0; $i <= $#$entities; $i++) {
+    if ( ! defined($$entities[$i]->{parent}) || $$entities[$i]->{parent} eq '' ) {
+      Carp::croak("Got the entity with mo_ref " . $$entities[$i]->{mo_ref}
+                . " and name " . $$entities[$i]->{name}
+                . " but without parent at popNextFolderWithParent");
+      return undef;
+    }
     my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent}, 'OFolder');
     if (defined $aParent) {
       my $r = $$entities[$i];
@@ -555,6 +583,19 @@ sub update {
     return 0;
   }
 
+  if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
+    Carp::croak("Trying to update a $oClassName without mo_ref");
+    return 0;
+  }
+  if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
+    Carp::croak("Trying to update a $oClassName without name");
+    return 0;
+  }
+  if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
+    Carp::croak("Trying to update a $oClassName without parent");
+    return 0;
+  }
+
   my $stmt;
   if($oClassName eq 'OFolder') {
     $stmt = $sqlFolderUpdate;
@@ -577,8 +618,9 @@ sub update {
   }
 
 #print "DEBUG: Dao.update: updating a $oClassName : " . $entity->toCsvRow() . "\n";
-  OvomExtractor::log(0, "Updating into db a $oClassName with mo_ref "
-                        . $entity->{mo_ref});
+  OvomExtractor::log(1, "Updating into db a $oClassName with name '"
+                        . $entity->{name}
+                        . "' and mo_ref '" . $entity->{mo_ref} . "'" );
 
   my $sthRes;
   my @data;
@@ -590,7 +632,7 @@ sub update {
     if(! defined($parentFolder)) {
       Carp::croak("Can't load the parent of a $oClassName."
                  . " Child's  mo_ref = " . $entity->{mo_ref}
-                 . " parent's mo_ref = " . $entity->{parent});
+                 . " parent's id     = " . $entity->{parent});
       return 0;
     }
     my $loadedParentId = $parentFolder->{id};
@@ -718,7 +760,15 @@ sub delete {
     return 0;
   }
 
-  OvomExtractor::log(0, "deleting from db a $oClassName with mo_ref " . $entity->{mo_ref});
+  if(defined($entity->{name})) {
+    OvomExtractor::log(0, "Deleting from db a $oClassName with name '"
+                          . $entity->{name}
+                          . "' and mo_ref '" . $entity->{mo_ref} . "'");
+  }
+  else {
+    OvomExtractor::log(0, "Deleting from db a $oClassName with mo_ref '"
+                          . $entity->{mo_ref} . "'");
+  }
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -775,11 +825,19 @@ sub loadEntityByMoRef {
   $timeBefore=Time::HiRes::time;
 
   if (! defined ($moRef)) {
-    Carp::croak("Got an undefined mo_ref");
+    Carp::croak("Got an undefined mo_ref trying to load a $entityType");
+    return undef;
+  }
+  if ($moRef eq '') {
+    Carp::croak("Got an empty mo_ref trying to load a $entityType");
     return undef;
   }
   if (! defined ($entityType)) {
-    Carp::croak("Got an undefined entity type");
+    Carp::croak("Got an undefined entity type trying to load an entity");
+    return undef;
+  }
+  if ($entityType eq '') {
+    Carp::croak("Got an empty entity type trying to load an entity");
     return undef;
   }
 
@@ -888,6 +946,19 @@ sub insert {
     return 0;
   }
 
+  if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
+    Carp::croak("Trying to insert a $oClassName without mo_ref");
+    return 0;
+  }
+  if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
+    Carp::croak("Trying to insert a $oClassName without name");
+    return 0;
+  }
+  if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
+    Carp::croak("Trying to insert a $oClassName without parent");
+    return 0;
+  }
+
   my $stmt;
   if($oClassName    eq 'OFolder') {
     $stmt = $sqlFolderInsert;
@@ -909,16 +980,25 @@ sub insert {
     return 0;
   }
 
-  OvomExtractor::log(0, "inserting into db a $oClassName with mo_ref " . $entity->{mo_ref});
+  OvomExtractor::log(1, "Inserting into db a $oClassName with name '"
+                        . $entity->{name}
+                        . "' and mo_ref '" . $entity->{mo_ref} . "'");
+
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
 
   eval {
-    my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
+    my $parentFolder = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
+    if( ! defined($parentFolder) ) {
+      Carp::croak("Can't find the parent for the $oClassName "
+                . "with mo_ref " . $entity->{mo_ref});
+      return 0;
+    }
     my $loadedParentId = $parentFolder->{id};
     if( ! defined($loadedParentId) ) {
-      Carp::croak("Can't find the parent for the $oClassName with mo_ref " . $entity->{mo_ref});
+      Carp::croak("Can't get the id of the parent for the $oClassName "
+                . "with mo_ref " . $entity->{mo_ref});
       return 0;
     }
     my $sth = $dbh->prepare_cached($stmt);
@@ -939,6 +1019,29 @@ sub insert {
       #
       my $e;
       my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
+
+      if( ! defined($entity->{datastoreFolder}) || $entity->{datastoreFolder} eq '' ) {
+        $sth->finish();
+        Carp::croak("Trying to insert a $oClassName without datastoreFolder");
+        return 0;
+      }
+      if( ! defined($entity->{vmFolder}) || $entity->{vmFolder} eq '' ) {
+        $sth->finish();
+        Carp::croak("Trying to insert a $oClassName without vmFolder");
+        return 0;
+      }
+      if( ! defined($entity->{hostFolder}) || $entity->{hostFolder} eq '' ) {
+        $sth->finish();
+        Carp::croak("Trying to insert a $oClassName without hostFolder");
+        return 0;
+      }
+      if( ! defined($entity->{networkFolder}) || $entity->{networkFolder} eq '' ) {
+        $sth->finish();
+        Carp::croak("Trying to insert a $oClassName without networkFolder");
+        return 0;
+      }
+
+      # Let's go:
       $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'OFolder');
       die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
         . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}

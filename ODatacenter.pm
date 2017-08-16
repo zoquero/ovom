@@ -103,18 +103,18 @@ sub compare {
     Carp::croak("Compare requires other entity of the same type as argument");
     return -2;
   }
-  if( !defined(${$other}->{name})
-   || !defined(${$other}->{parent})
-   || !defined(${$other}->{mo_ref})) {
+  if( !defined($other->{name})
+   || !defined($other->{parent})
+   || !defined($other->{mo_ref})) {
     Carp::croak("compare: The argument doesn't look like an entity");
     return -2;
   }
-  elsif ( $self->{mo_ref} ne ${$other}->{mo_ref} ) {
+  elsif ( $self->{mo_ref} ne $other->{mo_ref} ) {
     # Different folder (mo_ref differs)
     return -1;
   }
-  elsif ( $self->{name}    ne ${$other}->{name}
-       || $self->{parent}  ne ${$other}->{parent} ) {
+  elsif ( $self->{name}    ne $other->{name}
+       || $self->{parent}  ne $other->{parent} ) {
     # Same folder (equal mo_ref), but name or parent has changed
     return 0;
   }
