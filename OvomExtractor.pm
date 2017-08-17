@@ -189,9 +189,9 @@ sub pushToInventory {
             eq $OvomExtractor::configuration{'root_folder.mo_ref'} ) {
         OvomExtractor::log(1, "pushToInventory: The $type with name '"
           . $aEntity->{name} . "' and mo_ref '" . $aEntity->{mo_ref}
-          . "' seems to be the root for Datacenters. It hasn't parent "
-          . "and it's a known problem for the parentage of our hierarchy. "
-          . "Let's set it parent=0 as a workaround.");
+          . "' hasn't parent and it seems to be the root for Datacenters. "
+          . "It's a known problem for the parentage of our hierarchy. "
+          . "Let's set itself as its parent as a workaround.");
         $aEntity->{parent} =
           $OvomExtractor::configuration{'root_folder.mo_ref'};
       }
@@ -218,7 +218,7 @@ sub getViewsFromCsv {
   my $entityType = shift;
   my @entities;
   my ($csv, $csvHandler);
-  my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.inventoryRoot'}
+  my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.inventExpRoot'}
                              . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
 
   if( $entityType eq "Datacenter"
@@ -296,7 +296,7 @@ sub getViewsFromCsv {
 sub inventory2Csv {
   my ($csv, $csvHandler);
   my $entityType;
-  my($inventoryBaseFolder) = $OvomExtractor::configuration{'inventoryRoot'}
+  my($inventoryBaseFolder) = $OvomExtractor::configuration{'inventory.export.root'}
                              . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
 
   OvomExtractor::log(0, "Let's write inventory into CSV files on "
@@ -655,7 +655,7 @@ sub saveVmPerf {
 #     OvomExtractor::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
 #   }
 # 
-#   my $outputFile = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/vms/$vm/hour/$counterType.csv";
+#   my $outputFile = $OvomExtractor::configuration{'perfdata.root'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/vms/$vm/hour/$counterType.csv";
 # 
 #   my $headFile = $outputFile . ".head";
 #   if (! -f $headFile) {
@@ -695,7 +695,7 @@ sub saveHostPerf {
 #     OvomExtractor::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
 #   }
 # 
-#   my $outputFile = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/hosts/$host/hour/$counterType.csv";
+#   my $outputFile = $OvomExtractor::configuration{'perfdata.root'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/hosts/$host/hour/$counterType.csv";
 # 
 #   my $headFile = $outputFile . ".head";
 #   if (! -f $headFile) {
@@ -756,38 +756,38 @@ sub createFoldersIfNeeded {
   ##############################
   # Folders for performance data
   ##############################
-  $folder = $OvomExtractor::configuration{'perfDataRoot'};
+  $folder = $OvomExtractor::configuration{'perfdata.root'};
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfDataRoot folder $folder");
+    OvomExtractor::log(1, "Creating perfdata.root folder $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
   $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
-    OvomExtractor::log(1, "Creating perfDataRoot folder for the vCenter $vCenterFolder");
+    OvomExtractor::log(1, "Creating perfdata.root folder for the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
   $folder = $vCenterFolder . "/HostSystem";
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfDataRoot folder for hosts of the vCenter $folder");
+    OvomExtractor::log(1, "Creating perfdata.root folder for hosts of the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
   $folder = $vCenterFolder . "/VirtualMachine";
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfDataRoot folder for VMs of the vCenter $folder");
+    OvomExtractor::log(1, "Creating perfdata.root folder for VMs of the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
 
   ##############################
   # Folders for inventory
   ##############################
-  $folder = $OvomExtractor::configuration{'inventoryRoot'};
+  $folder = $OvomExtractor::configuration{'inventory.export.root'};
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating inventoryRoot folder $folder");
+    OvomExtractor::log(1, "Creating inventory.export.root folder $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
   $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
-    OvomExtractor::log(1, "Creating inventoryRoot folder for the vCenter $vCenterFolder");
+    OvomExtractor::log(1, "Creating inventory.export.root folder for the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
 
