@@ -69,6 +69,11 @@ else {
 #   print "Folder : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = $parent\n";
 # }
 
+my %inventOnDb = (); # keys = Folder Datacenter ClusterComputeResource HostSystem VirtualMachine
+foreach my $entityType (@$OvomExtractor::entityTypes) {
+  $inventOnDb{$entityType} = ();
+}
+
 my $r;
 if(OvomDao::connect() != 1) {
   OvomExtractor::collectorStop();
@@ -95,6 +100,8 @@ if($r == -1) {
   OvomExtractor::collectorStop();
   exit(1);
 }
+
+push @{$inventOnDb{'Folder'}}, $allFoldersFromDB;
 
 #########################
 # ODatacenter

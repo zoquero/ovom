@@ -139,8 +139,14 @@ sub connect {
 
   my $connStr  = "dbi:mysql:dbname=" . $OvomExtractor::configuration{'db.name'}
                . ";host=" . $OvomExtractor::configuration{'db.hostname'};
-  my $username = $OvomExtractor::configuration{'db.username'};
-  my $passwd   = $OvomExtractor::configuration{'db.password'};
+  my $username = $ENV{'OVOM_DB_USERNAME'}; 
+  my $passwd   = $ENV{'OVOM_DB_PASSWORD'}; 
+  if(  ! defined($username) || $username eq ''
+    || ! defined($passwd)   || $passwd   eq '') {
+    OvomExtractor::log(3, "Can't get DB username or password (check environment "
+                        . "variables OVOM_DB_USERNAME and OVOM_DB_PASSWORD)");
+    return 0;
+  }
   OvomExtractor::log(0, "Connecting to database with connection string: '$connStr'");
 
   eval {

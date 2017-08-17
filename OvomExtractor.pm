@@ -40,7 +40,7 @@ our %ovomGlobals;
 our %inventory; # keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
-our @entityTypes = ("Folder", "HostSystem", "VirtualMachine", "Datacenter", "ClusterComputeResource");
+our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource", "HostSystem", "VirtualMachine");
 
 # vmname/last_hour/
 # vmname/last_day/
@@ -74,11 +74,18 @@ sub connect {
   }
 
   my $vCWSUrl = 'https://'
-                . $OvomExtractor::configuration{'vCenterName'}
+                . $OvomExtractor::configuration{'vCenter.fqdn'}
                 . '/sdk/webService';
-  eval { Util::connect($vCWSUrl,
-                       $OvomExtractor::configuration{'vCUsername'},
-                       $OvomExtractor::configuration{'vCPassword'}); };
+  my $user = $ENV{'OVOM_VC_USERNAME'};
+  my $pass = $ENV{'OVOM_VC_PASSWORD'};
+  if ( ! defined($user) || $user eq '' ||  ! defined($pass) || $pass eq '') {
+    OvomExtractor::log(3, "Can't find username or password for vCenter "
+                        . "in the environment. Read install instructions.");
+    return 1;
+  }
+  eval {
+    Util::connect($vCWSUrl, $user, $pass);
+  };
   if($@) {
     OvomExtractor::log(3, "Errors connecting to $vCWSUrl: $@");
     return 1;
@@ -212,7 +219,7 @@ sub getViewsFromCsv {
   my @entities;
   my ($csv, $csvHandler);
   my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.inventoryRoot'}
-                             . "/" . $OvomExtractor::configuration{'vCenterName'} ;
+                             . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
 
   if( $entityType eq "Datacenter"
    || $entityType eq "VirtualMachine"
@@ -290,7 +297,7 @@ sub inventory2Csv {
   my ($csv, $csvHandler);
   my $entityType;
   my($inventoryBaseFolder) = $OvomExtractor::configuration{'inventoryRoot'}
-                             . "/" . $OvomExtractor::configuration{'vCenterName'} ;
+                             . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
 
   OvomExtractor::log(0, "Let's write inventory into CSV files on "
                         . $inventoryBaseFolder);
@@ -465,7 +472,7 @@ sub getVmPerfs {
 #   foreach $counterType (@OvomExtractor::counterTypes) {
 #     my %vmPerfParams = ();
 #     my $getVmPerfCommand = $configuration{'command.getPerf'} .
-#                              " --server "      . $configuration{'vCenterName'} .
+#                              " --server "      . $configuration{'vCenter.fqdn'} .
 #                              " --countertype " . $counterType .
 #                              " --vm "        . $vm;
 #   
@@ -554,7 +561,7 @@ sub getHostPerfs {
 #   foreach $counterType (@OvomExtractor::counterTypes) {
 #     my %hostPerfParams = ();
 #     my $getHostPerfCommand = $configuration{'command.getPerf'} .
-#                              " --server "      . $configuration{'vCenterName'} .
+#                              " --server "      . $configuration{'vCenter.fqdn'} .
 #                              " --countertype " . $counterType .
 #                              " --host "        . $host;
 #   
@@ -648,7 +655,7 @@ sub saveVmPerf {
 #     OvomExtractor::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
 #   }
 # 
-#   my $outputFile = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenterName'} . "/vms/$vm/hour/$counterType.csv";
+#   my $outputFile = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/vms/$vm/hour/$counterType.csv";
 # 
 #   my $headFile = $outputFile . ".head";
 #   if (! -f $headFile) {
@@ -688,7 +695,7 @@ sub saveHostPerf {
 #     OvomExtractor::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
 #   }
 # 
-#   my $outputFile = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenterName'} . "/hosts/$host/hour/$counterType.csv";
+#   my $outputFile = $OvomExtractor::configuration{'perfDataRoot'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/hosts/$host/hour/$counterType.csv";
 # 
 #   my $headFile = $outputFile . ".head";
 #   if (! -f $headFile) {
@@ -754,7 +761,7 @@ sub createFoldersIfNeeded {
     OvomExtractor::log(1, "Creating perfDataRoot folder $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
-  $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenterName'};
+  $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
     OvomExtractor::log(1, "Creating perfDataRoot folder for the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
@@ -778,7 +785,7 @@ sub createFoldersIfNeeded {
     OvomExtractor::log(1, "Creating inventoryRoot folder $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
-  $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenterName'};
+  $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
     OvomExtractor::log(1, "Creating inventoryRoot folder for the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";

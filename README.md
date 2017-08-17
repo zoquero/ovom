@@ -39,38 +39,45 @@ It's in development stage. It's expected to have a release in september 2017 wit
 
 # Installation
 
+## Credentials to access vCenter
+By now it just needs inventory access. A role like *Read-only* would be more than enough. In future releases it may need permissions for vMotion and Storage vMotion.
+
+Set the credentials in the environment variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+
 ## Database
 
-Nowadays it just supports MySQL through Perl DBI
+Nowadays it just supports MySQL through Perl DBI.
 
-* Setup Database configuration in **`ovom.conf`**
+You can use root MySQL user to create the database and tables and use a new dedicated user access those tables.
+
+*  Set the credentials for that new user in the environment variables **`OVOM_DB_USERNAME`** and **`OVOM_DB_PASSWORD`**
+
+* Setup Database configuration in **`ovom.conf`**:
     * **`db.hostname`**
     * **`db.name`**
-    * **`db.username`**
-    * **`db.password`**
 
-* Creation of the DataBase, the user and authorizations:
-
-```
-$ mysql -u root -p
-mysql> CREATE DATABASE ovomdb;
-mysql> CREATE USER 'ovomdbuser'@'localhost' IDENTIFIED BY 'ovomdbpass';
-mysql> GRANT CREATE, DELETE, INSERT, SELECT, UPDATE 
-             ON `ovomdb`.* TO 'ovomdbuser'@'localhost';
-mysql> flush privileges;
-```
-
-* Creation of tables and initial data from scripts **`db/ddl.sql`** and **`db/data.sql`** :
+* Creation of database, user, grants, tables and initial data:
 ```
 $ mysql -u root       -prootpassword        < db/create_db.sql
 $ mysql -u root       -prootpassword        < db/grants.sql
 $ mysql -u root       -prootpassword ovomdb < db/ddl.sql
-$ mysql -u ovomdbuser -povomdbpass   ovomdb < db/data.sql
+$ mysql -u root       -prootpassword ovomdb < db/data.sql
+```
+
+## Run sample
+
+```
+Ex.:
+$ OVOM_DB_USERNAME=ovomdbuser  \
+  OVOM_DB_PASSWORD=ovomdbpass  \
+  OVOM_VC_USERNAME=vcenteruser \
+  OVOM_VC_PASSWORD=vcenterpass ./testdao.pl 
 ```
 
 # Uninstallation
 
-* Remove authorizations (revoke grants)
-* Remove user
-* Remove database ( **`DROP DATABASE ovomdb`** )
+* Remove authorizations (revoke grants), user and database:
+```
+$ mysql -u root       -prootpassword ovomdb < db/deletedb.sql 
+```
 
