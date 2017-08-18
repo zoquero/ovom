@@ -418,17 +418,11 @@ sub updateAsNeeded {
   my $databaseHashRef    = shift;
 
   #
-  # Reference to the hash of arrays of references to objects.
+  # Reference to the hash of refs to arrays of references
+  # to objects (entities) found at vCenter.
   # The keys of the hash should be the entityTypes.
   #
-  # Take care, because the inventory (%$inventoryHashRef) components
-  # are references to arrays, but the %$databaseHashRef components
-  # are arrays, not refs to arrays.
-  #
-  # i.e.: inventory hash (inventoryHashRef) contains arrays,
-  #       DB hash (databaseHashRef) contains references to arrays
-  #
-  my $inventoryHashRef   = OvomExtractor::getInventory();
+  my $inventoryHashRef    = OvomExtractor::getInventory();
   my $entityTypesArrayRef = OvomExtractor::getEntityTypes();
   my $discoveredHashRef;
   my $somethingChanged = 0;

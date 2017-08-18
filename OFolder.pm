@@ -93,7 +93,7 @@ sub compare {
     Carp::croak("Compare requires other entity as argument");
     return -2;
   }
-  if(ref($other) ne 'OFolder') {
+  if(ref($self) ne ref($other)) {
     Carp::croak("Compare requires a entity of the same type as argument");
     return -2;
   }
