@@ -23,6 +23,46 @@ sub new {
 }
 
 #
+# Constructor that creates from a ODatacenter.
+#
+sub cloneFromDatacenter {
+  my ($class, $dc) = @_;
+
+  # Preconditions
+  Carp::croak("OFolder constructor requires args")
+    if (! defined($dc));
+
+  Carp::croak("OFolder constructor requires args")
+    if(ref($dc) ne 'ODatacenter');
+
+  my $a = { 'id'     => undef,
+            'name'   => $dc->{name},
+            'mo_ref' => $dc->{mo_ref},
+            'parent' => $dc->{parent} };
+  return OFolder->newWithArgsHash($a);
+}
+
+#
+# Constructor that creates from a OCluster.
+#
+sub cloneFromCluster {
+  my ($class, $cluster) = @_;
+
+  # Preconditions
+  Carp::croak("OFolder constructor requires args")
+    if (! defined($cluster));
+
+  Carp::croak("OFolder constructor requires args")
+    if(ref($cluster) ne 'OCluster');
+
+  my $a = { 'id'     => undef,
+            'name'   => $cluster->{name},
+            'mo_ref' => $cluster->{mo_ref},
+            'parent' => $cluster->{parent} };
+  return OFolder->newWithArgsHash($a);
+}
+
+#
 # Constructor with args hash
 #
 sub newWithArgsHash {

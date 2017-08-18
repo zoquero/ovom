@@ -149,18 +149,23 @@ sub pushToInventory {
       #
       # The parent for the base folders for hosts, networks, VMs
       # and datastores are not folders, are its datacenters.
-      # So let's create a Folder object also for each Datacenter
+      # So we will create a Folder object also for each Datacenter.
       #
-      my $extraFolderEntity = OFolder->newFromView($aEntityView);
+
+      #
+      # Let's create the regular ODatacenter object
+      #
+      $aEntity = ODatacenter->newFromView($aEntityView);
+
+      #
+      # Let's create the extra OFolder object
+      #
+      my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
       OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Datacenter "
                             . $aEntityView->{name} . " with same mo_ref as a "
                             . "workaround for base Folders that have its "
                             . "Datacenter as parent");
-      #
-      # Now let's create the regular ODatacenter object
-      #
-      $aEntity = ODatacenter->newFromView($aEntityView);
     }
     elsif($type eq 'VirtualMachine') {
       $aEntity = OVirtualMachine->newFromView($aEntityView);
@@ -185,16 +190,22 @@ sub pushToInventory {
       # The parent for the hosts of a cluster is its cluster.
       # So let's create a Folder object also for each ClusterComputeResource
       #
-      my $extraFolderEntity = OFolder->newFromView($aEntityView);
+
+      #
+      # First let's create the regular OCluster object
+      #
+      $aEntity = OCluster->newFromView($aEntityView);
+
+
+      #
+      # Now let's create the extra OFolder object
+      #
+      my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
       OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Cluster "
                             . $aEntityView->{name} . " with same mo_ref as a "
                             . "workaround for hosts of a cluster that have its "
                             . "cluster as parent");
-      #
-      # Now let's create the regular OCluster object
-      #
-      $aEntity = OCluster->newFromView($aEntityView);
     }
     elsif($type eq 'Folder') {
       $aEntity = OFolder->newFromView($aEntityView);
