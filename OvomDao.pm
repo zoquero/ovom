@@ -609,8 +609,8 @@ sub updateAsNeeded {
       # Let's keep parental integrity
       while (my $aEntity = popNextFolderWithParent(\@{$toInsert{$entityType}})) {
         if( ! OvomDao::insert($aEntity) ) {
-          Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
-                      . $aEntity->{mo_ref} );
+          OvomExtractor::log(3, "updateAsNeeded can't insert the entity "
+                      . " with mo_ref '" . $aEntity->{mo_ref} . "'" );
           return -1;
         }
       }
@@ -618,8 +618,7 @@ sub updateAsNeeded {
         my $s = "Something went wrong and couldn't get next "
               . "Folder with parent. Did you created "
               . "the initial root Folder? Read install instructions.";
-        OvomExtractor::log(3, "$s");
-        Carp::croak($s);
+        OvomExtractor::log(3, $s);
         return -1;
       }
     }
@@ -627,7 +626,7 @@ sub updateAsNeeded {
       foreach my $aEntity (@{$toInsert{$entityType}}) {
 #  print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
         if( ! OvomDao::insert($aEntity) ) {
-          Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+          OvomExtractor::log(3, "updateAsNeeded can't insert the entity with mo_ref "
                       . $aEntity->{mo_ref} );
           return -1;
         }
@@ -641,7 +640,7 @@ sub updateAsNeeded {
     foreach my $aEntity (@{$toUpdate{$entityType}}) {
 #  print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::update($aEntity) ) {
-        Carp::croak("updateAsNeeded can't update the entity with mo_ref "
+        OvomExtractor::log(3, "updateAsNeeded can't update the entity with mo_ref "
                     . $aEntity->{mo_ref} );
         return -1;
       }
@@ -654,7 +653,7 @@ sub updateAsNeeded {
     foreach my $aEntity (@{$toDelete{$entityType}}) {
 #  print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::delete($aEntity) ) {
-        Carp::croak("updateAsNeeded can't delete the entity with mo_ref "
+        OvomExtractor::log(3, "updateAsNeeded can't delete the entity with mo_ref "
                     . $aEntity->{mo_ref} );
         return -1;
       }
@@ -927,7 +926,7 @@ sub delete {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors deleting a $oClassName into DB: $@");
+    OvomExtractor::log(3, "Errors deleting a $oClassName from DB: $@");
     return 0;
   }
 
