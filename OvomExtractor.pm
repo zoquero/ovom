@@ -37,6 +37,9 @@ our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collecto
 our $csvSep = ";";
 our %configuration;
 our %ovomGlobals;
+#
+# Each component in the hash is an array of references to objects of the key type
+#
 our %inventory; # keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
@@ -65,6 +68,20 @@ our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource", "HostSyste
 #   return \@sampleLengths;
 # }
 
+
+#
+# Get a reference to the entity types array.
+#
+sub getEntityTypes {
+  return \@entityTypes;
+}
+
+#
+# Get a reference to the inventory hash.
+#
+sub getInventory {
+  return \%inventory;
+}
 
 sub connect {
 

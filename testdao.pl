@@ -23,56 +23,14 @@ else {
 
 # OvomExtractor::printInventoryForDebug();
 
-#print "Show Folders::\n";
-#foreach my $aEntity (@{$OvomExtractor::inventory{'Folder'}}) {
-#  print "a Folder = " . $$aEntity->toCsvRow() . "\n";
-#}
-
-# my @foundDatacenters;
-# my @foundVirtualMachines;
-# my @foundHosts;
-# my @foundClusters;
-# my @foundFolders;
-# 
-# my $someDatacenterViews     = OvomExtractor::getViewsFromCsv('Datacenter');
-# my $someVirtualMachineViews = OvomExtractor::getViewsFromCsv('VirtualMachine');
-# my $someHostViews           = OvomExtractor::getViewsFromCsv('HostSystem');
-# my $someClusterViews        = OvomExtractor::getViewsFromCsv('ClusterComputeResource');
-# my $someFolderViews         = OvomExtractor::getViewsFromCsv('Folder');
-# 
-# foreach my $aView (@$someDatacenterViews) {
-#   my $aEntity = ODatacenter->newFromView($aView);
-#   push @foundDatacenters, $aEntity;
-# # print "vDC : name = "            . $aEntity->{name}            . " mo_ref = "         . $aEntity->{mo_ref}        . " parent = " . $aEntity->{parent}
-# #          . " datastoreFolder = " . $aEntity->{datastoreFolder} . " vmFolder = "      . $aEntity->{vmFolder}
-# #          . " hostFolder = "      . $aEntity->{hostFolder}      . " networkFolder = " . $aEntity->{networkFolder} . "\n";
-# }
-# foreach my $aView (@$someVirtualMachineViews) {
-#   my $aEntity = OVirtualMachine->new($aView);
-#   push @foundVirtualMachines, $aEntity;
-# # print "VM : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
-# }
-# foreach my $aView (@$someHostViews) {
-#   my $aEntity = OHost->new($aView);
-#   push @foundHosts, $aEntity;
-# # print "Host : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
-# }
-# foreach my $aView (@$someClusterViews) {
-#   my $aEntity = OCluster->new($aView);
-#   push @foundClusters, $aEntity;
-# # print "Cluster : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = " . $aEntity->{parent} . "\n";
-# }
-# foreach my $aView (@$someFolderViews) {
-#   my $aEntity = OFolder->newFromView($aView);
-#   push @foundFolders, $aEntity;
-#   my $parent = defined($aEntity->{parent}) ? $aEntity->{parent} : '';
-#   print "Folder : name = " . $aEntity->{name} . " mo_ref = " . $aEntity->{mo_ref} . " parent = $parent\n";
-# }
-
 my %inventOnDb = (); # keys = Folder Datacenter ClusterComputeResource HostSystem VirtualMachine
 foreach my $entityType (@$OvomExtractor::entityTypes) {
-  $inventOnDb{$entityType} = ();
+  $inventOnDb{$entityType} = \();
 }
+
+#########################
+# Connect to Database
+#########################
 
 my $r;
 if(OvomDao::connect() != 1) {
@@ -93,15 +51,16 @@ if (! defined($allFoldersFromDB) ) {
   exit(1);
 }
 
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Folder'}}, $allFoldersFromDB);
-if($r == -1) {
-  OvomDao::transactionRollback();
-  OvomDao::disconnect();
-  OvomExtractor::collectorStop();
-  exit(1);
-}
+# print "call to updateAsNeeded for Folder.\n";
+# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Folder'}}, $allFoldersFromDB);
+# if($r == -1) {
+#   OvomDao::transactionRollback();
+#   OvomDao::disconnect();
+#   OvomExtractor::collectorStop();
+#   exit(1);
+# }
 
-push @{$inventOnDb{'Folder'}}, $allFoldersFromDB;
+push @{$inventOnDb{'Folder'}}, @$allFoldersFromDB;
 
 #########################
 # ODatacenter
@@ -115,14 +74,16 @@ if (! defined($allDatacentersFromDB) ) {
   exit(1);
 }
 
-print "call to updateAsNeeded for Datacenter.\n";
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Datacenter'}}, $allDatacentersFromDB);
-if($r == -1) {
-  OvomDao::transactionRollback();
-  OvomDao::disconnect();
-  OvomExtractor::collectorStop();
-  exit(1);
-}
+# print "call to updateAsNeeded for Datacenter.\n";
+# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Datacenter'}}, $allDatacentersFromDB);
+# if($r == -1) {
+#   OvomDao::transactionRollback();
+#   OvomDao::disconnect();
+#   OvomExtractor::collectorStop();
+#   exit(1);
+# }
+
+push @{$inventOnDb{'Datacenter'}}, @$allDatacentersFromDB;
 
 #########################
 # OCluster
@@ -136,15 +97,16 @@ if (! defined($allClustersFromDB) ) {
   exit(1);
 }
 
-print "call to updateAsNeeded for Cluster.\n";
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'ClusterComputeResource'}}, $allClustersFromDB);
-if($r == -1) {
-  OvomDao::transactionRollback();
-  OvomDao::disconnect();
-  OvomExtractor::collectorStop();
-  exit(1);
-}
+# print "call to updateAsNeeded for Cluster.\n";
+# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'ClusterComputeResource'}}, $allClustersFromDB);
+# if($r == -1) {
+#   OvomDao::transactionRollback();
+#   OvomDao::disconnect();
+#   OvomExtractor::collectorStop();
+#   exit(1);
+# }
 
+push @{$inventOnDb{'ClusterComputeResource'}}, @$allClustersFromDB;
 
 #########################
 # OHost
@@ -158,15 +120,16 @@ if (! defined($allHostsFromDB) ) {
   exit(1);
 }
 
-print "call to updateAsNeeded for Host.\n";
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'HostSystem'}}, $allHostsFromDB);
-if($r == -1) {
-  OvomDao::transactionRollback();
-  OvomDao::disconnect();
-  OvomExtractor::collectorStop();
-  exit(1);
-}
+# print "call to updateAsNeeded for Host.\n";
+# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'HostSystem'}}, $allHostsFromDB);
+# if($r == -1) {
+#   OvomDao::transactionRollback();
+#   OvomDao::disconnect();
+#   OvomExtractor::collectorStop();
+#   exit(1);
+# }
 
+push @{$inventOnDb{'HostSystem'}}, @$allHostsFromDB;
 
 #########################
 # OVirtualMachine
@@ -180,8 +143,24 @@ if (! defined($allVirtualMachinesFromDB) ) {
   exit(1);
 }
 
-print "call to updateAsNeeded for VirtualMachine.\n";
-$r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'VirtualMachine'}}, $allVirtualMachinesFromDB);
+# print "call to updateAsNeeded for VirtualMachine.\n";
+# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'VirtualMachine'}}, $allVirtualMachinesFromDB);
+# if($r == -1) {
+#   OvomDao::transactionRollback();
+#   OvomDao::disconnect();
+#   OvomExtractor::collectorStop();
+#   exit(1);
+# }
+
+push @{$inventOnDb{'VirtualMachine'}}, @$allVirtualMachinesFromDB;
+
+#######################################
+# Let's updateAsNeeded
+#######################################
+print "call to updateAsNeeded:\n";
+
+$r = OvomDao::updateAsNeeded(\%inventOnDb);
+print "call to updateAsNeeded returned = $r\n";
 if($r == -1) {
   OvomDao::transactionRollback();
   OvomDao::disconnect();
@@ -189,7 +168,9 @@ if($r == -1) {
   exit(1);
 }
 
-# Ok
+#######################################
+# Ok! Commit and disconnect to Database
+#######################################
 OvomDao::transactionCommit();
 if( OvomDao::disconnect() != 1 ) {
   OvomExtractor::collectorStop();

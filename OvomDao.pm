@@ -4,6 +4,7 @@ use warnings;
 use DBI;
 use Time::HiRes; ## gettimeofday
 use Carp;
+use OvomExtractor;
 
 
 our $dbh;
@@ -389,7 +390,8 @@ sub getAllEntitiesOfType {
 
   $eTime=Time::HiRes::time - $timeBefore;
   OvomExtractor::log(1, "Profiling: select all ${entityType}s took "
-                        . sprintf("%.3f", $eTime) . " s");
+                        . sprintf("%.3f", $eTime) . " s "
+                        . "and returned " . ($#r + 1) . " entities");
   return \@r;
 }
 
@@ -397,144 +399,268 @@ sub getAllEntitiesOfType {
 # Insert, update or delete objects on database as needed.
 #
 # Inserts the new objects,
-# updates the existing with changes,
-# noops on the unchanged existing
-# and deletes the ones that aren't available.
+# updates the existing that have changes,
+# noops on the existing objects that haven't changed,
+# and deletes the ones that doesn't exist now in inventory
 #
-# @arg ref to array of references to objects found on vCenter (source)
-# @arg ref to array of references to objects read on database (destination)
-# @return 1 if something changed, 0 if nothing changed, -1 if errors.
+# It gets the current inventory from $OvomExtractor::inventory
+#
+# It gets the inventory that was stored on DataBase for the last time
+#    from the only argument
+#
+# @arg ref to hash of refs to arrays of refs of objects from database (dest)
+#             keys   of the hash = entityTypes
+#             values of the hash = reference to
+#                                    array of references to the objects
+# @return How many entityTypes had changes, -1 if errors.
 #
 sub updateAsNeeded {
-  my ($discovered, $loadedFromDb) = @_;
-  my @toUpdate;
-  my @toInsert;
-  my @toDelete;
-  my @loadedPositionsNotTobeDeleted;
+  my $databaseHashRef    = shift;
+
+  #
+  # Reference to the hash of arrays of references to objects.
+  # The keys of the hash should be the entityTypes.
+  #
+  # Take care, because the inventory (%$inventoryHashRef) components
+  # are references to arrays, but the %$databaseHashRef components
+  # are arrays, not refs to arrays.
+  #
+  # i.e.: inventory hash (inventoryHashRef) contains arrays,
+  #       DB hash (databaseHashRef) contains references to arrays
+  #
+  my $inventoryHashRef   = OvomExtractor::getInventory();
+  my $entityTypesArrayRef = OvomExtractor::getEntityTypes();
+  my $discoveredHashRef;
+  my $somethingChanged = 0;
+  #
+  # Hashes containing a component for each type
+  # holding an array (not a reference to array!) of references
+  # to objects of that type. The hashes will have the same keys
+  # than the inventory hash.
+  #
+  my %toInsert = ();
+  my %toUpdate = ();
+  my %toDelete = ();
 
   OvomExtractor::log(0, "Running updateAsNeeded");
 
-  if( !defined($discovered) || !defined($loadedFromDb)) {
-    Carp::croak("updateAsNeeded needs a reference to 2 entitiy arrays as argument");
+  ###################################
+  # Preconditions for databaseHashRef
+  ###################################
+  if( ! ref($databaseHashRef) eq "HASH") {
+    Carp::croak("updateAsNeeded: database contents parameter "
+              . "should be a hash of references to arrays "
+              . "and 'ref' tells '" . ref($databaseHashRef). "'");
+    return -1;
+  }
+  if( !defined($databaseHashRef)) {
+    Carp::croak("updateAsNeeded: missing parameter with database contents");
+    return -1;
+  }
+  foreach my $entityType (@$entityTypesArrayRef) {
+    if( ! defined($$databaseHashRef{$entityType})) {
+      my $msg = "updateAsNeeded: database contents parameter "
+                . "should be a hash of references to arrays "
+                . "and its keys should be the entityTypes. "
+                . "At least '$entityType' is undefined "
+                . "If it's not the first run then probably "
+                . "there's a bug somewhere in this software";
+      OvomExtractor::log(1, $msg);
+#     return -1;
+    }
+    if ( ref($$databaseHashRef{$entityType}) ne 'ARRAY') {
+      my $msg = "updateAsNeeded: database contents parameter "
+                . "should be a hash of references to arrays "
+                . "and its component $entityType "
+                . "is not a reference to an array. "
+                . "If it's not the first run then probably "
+                . "there's a bug somewhere in this software";
+      OvomExtractor::log(1, $msg);
+#     return -1;
+    }
+  }
+
+  ####################################
+  # Preconditions for loaded inventory
+  ####################################
+# OvomExtractor::printInventoryForDebug();
+
+  if( !defined($inventoryHashRef)) {
+    Carp::croak("updateAsNeeded: inventory hash is not defined");
     return -1;
   }
 
-  if( $#$discovered == -1 && $#$loadedFromDb == -1 ) {
-    OvomExtractor::log(2, "updateAsNeeded: NOP: "
-                        . "Got 0 entities discovered (mem inventory) "
-                        . "and 0 entities in inventory DB. "
-                        . "Is there anybody out there?");
-    return 0;
+  if( ! ref($inventoryHashRef) eq "HASH") {
+    Carp::croak("updateAsNeeded: inventory hash should be a hash of arrays "
+              . "and its not a reference to a HASH");
+    return -1;
   }
 
-  foreach my $aDiscovered (@$discovered) {
-    my $found = 0;
-    my $j = -1;
-    foreach my $aLoadedFromDb (@$loadedFromDb) {
-      $j++;
-      my $r;
-#print "DEBUG: (j=$j)      \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
-      $r = $aDiscovered->compare($aLoadedFromDb);
-      if ($r == -2) {
-        # Errors
+  foreach my $entityType (@$entityTypesArrayRef) {
+    if( ! defined($$inventoryHashRef{$entityType})) {
+      Carp::croak("updateAsNeeded: The loaded inventory "
+                . "should be a hash of arrays of references to objects "
+                . "and the keys of the hash should be the entityTypes. "
+                . "At least it's not defined the comp with key $entityType'");
+      return -1;
+    }
+  }
+
+  ####################################################################
+  # Lets see what has to be inserted, updated or deleted for each type
+  ####################################################################
+  foreach my $entityType (@$entityTypesArrayRef) {
+    #
+    # Loop for each entity type
+    #
+
+    #
+    # Refs to arrays, for commodity
+    #
+    my $discovered   = $$inventoryHashRef{$entityType};
+    my $loadedFromDb = $$databaseHashRef{$entityType};
+    my @loadedPositionsNotTobeDeleted = ();
+
+    if( $#$discovered == -1 && $#$loadedFromDb == -1 ) {
+      OvomExtractor::log(2, "updateAsNeeded: NOP for $entityType: "
+                          . "Got 0 entities discovered (mem inventory) "
+                          . "and 0 entities in inventory DB. "
+                          . "Is there anybody out there?");
+      next;
+    }
+
+# print "DEBUG: $entityType : there are " . ($#$discovered + 1) . " discovered i " . ($#$loadedFromDb + 1) . " on BD\n";
+  
+    foreach my $aDiscovered (@$discovered) {
+      my $found = 0;
+      my $j = -1;
+      foreach my $aLoadedFromDb (@$loadedFromDb) {
+
+        $j++;
+        my $r;
+# print "DEBUG: ref aDiscovered   = ". ref($aDiscovered) . "\n";
+# print "DEBUG: ref aLoadedFromDb = ". ref($aLoadedFromDb) . "\n";
+# print "DEBUG: (j=$j)      \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+        $r = $aDiscovered->compare($aLoadedFromDb);
+        if ($r == -2) {
+          # Errors
+          return -1;
+        }
+        elsif ($r == 1) {
+# print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
+          # Equal
+          push @loadedPositionsNotTobeDeleted, $j;
+          $found = 1;
+          last;
+        }
+        elsif ($r == 0) {
+          # Changed (same mo_ref but some other attribute differs)
+# print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
+          push @{$toUpdate{$entityType}}, $aDiscovered;
+          push @loadedPositionsNotTobeDeleted, $j;
+          $found = 1;
+          last;
+        }
+        else {
+          # $r == -1  =>  differ
+        }
+      }
+  
+      if (! $found) {
+# print "DEBUG: It has to be INSERTED into DB: " .  $aDiscovered->toCsvRow() . "\n";
+        push @{$toInsert{$entityType}}, $aDiscovered;
+      }
+    }
+    for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
+      if ( ! grep /^$i$/, @loadedPositionsNotTobeDeleted ) {
+        push @{$toDelete{$entityType}}, $$loadedFromDb[$i];
+      }
+    }
+
+    #
+    # Let's report what's going to be done:
+    #
+    my $str = ($#$discovered + 1)              . " ${entityType}s discovered "
+                                               .           "(mem inventory), "
+            . ($#$loadedFromDb + 1)            . " in inventory DB, "
+            . ($#{$toInsert{$entityType}} + 1) . " toInsert, "
+            . ($#{$toUpdate{$entityType}} + 1) . " toUpdate, "
+            . ($#{$toDelete{$entityType}} + 1) . " toDelete";
+    OvomExtractor::log(1, "updateAsNeeded: $str ");
+
+    if($#{$toInsert{$entityType}} > -1 || $#{$toUpdate{$entityType}} > -1 || $#{$toDelete{$entityType}} > -1) {
+      $somethingChanged++;
+    }
+  }
+  
+  ####################################
+  # Now let's update in the right way:
+  # * 1) insert for each type
+  # * 2) update for each type
+  # * 3) delete for each type
+  ####################################
+  foreach my $entityType (@$entityTypesArrayRef) {
+ 
+    # Let's work:
+    OvomExtractor::log(0, "updateAsNeeded: Inserting "
+                          . ($#{$toInsert{$entityType}} + 1) . " ${entityType}s") if $#{$toInsert{$entityType}} >= 0;
+
+    if($entityType eq 'Folder') {
+      # Let's keep parental integrity
+      while (my $aEntity = popNextFolderWithParent(\@{$toInsert{$entityType}})) {
+        if( ! OvomDao::insert($aEntity) ) {
+          Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+                      . $aEntity->{mo_ref} );
+          return -1;
+        }
+      }
+      if($#{$toInsert{$entityType}} != -1) {
+        my $s = "Something went wrong and couldn't get next "
+              . "Folder with parent. Did you created "
+              . "the initial root Folder? Read install instructions.";
+        OvomExtractor::log(3, "$s");
+        Carp::croak($s);
         return -1;
       }
-      elsif ($r == 1) {
-#print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
-        # Equal
-        push @loadedPositionsNotTobeDeleted, $j;
-        $found = 1;
-        last;
-      }
-      elsif ($r == 0) {
-        # Changed (same mo_ref but some other attribute differs)
-#print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
-        push @toUpdate, $aDiscovered;
-        push @loadedPositionsNotTobeDeleted, $j;
-        $found = 1;
-        last;
-      }
-      else {
-        # $r == -1  =>  differ
-      }
     }
-
-    if (! $found) {
-#print "DEBUG: It has to be INSERTED into DB: " .  $aDiscovered->toCsvRow() . "\n";
-      push @toInsert, $aDiscovered;
+    else {
+      foreach my $aEntity (@{$toInsert{$entityType}}) {
+#  print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
+        if( ! OvomDao::insert($aEntity) ) {
+          Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+                      . $aEntity->{mo_ref} );
+          return -1;
+        }
+      }
     }
   }
-  for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
-    if ( ! grep /^$i$/, @loadedPositionsNotTobeDeleted ) {
-      push @toDelete, $$loadedFromDb[$i];
-    }
-  }
-
-  my $str = ($#$discovered + 1)   . " entities discovered (mem inventory), "
-          . ($#$loadedFromDb + 1) . " entities in inventory DB, "
-          . ($#toInsert + 1)      . " entities toInsert, "
-          . ($#toUpdate + 1)      . " entities toUpdate, "
-          . ($#toDelete + 1)      . " entities toDelete";
-
-  OvomExtractor::log(0, "updateAsNeeded: $str");
-
-  # Let's work:
-  OvomExtractor::log(0, "updateAsNeeded: Inserting "
-                        . ($#toInsert + 1) . " entities") if $#toInsert >= 0;
-#    ${$$discovered[0]}->{oclass_name}
-  if($$discovered[0]->{oclass_name} eq 'OFolder') {
-    # Let's keep parental integrity
-    while (my $aEntity = popNextFolderWithParent(\@toInsert)) {
-      if( ! OvomDao::insert($aEntity) ) {
-        Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+  
+  foreach my $entityType (@$entityTypesArrayRef) {
+    OvomExtractor::log(0, "updateAsNeeded: Updating "
+                          . ($#{$toUpdate{$entityType}} + 1) . " ${entityType}s") if $#{$toUpdate{$entityType}} >= 0;
+    foreach my $aEntity (@{$toUpdate{$entityType}}) {
+#  print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
+      if( ! OvomDao::update($aEntity) ) {
+        Carp::croak("updateAsNeeded can't update the entity with mo_ref "
                     . $aEntity->{mo_ref} );
         return -1;
       }
     }
-    if($#toInsert != -1) {
-      my $s = "Something went wrong and couldn't get next "
-            . "Folder with parent. Did you created "
-            . "the initial root Folder? Read install instructions.";
-      OvomExtractor::log(3, "$s");
-      Carp::croak($s);
-      return -1;
-    }
   }
-  else {
-    foreach my $aEntity (@toInsert) {
-#print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
-      if( ! OvomDao::insert($aEntity) ) {
-        Carp::croak("updateAsNeeded can't insert the entity with mo_ref "
+  
+  foreach my $entityType (@$entityTypesArrayRef) {
+    OvomExtractor::log(0, "updateAsNeeded: Deleting "
+                          . ($#{$toDelete{$entityType}} + 1) . " ${entityType}s") if $#{$toDelete{$entityType}} >= 0;
+    foreach my $aEntity (@{$toDelete{$entityType}}) {
+#  print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
+      if( ! OvomDao::delete($aEntity) ) {
+        Carp::croak("updateAsNeeded can't delete the entity with mo_ref "
                     . $aEntity->{mo_ref} );
         return -1;
       }
     }
   }
-
-  OvomExtractor::log(0, "updateAsNeeded: Updating "
-                        . ($#toUpdate + 1) . " entities") if $#toUpdate >= 0;
-  foreach my $aEntity (@toUpdate) {
-#print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
-    if( ! OvomDao::update($aEntity) ) {
-      Carp::croak("updateAsNeeded can't update the entity with mo_ref "
-                  . $aEntity->{mo_ref} );
-      return -1;
-    }
-  }
-
-  OvomExtractor::log(0, "updateAsNeeded: Deleting "
-                        . ($#toDelete + 1) . " entities") if $#toDelete >= 0;
-  foreach my $aEntity (@toDelete) {
-#print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
-    if( ! OvomDao::delete($aEntity) ) {
-      Carp::croak("updateAsNeeded can't delete the entity with mo_ref "
-                  . $aEntity->{mo_ref} );
-      return -1;
-    }
-  }
-
-  return 1 if($#toInsert == -1 && $#toUpdate == -1 && $#toDelete == -1);
-  return 0;
+  return $somethingChanged;
 }
 
 #
@@ -623,10 +749,8 @@ sub update {
     return 0;
   }
 
-#print "DEBUG: Dao.update: updating a $oClassName : " . $entity->toCsvRow() . "\n";
-  OvomExtractor::log(1, "Updating into db a $oClassName with name '"
-                        . $entity->{name}
-                        . "' and mo_ref '" . $entity->{mo_ref} . "'" );
+  OvomExtractor::log(1, "Updating into db the $oClassName: "
+                        . $entity->toCsvRow());
 
   my $sthRes;
   my @data;
@@ -767,12 +891,11 @@ sub delete {
   }
 
   if(defined($entity->{name})) {
-    OvomExtractor::log(0, "Deleting from db a $oClassName with name '"
-                          . $entity->{name}
-                          . "' and mo_ref '" . $entity->{mo_ref} . "'");
+    OvomExtractor::log(0, "Deleting from DB the $oClassName "
+                          . $entity->toCsvRow());
   }
   else {
-    OvomExtractor::log(0, "Deleting from db a $oClassName with mo_ref '"
+    OvomExtractor::log(0, "Deleting from DB the $oClassName with mo_ref = '"
                           . $entity->{mo_ref} . "'");
   }
   my @data;
@@ -986,9 +1109,8 @@ sub insert {
     return 0;
   }
 
-  OvomExtractor::log(1, "Inserting into db a $oClassName with name '"
-                        . $entity->{name}
-                        . "' and mo_ref '" . $entity->{mo_ref} . "'");
+  OvomExtractor::log(1, "Inserting into db the $oClassName: "
+                        . $entity->toCsvRow());
 
   my @data;
   my ($timeBefore, $eTime);
