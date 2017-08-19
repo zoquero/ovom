@@ -478,11 +478,62 @@ sub loadInventoryDatabaseContents {
 #
 # Updates the inventory DB according to the discovered inventory from vCenter.
 #
-# @arg 
+# It does it this way:
+# * filling %inventory hash (from vCenter)
+# * Connecting to Database
+# * filling %inventDb  hash (from Database)
+# * updating database contents
+# * Disconnecting from Database
 #
-sub updateInventoryDatabase {
-  my $inventDb = shift;
-  die "updateInventoryDatabase still unimplemented";
+# @return 1 if ok, 0 if errors
+#
+sub updateOvomInventoryDatabaseFromVcenter {
+
+  if(updateInventory()) {
+    OvomExtractor::log(2, "Errors updating inventory");
+  }
+  else {
+    OvomExtractor::log(2, "The inventory has been updated on memory");
+  }
+  
+  # Connect to Database
+  if(OvomDao::connect() != 1) {
+    OvomExtractor::log(3, "Cannot connect to DataBase");
+    return 0;
+  }
+  
+  if(loadInventoryDatabaseContents()) {
+    OvomExtractor::log(2, "Errors getting inventory from DB");
+  }
+  else {
+    OvomExtractor::log(2, "The inventory database contents have been loaded");
+  }
+  
+  # my $inv = getInventDb();
+  
+  print "\nLet's print inventory contents:\n";
+  printInventoryForDebug(getInventory());
+  
+  print "\nLet's print inventory DB contents:\n";
+  printInventoryForDebug(getInventDb());
+  
+  print "\nLet's Update inventory DB contents:\n";
+  if( updateAsNeeded() == -1) {
+    OvomExtractor::log(3, "Errors updating inventory DB contents. "
+                        . "Let's rollback transactions on DataBase");
+    return 0;
+  }
+  
+  # Ok! Commit and disconnect from Database
+  if( ! OvomDao::transactionCommit()) { 
+    OvomExtractor::log(3, "Cannot commit transactions on DataBase");
+    return 0;
+  }
+  if( OvomDao::disconnect() != 1 ) {
+    OvomExtractor::log(3, "Cannot disconnect to DataBase");
+    return 0;
+  }
+  return 1;
 }
 
 
@@ -821,6 +872,9 @@ sub printInventoryForDebug {
 #
 sub getLatestPerformance {
   OvomExtractor::log(1, "Updating performance");
+
+  OvomExtractor::log(3, "The new version of getLatestPerformance is still in development ");
+  return 0;
 
   my($aHost, $aVM);
   foreach $aVM (@{$OvomExtractor::inventory{'VirtualMachine'}}) {

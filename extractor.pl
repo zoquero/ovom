@@ -6,6 +6,9 @@ use FindBin;
 use lib $FindBin::Bin;
 use OvomExtractor;
 
+my $justOneLoop = 0;
+$justOneLoop = 1 if ( defined($ARGV[0]) && $ARGV[0] eq '--once' );
+
 my $inventoryRefreshCount = 0;
 OvomExtractor::collectorInit();
 while(1) {
@@ -16,11 +19,11 @@ while(1) {
   if($inventoryRefreshCount++
      % $OvomExtractor::configuration{'inventory.refreshPeriod'} == 0) {
     OvomExtractor::log(1, "Let's update the inventory");
-    if(OvomExtractor::updateInventory()) {
-      OvomExtractor::log(2, "Errors updating inventory");
+    if(! OvomExtractor::updateOvomInventoryDatabaseFromVcenter()) {
+      OvomExtractor::log(3, "Errors updating inventory");
     }
     else {
-      OvomExtractor::log(2, "The inventory has been updated on memory");
+      OvomExtractor::log(3, "The inventory has been updated on memory");
     }
   }
   else {
@@ -36,6 +39,12 @@ while(1) {
   if(OvomExtractor::getLatestPerformance()) {
     OvomExtractor::log(3, "Errors getting performance data");
   }
+
+  last if($justOneLoop);
+
+  #########################
+  # Sleep until next loop #
+  #########################
   my $sleepSecs = $OvomExtractor::configuration{'polling.wait_seconds'};
   OvomExtractor::log(1, "Let's sleep ${sleepSecs}s after a loop");
   sleep($sleepSecs);

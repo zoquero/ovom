@@ -14,6 +14,11 @@ use OCluster;
 print "Testing DBI\n";
 OvomExtractor::collectorInit();
 
+OvomExtractor::updateOvomInventoryDatabaseFromVcenter();
+die "Jurl!!!";
+
+
+
 if(OvomExtractor::updateInventory()) {
   OvomExtractor::log(2, "Errors updating inventory");
 }
