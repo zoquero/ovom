@@ -3,6 +3,18 @@ use strict;
 use warnings;
 use Carp;
 
+#
+# Probably added in a future:
+#
+# runtime.standbyMode
+# runtime.powerState
+# runtime.inMaintenanceMode
+# config.host | mo_ref
+# summary.hardware.memorySize    <<== $aEntityView->summary->hardware->memorySize;
+# summary.hardware.numCpuCores   <<== $aEntityView->summary->hardware->numCpuCores;
+# summary.hardware.numCpuThreads <<== $aEntityView->summary->hardware->numCpuThreads;
+# 
+
 our $csvSep = ";";
 
 #

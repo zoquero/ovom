@@ -21,6 +21,50 @@ else {
   OvomExtractor::log(2, "The inventory has been updated on memory");
 }
 
+# Connect to Database
+if(OvomDao::connect() != 1) {
+  OvomExtractor::log(3, "Cannot connect to DataBase");
+  return 0;
+}
+
+if(OvomExtractor::loadInventoryDatabaseContents()) {
+  OvomExtractor::log(2, "Errors getting inventory from DB");
+}
+else {
+  OvomExtractor::log(2, "The inventory database contents have been loaded");
+}
+
+# my $inv = OvomExtractor::getInventDb();
+
+print "\nLet's print inventory contents:\n";
+OvomExtractor::printInventoryForDebug(OvomExtractor::getInventory());
+
+print "\nLet's print inventory DB contents:\n";
+OvomExtractor::printInventoryForDebug(OvomExtractor::getInventDb());
+
+print "\nLet's Update inventory DB contents:\n";
+if( OvomExtractor::updateAsNeeded() == -1) {
+  OvomExtractor::log(3, "Errors updating inventory DB contents. "
+                      . "Let's rollback transactions on DataBase");
+  return 0;
+}
+
+# Ok! Commit and disconnect from Database
+if( ! OvomDao::transactionCommit()) {
+  OvomExtractor::log(3, "Cannot commit transactions on DataBase");
+  return 0;
+}
+if( OvomDao::disconnect() != 1 ) {
+  OvomExtractor::log(3, "Cannot disconnect to DataBase");
+  return 0;
+}
+
+die "End of the test";
+
+
+
+
+
 # OvomExtractor::printInventoryForDebug();
 
 my %inventOnDb = (); # keys = Folder Datacenter ClusterComputeResource HostSystem VirtualMachine
@@ -52,7 +96,7 @@ if (! defined($allFoldersFromDB) ) {
 }
 
 # print "call to updateAsNeeded for Folder.\n";
-# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Folder'}}, $allFoldersFromDB);
+# $r = OvomExtractor::updateAsNeeded(\@{$OvomExtractor::inventory{'Folder'}}, $allFoldersFromDB);
 # if($r == -1) {
 #   OvomDao::transactionRollback();
 #   OvomDao::disconnect();
@@ -75,7 +119,7 @@ if (! defined($allDatacentersFromDB) ) {
 }
 
 # print "call to updateAsNeeded for Datacenter.\n";
-# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'Datacenter'}}, $allDatacentersFromDB);
+# $r = OvomExtractor::updateAsNeeded(\@{$OvomExtractor::inventory{'Datacenter'}}, $allDatacentersFromDB);
 # if($r == -1) {
 #   OvomDao::transactionRollback();
 #   OvomDao::disconnect();
@@ -98,7 +142,7 @@ if (! defined($allClustersFromDB) ) {
 }
 
 # print "call to updateAsNeeded for Cluster.\n";
-# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'ClusterComputeResource'}}, $allClustersFromDB);
+# $r = OvomExtractor::updateAsNeeded(\@{$OvomExtractor::inventory{'ClusterComputeResource'}}, $allClustersFromDB);
 # if($r == -1) {
 #   OvomDao::transactionRollback();
 #   OvomDao::disconnect();
@@ -121,7 +165,7 @@ if (! defined($allHostsFromDB) ) {
 }
 
 # print "call to updateAsNeeded for Host.\n";
-# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'HostSystem'}}, $allHostsFromDB);
+# $r = OvomExtractor::updateAsNeeded(\@{$OvomExtractor::inventory{'HostSystem'}}, $allHostsFromDB);
 # if($r == -1) {
 #   OvomDao::transactionRollback();
 #   OvomDao::disconnect();
@@ -144,7 +188,7 @@ if (! defined($allVirtualMachinesFromDB) ) {
 }
 
 # print "call to updateAsNeeded for VirtualMachine.\n";
-# $r = OvomDao::updateAsNeeded(\@{$OvomExtractor::inventory{'VirtualMachine'}}, $allVirtualMachinesFromDB);
+# $r = OvomExtractor::updateAsNeeded(\@{$OvomExtractor::inventory{'VirtualMachine'}}, $allVirtualMachinesFromDB);
 # if($r == -1) {
 #   OvomDao::transactionRollback();
 #   OvomDao::disconnect();
@@ -159,7 +203,7 @@ push @{$inventOnDb{'VirtualMachine'}}, @$allVirtualMachinesFromDB;
 #######################################
 print "call to updateAsNeeded:\n";
 
-$r = OvomDao::updateAsNeeded(\%inventOnDb);
+$r = OvomExtractor::updateAsNeeded(\%inventOnDb);
 print "call to updateAsNeeded returned = $r\n";
 if($r == -1) {
   OvomDao::transactionRollback();

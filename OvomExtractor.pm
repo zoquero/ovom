@@ -1,14 +1,18 @@
 package OvomExtractor;
 use strict;
 use warnings;
+
 use Exporter;
 use Cwd 'abs_path';
 use File::Basename;
 use POSIX qw/strftime/;
 use Time::Piece;
 use IO::Handle;  ## autoflush
-use VMware::VIRuntime;
 use Time::HiRes; ## gettimeofday
+use VMware::VIRuntime;
+
+# Our packages
+use OvomDao;
 
 # Our entities:
 use ODatacenter;
@@ -38,9 +42,22 @@ our $csvSep = ";";
 our %configuration;
 our %ovomGlobals;
 #
-# Each component in the hash is an array of references to objects of the key type
+# Hash with the discovered objects on the vCenter
 #
-our %inventory; # keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
+# keys: Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
+#      (VIM view names)
+# components: array of references to objects of the key type
+#
+our %inventory = ();
+#
+# Hash with inventory database contents.
+#
+# keys: Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
+#      (VIM view names)
+# components: array of references to objects of the key type
+#
+our %inventDb = ();
+
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
 our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource", "HostSystem", "VirtualMachine");
@@ -77,10 +94,19 @@ sub getEntityTypes {
 }
 
 #
-# Get a reference to the inventory hash.
+# Get a reference to the inventory hash
+# (inventory objects from vCenter).
 #
 sub getInventory {
   return \%inventory;
+}
+
+#
+# Get a reference to the inventDb hash
+# (inventory objects from our inventory database).
+#
+sub getInventDb {
+  return \%inventDb;
 }
 
 sub connect {
@@ -130,6 +156,337 @@ sub disconnect {
 
 
 #
+# Insert, update or delete objects on database as needed.
+#
+# Inserts the new objects,
+# updates the existing that have changes,
+# noops on the existing objects that haven't changed,
+# and deletes the ones that doesn't exist now in inventory
+#
+# It gets the current inventory from $OvomExtractor::inventory
+#
+# It gets the inventory that was stored on DataBase for the last time
+#    from $OvomExtractor::inventDb
+#
+# @return How many kinds of entityTypes had changes (not how many objects),
+#         -1 if errors.
+#
+sub updateAsNeeded {
+  my $databaseHashRef    = OvomExtractor::getInventDb();
+
+  #
+  # Reference to the hash of refs to arrays of references
+  # to objects (entities) found at vCenter.
+  # The keys of the hash should be the entityTypes.
+  #
+  my $inventoryHashRef    = OvomExtractor::getInventory();
+  my $entityTypesArrayRef = OvomExtractor::getEntityTypes();
+  my $discoveredHashRef;
+  my $somethingChanged = 0;
+  #
+  # Hashes containing a component for each type
+  # holding an array (not a reference to array!) of references
+  # to objects of that type. The hashes will have the same keys
+  # than the inventory hash.
+  #
+  my %toInsert = ();
+  my %toUpdate = ();
+  my %toDelete = ();
+
+  OvomExtractor::log(0, "Running updateAsNeeded");
+
+  ###################################
+  # Preconditions for databaseHashRef
+  ###################################
+  if( ! ref($databaseHashRef) eq "HASH") {
+    Carp::croak("updateAsNeeded: database contents parameter "
+              . "should be a hash of references to arrays "
+              . "and 'ref' tells '" . ref($databaseHashRef). "'");
+    return -1;
+  }
+  if( !defined($databaseHashRef)) {
+    Carp::croak("updateAsNeeded: missing parameter with database contents");
+    return -1;
+  }
+  foreach my $entityType (@$entityTypesArrayRef) {
+    if( ! defined($$databaseHashRef{$entityType})) {
+      my $msg = "updateAsNeeded: database contents parameter "
+                . "should be a hash of references to arrays "
+                . "and its keys should be the entityTypes. "
+                . "At least '$entityType' is undefined "
+                . "If it's not the first run then probably "
+                . "there's a bug somewhere in this software";
+      OvomExtractor::log(1, $msg);
+#     return -1;
+    }
+    if ( ref($$databaseHashRef{$entityType}) ne 'ARRAY') {
+      my $msg = "updateAsNeeded: database contents parameter "
+                . "should be a hash of references to arrays "
+                . "and its component $entityType "
+                . "is not a reference to an array. "
+                . "If it's not the first run then probably "
+                . "there's a bug somewhere in this software";
+      OvomExtractor::log(1, $msg);
+#     return -1;
+    }
+  }
+
+  ####################################
+  # Preconditions for loaded inventory
+  ####################################
+# OvomExtractor::printInventoryForDebug();
+
+  if( !defined($inventoryHashRef)) {
+    Carp::croak("updateAsNeeded: inventory hash is not defined");
+    return -1;
+  }
+
+  if( ! ref($inventoryHashRef) eq "HASH") {
+    Carp::croak("updateAsNeeded: inventory hash should be a hash of arrays "
+              . "and its not a reference to a HASH");
+    return -1;
+  }
+
+  foreach my $entityType (@$entityTypesArrayRef) {
+    if( ! defined($$inventoryHashRef{$entityType})) {
+      Carp::croak("updateAsNeeded: The loaded inventory "
+                . "should be a hash of arrays of references to objects "
+                . "and the keys of the hash should be the entityTypes. "
+                . "At least it's not defined the comp with key $entityType'");
+      return -1;
+    }
+  }
+
+  ####################################################################
+  # Lets see what has to be inserted, updated or deleted for each type
+  ####################################################################
+  foreach my $entityType (@$entityTypesArrayRef) {
+    #
+    # Loop for each entity type
+    #
+
+    #
+    # Refs to arrays, for commodity
+    #
+    my $discovered   = $$inventoryHashRef{$entityType};
+    my $loadedFromDb = $$databaseHashRef{$entityType};
+    my @loadedPositionsNotTobeDeleted = ();
+
+    if( $#$discovered == -1 && $#$loadedFromDb == -1 ) {
+      OvomExtractor::log(2, "updateAsNeeded: NOP for $entityType: "
+                          . "Got 0 entities discovered (mem inventory) "
+                          . "and 0 entities in inventory DB. "
+                          . "Is there anybody out there?");
+      next;
+    }
+
+# print "DEBUG: $entityType : there are " . ($#$discovered + 1) . " discovered i " . ($#$loadedFromDb + 1) . " on BD\n";
+  
+    foreach my $aDiscovered (@$discovered) {
+      my $found = 0;
+      my $j = -1;
+      foreach my $aLoadedFromDb (@$loadedFromDb) {
+
+        $j++;
+        my $r;
+# print "DEBUG: ref aDiscovered   = ". ref($aDiscovered) . "\n";
+# print "DEBUG: ref aLoadedFromDb = ". ref($aLoadedFromDb) . "\n";
+# print "DEBUG: (j=$j)      \tcomparing " . $aDiscovered->toCsvRow() . " with " . $aLoadedFromDb->toCsvRow() . "\n";
+        $r = $aDiscovered->compare($aLoadedFromDb);
+        if ($r == -2) {
+          # Errors
+          return -1;
+        }
+        elsif ($r == 1) {
+# print "DEBUG: It's equal. It hasn't to change in DB. Pushed position $j NOT to be deleted\n";
+          # Equal
+          push @loadedPositionsNotTobeDeleted, $j;
+          $found = 1;
+          last;
+        }
+        elsif ($r == 0) {
+          # Changed (same mo_ref but some other attribute differs)
+# print "DEBUG: It has to be UPDATED into DB. Pushed position $j NOT to be deleted\n";
+          push @{$toUpdate{$entityType}}, $aDiscovered;
+          push @loadedPositionsNotTobeDeleted, $j;
+          $found = 1;
+          last;
+        }
+        else {
+          # $r == -1  =>  differ
+        }
+      }
+  
+      if (! $found) {
+# print "DEBUG: It has to be INSERTED into DB: " .  $aDiscovered->toCsvRow() . "\n";
+        push @{$toInsert{$entityType}}, $aDiscovered;
+      }
+    }
+    for (my $i = 0; $i <= $#$loadedFromDb; $i++) {
+      if ( ! grep /^$i$/, @loadedPositionsNotTobeDeleted ) {
+        push @{$toDelete{$entityType}}, $$loadedFromDb[$i];
+      }
+    }
+
+    #
+    # Let's report what's going to be done:
+    #
+    my $str = ($#$discovered + 1)              . " ${entityType}s discovered "
+                                               .           "(mem inventory), "
+            . ($#$loadedFromDb + 1)            . " in inventory DB, "
+            . ($#{$toInsert{$entityType}} + 1) . " toInsert, "
+            . ($#{$toUpdate{$entityType}} + 1) . " toUpdate, "
+            . ($#{$toDelete{$entityType}} + 1) . " toDelete";
+    OvomExtractor::log(1, "updateAsNeeded: $str ");
+
+    if($#{$toInsert{$entityType}} > -1 || $#{$toUpdate{$entityType}} > -1 || $#{$toDelete{$entityType}} > -1) {
+      $somethingChanged++;
+    }
+  }
+  
+  ####################################
+  # Now let's update in the right way:
+  # * 1) insert for each type
+  # * 2) update for each type
+  # * 3) delete for each type
+  ####################################
+  foreach my $entityType (@$entityTypesArrayRef) {
+ 
+    # Let's work:
+    OvomExtractor::log(0, "updateAsNeeded: Inserting "
+                          . ($#{$toInsert{$entityType}} + 1) . " ${entityType}s") if $#{$toInsert{$entityType}} >= 0;
+
+    if($entityType eq 'Folder') {
+      # Let's keep parental integrity
+      while (my $aEntity = popNextFolderWithParent(\@{$toInsert{$entityType}})) {
+        if( ! OvomDao::insert($aEntity) ) {
+          OvomExtractor::log(3, "updateAsNeeded can't insert the entity "
+                      . " with mo_ref '" . $aEntity->{mo_ref} . "'" );
+          return -1;
+        }
+      }
+      if($#{$toInsert{$entityType}} != -1) {
+        my $s = "Something went wrong and couldn't get next "
+              . "Folder with parent. Did you created "
+              . "the initial root Folder? Read install instructions.";
+        OvomExtractor::log(3, $s);
+        return -1;
+      }
+    }
+    else {
+      foreach my $aEntity (@{$toInsert{$entityType}}) {
+#  print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
+        if( ! OvomDao::insert($aEntity) ) {
+          OvomExtractor::log(3, "updateAsNeeded can't insert the entity with mo_ref "
+                      . $aEntity->{mo_ref} );
+          return -1;
+        }
+      }
+    }
+  }
+  
+  foreach my $entityType (@$entityTypesArrayRef) {
+    OvomExtractor::log(0, "updateAsNeeded: Updating "
+                          . ($#{$toUpdate{$entityType}} + 1) . " ${entityType}s") if $#{$toUpdate{$entityType}} >= 0;
+    foreach my $aEntity (@{$toUpdate{$entityType}}) {
+#  print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
+      if( ! OvomDao::update($aEntity) ) {
+        OvomExtractor::log(3, "updateAsNeeded can't update the entity with mo_ref "
+                    . $aEntity->{mo_ref} );
+        return -1;
+      }
+    }
+  }
+  
+  foreach my $entityType (@$entityTypesArrayRef) {
+    OvomExtractor::log(0, "updateAsNeeded: Deleting "
+                          . ($#{$toDelete{$entityType}} + 1) . " ${entityType}s") if $#{$toDelete{$entityType}} >= 0;
+    foreach my $aEntity (@{$toDelete{$entityType}}) {
+#  print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
+      if( ! OvomDao::delete($aEntity) ) {
+        OvomExtractor::log(3, "updateAsNeeded can't delete the entity with mo_ref "
+                    . $aEntity->{mo_ref} );
+        return -1;
+      }
+    }
+  }
+  return $somethingChanged;
+}
+
+#
+# Get next Folder that has parent and remove it from the array.
+#
+# @arg Reference to the array of references to entities
+# @return a reference to the first entity with parent in the array (if ok)
+#         undef (if errors)
+#
+sub popNextFolderWithParent {
+  my $entities = shift;
+  for(my $i = 0; $i <= $#$entities; $i++) {
+    if ( ! defined($$entities[$i]->{parent}) || $$entities[$i]->{parent} eq '' ) {
+      Carp::croak("Got the entity with mo_ref " . $$entities[$i]->{mo_ref}
+                . " and name " . $$entities[$i]->{name}
+                . " but without parent at popNextFolderWithParent");
+      return undef;
+    }
+    my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent}, 'OFolder');
+    if (defined $aParent) {
+      my $r = $$entities[$i];
+      splice @$entities, $i, 1;
+      return $r;
+    }
+  }
+}
+
+
+#
+# Gets the contents of the inventory Database
+#
+# Stores it in the global hash %inventDb
+#
+# Precondition: must be previously connected to Database
+#
+# @return 1 if ok, 0 if errors
+#
+#
+sub loadInventoryDatabaseContents {
+
+  if(OvomDao::connected() != 1) {
+    OvomExtractor::log(3, "Must be previously connected to Database");
+    return 0;
+  }
+ 
+  foreach my $entityType (@entityTypes) {
+#   $OvomExtractor::inventDb{$entityType} = \();
+    $OvomExtractor::inventDb{$entityType} = [];
+    OvomExtractor::log(0, "Getting all ${entityType}s");
+    my $entities = OvomDao::getAllEntitiesOfType($entityType);
+    if (! defined($entities) ) {
+      OvomDao::transactionRollback();
+      OvomDao::disconnect();
+      OvomExtractor::log(3, "Errors getting ${entityType}s from DataBase");
+      return 0;
+    }
+
+    push @{$OvomExtractor::inventDb{$entityType}}, @$entities;
+  }
+  
+  return 1;
+}
+
+
+#
+# Updates the inventory DB according to the discovered inventory from vCenter.
+#
+# @arg 
+#
+sub updateInventoryDatabase {
+  my $inventDb = shift;
+  die "updateInventoryDatabase still unimplemented";
+}
+
+
+#
 # Pushes entities to the inventory hash.
 #
 # First loads new Entity Objects from each view
@@ -153,12 +510,12 @@ sub pushToInventory {
       #
 
       #
-      # Let's create the regular ODatacenter object
+      # First let's create the regular ODatacenter object
       #
       $aEntity = ODatacenter->newFromView($aEntityView);
 
       #
-      # Let's create the extra OFolder object
+      # Now let's create the extra 'Virtual' OFolder object
       #
       my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
@@ -172,18 +529,6 @@ sub pushToInventory {
     }
     elsif($type eq 'HostSystem') {
       $aEntity = OHost->newFromView($aEntityView);
-
-# parent 
-# runtime.standbyMode
-# runtime.powerState
-# runtime.inMaintenanceMode
-# config.host | mo_ref
-# summary.hardware.memorySize
-# summary.hardware.numCpuCores
-# summary.hardware.numCpuThreads
-#      $aEntity{'summary.hardware.memorySize'}    = $aEntityView->summary->hardware->memorySize;
-#      $aEntity{'summary.hardware.numCpuCores'}   = $aEntityView->summary->hardware->numCpuCores;
-#      $aEntity{'summary.hardware.numCpuThreads'} = $aEntityView->summary->hardware->numCpuThreads;
     }
     elsif($type eq 'ClusterComputeResource') {
       #
@@ -196,9 +541,8 @@ sub pushToInventory {
       #
       $aEntity = OCluster->newFromView($aEntityView);
 
-
       #
-      # Now let's create the extra OFolder object
+      # Now let's create the extra 'Virtual' OFolder object
       #
       my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
@@ -450,9 +794,18 @@ sub updateInventory {
 # Just for debugging purposes
 #
 sub printInventoryForDebug {
+  my $inventoryRef = shift;
+  die "printInventoryForDebug: Missing parameter with inventory ref"
+    if(! defined($inventoryRef));
+  die "printInventoryForDebug: The parameter must be a inventory ref"
+    if(ref($inventoryRef) ne 'HASH');
+  my %inventHash   = %$inventoryRef;
+
   print "DEBUG: Let's print inventory contents:\n";
   foreach my $aEntityType (@entityTypes) {
-    my @ents = @{$inventory{$aEntityType}};
+    die "printInventoryForDebug: Each component of the hash must be an array"
+      if (ref($inventHash{$aEntityType}) ne 'ARRAY');
+    my @ents = @{$inventHash{$aEntityType}};
     print "DEBUG: " . ($#ents + 1) . " ${aEntityType}s:\n";
     foreach my $aCom (@ents) {
       print "DEBUG:   " . $aCom->toCsvRow() . "\n";
