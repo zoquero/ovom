@@ -109,11 +109,16 @@ sub getInventDb {
   return \%inventDb;
 }
 
-sub connect {
+#
+# Connect to vCenter.
+#
+# @return 1 error, 0 ok
+#
+sub connectToVcenter {
 
   if($configuration{'debug.mock.enabled'}) {
     OvomExtractor::log(1, "In mocking mode. Now we should be connecting to a vCenter...");
-    return 0;
+    return 1;
   }
 
   my $vCWSUrl = 'https://'
@@ -124,34 +129,38 @@ sub connect {
   if ( ! defined($user) || $user eq '' ||  ! defined($pass) || $pass eq '') {
     OvomExtractor::log(3, "Can't find username or password for vCenter "
                         . "in the environment. Read install instructions.");
-    return 1;
+    return 0;
   }
   eval {
     Util::connect($vCWSUrl, $user, $pass);
   };
   if($@) {
     OvomExtractor::log(3, "Errors connecting to $vCWSUrl: $@");
-    return 1;
+    return 0;
   }
   OvomExtractor::log(1, "Successfully connected to $vCWSUrl");
-  return 0;
+  return 1;
 }
 
-
-sub disconnect {
+#
+# Disconnect from vCenter.
+#
+# @return 1 error, 0 ok
+#
+sub disconnectFromVcenter {
 
   if($configuration{'debug.mock.enabled'}) {
     OvomExtractor::log(1, "In mocking mode. Now we should be disconnecting from a vCenter...");
-    return 0;
+    return 1;
   }
 
   eval { Util::disconnect(); };
   if($@) {
     OvomExtractor::log(3, "Errors disconnecting from vCenter : $@");
-    return 1;
+    return 0;
   }
   OvomExtractor::log(1, "Successfully disconnected from vCenter");
-  return 0;
+  return 1;
 }
 
 
@@ -342,7 +351,9 @@ sub updateAsNeeded {
             . ($#{$toDelete{$entityType}} + 1) . " toDelete";
     OvomExtractor::log(1, "updateAsNeeded: $str ");
 
-    if($#{$toInsert{$entityType}} > -1 || $#{$toUpdate{$entityType}} > -1 || $#{$toDelete{$entityType}} > -1) {
+    if(   $#{$toInsert{$entityType}} > -1
+       || $#{$toUpdate{$entityType}} > -1
+       || $#{$toDelete{$entityType}} > -1) {
       $somethingChanged++;
     }
   }
@@ -356,8 +367,10 @@ sub updateAsNeeded {
   foreach my $entityType (@$entityTypesArrayRef) {
  
     # Let's work:
-    OvomExtractor::log(0, "updateAsNeeded: Inserting "
-                          . ($#{$toInsert{$entityType}} + 1) . " ${entityType}s") if $#{$toInsert{$entityType}} >= 0;
+    OvomExtractor::log(1, "updateAsNeeded: Inserting "
+                          . ($#{$toInsert{$entityType}} + 1)
+                          . " ${entityType}s")
+      if $#{$toInsert{$entityType}} >= 0;
 
     if($entityType eq 'Folder') {
       # Let's keep parental integrity
@@ -380,8 +393,8 @@ sub updateAsNeeded {
       foreach my $aEntity (@{$toInsert{$entityType}}) {
 #  print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
         if( ! OvomDao::insert($aEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't insert the entity with mo_ref "
-                      . $aEntity->{mo_ref} );
+          OvomExtractor::log(3, "updateAsNeeded can't insert the entity "
+                              . "with mo_ref " . $aEntity->{mo_ref} );
           return -1;
         }
       }
@@ -389,13 +402,17 @@ sub updateAsNeeded {
   }
   
   foreach my $entityType (@$entityTypesArrayRef) {
-    OvomExtractor::log(0, "updateAsNeeded: Updating "
-                          . ($#{$toUpdate{$entityType}} + 1) . " ${entityType}s") if $#{$toUpdate{$entityType}} >= 0;
+    OvomExtractor::log(1, "updateAsNeeded: Updating "
+                          . ($#{$toUpdate{$entityType}} + 1)
+                          . " ${entityType}s")
+      if $#{$toUpdate{$entityType}} >= 0;
+
     foreach my $aEntity (@{$toUpdate{$entityType}}) {
+
 #  print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::update($aEntity) ) {
-        OvomExtractor::log(3, "updateAsNeeded can't update the entity with mo_ref "
-                    . $aEntity->{mo_ref} );
+        OvomExtractor::log(3, "updateAsNeeded can't update the entity "
+                            . " with mo_ref " . $aEntity->{mo_ref} );
         return -1;
       }
 
@@ -411,12 +428,13 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
         if( ! OvomDao::update($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' entity with mo_ref "
-                      . $extraFolderEntity->{mo_ref} );
+          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' "
+                              . "entity with mo_ref "
+                              . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also updated the 'virtual' Folder for the Datacenter "
-                              . $extraFolderEntity->{mo_ref});
+        OvomExtractor::log(0, "Also updated the 'virtual' Folder for the "
+                            . "Datacenter " . $extraFolderEntity->{mo_ref});
       }
       elsif( $entityType eq 'ClusterComputeResource' ) {
         #
@@ -424,24 +442,29 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
         if( ! OvomDao::update($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' entity with mo_ref "
-                      . $extraFolderEntity->{mo_ref} );
+          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' "
+                              . "entity with mo_ref "
+                              . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also updated the 'virtual' Folder for the Cluster "
-                              . $extraFolderEntity->{mo_ref});
+        OvomExtractor::log(0, "Also updated the 'virtual' Folder for "
+                            . "the Cluster " . $extraFolderEntity->{mo_ref});
       }
     }
   }
   
   foreach my $entityType (reverse @$entityTypesArrayRef) {
-    OvomExtractor::log(0, "updateAsNeeded: Deleting "
-                          . ($#{$toDelete{$entityType}} + 1) . " ${entityType}s") if $#{$toDelete{$entityType}} >= 0;
+
+    OvomExtractor::log(1, "updateAsNeeded: Deleting "
+                          . ($#{$toDelete{$entityType}} + 1)
+                          . " ${entityType}s")
+      if $#{$toDelete{$entityType}} >= 0;
+
     foreach my $aEntity (@{$toDelete{$entityType}}) {
 #  print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::delete($aEntity) ) {
-        OvomExtractor::log(3, "updateAsNeeded can't delete the entity with mo_ref "
-                    . $aEntity->{mo_ref} );
+        OvomExtractor::log(3, "updateAsNeeded can't delete the entity "
+                            . "with mo_ref " . $aEntity->{mo_ref} );
         return -1;
       }
 
@@ -457,12 +480,12 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
         if( ! OvomDao::delete($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' entity with mo_ref "
-                      . $extraFolderEntity->{mo_ref} );
+          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' entity "
+                              . "with mo_ref " . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also delete the 'virtual' Folder for the Datacenter "
-                              . $extraFolderEntity->{mo_ref});
+        OvomExtractor::log(0, "Also delete the 'virtual' Folder for the "
+                              . "Datacenter " . $extraFolderEntity->{mo_ref});
       }
       elsif( $entityType eq 'ClusterComputeResource' ) {
         #
@@ -470,12 +493,13 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
         if( ! OvomDao::delete($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' entity with mo_ref "
-                      . $extraFolderEntity->{mo_ref} );
+          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' "
+                              . "entity with mo_ref "
+                              . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also deleted the 'virtual' Folder for the Cluster "
-                              . $extraFolderEntity->{mo_ref});
+        OvomExtractor::log(0, "Also deleted the 'virtual' Folder for "
+                            . "the Cluster " . $extraFolderEntity->{mo_ref});
       }
     }
   }
@@ -492,13 +516,17 @@ sub updateAsNeeded {
 sub popNextFolderWithParent {
   my $entities = shift;
   for(my $i = 0; $i <= $#$entities; $i++) {
-    if ( ! defined($$entities[$i]->{parent}) || $$entities[$i]->{parent} eq '' ) {
-      Carp::croak("Got the entity with mo_ref " . $$entities[$i]->{mo_ref}
+    if ( ! defined($$entities[$i]->{parent})
+        ||         $$entities[$i]->{parent} eq '' ) {
+
+      OvomExtractor::log(3, " Got the entity with mo_ref "
+                . $$entities[$i]->{mo_ref}
                 . " and name " . $$entities[$i]->{name}
                 . " but without parent at popNextFolderWithParent");
       return undef;
     }
-    my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent}, 'OFolder');
+    my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent},
+                                             'OFolder');
     if (defined $aParent) {
       my $r = $$entities[$i];
       splice @$entities, $i, 1;
@@ -558,35 +586,44 @@ sub loadInventoryDatabaseContents {
 #
 sub updateOvomInventoryDatabaseFromVcenter {
 
-  if(updateInventory()) {
-    OvomExtractor::log(2, "Errors updating inventory");
+  # Get both inventories (the alive and the one saved on DB for the last time)
+  OvomExtractor::log(1, "Let's read the inventory from the vCenter.");
+  my $r = updateInventory();
+  if($r > 0) {
+    OvomExtractor::log(2, "The inventory has been updated on mem from vCenter");
+  }
+  elsif($r == 0) {
+    OvomExtractor::log(2, "The inventory has been revised "
+                        . "but there we found no changes.");
+    return 1;
   }
   else {
-    OvomExtractor::log(2, "The inventory has been updated on memory");
+    OvomExtractor::log(3, "Errors updating inventory");
+    return 0;
   }
   
+  OvomExtractor::log(1, "Let's read the last inventory saved on DB.");
   # Connect to Database
   if(OvomDao::connect() != 1) {
     OvomExtractor::log(3, "Cannot connect to DataBase");
     return 0;
   }
   
-  if(loadInventoryDatabaseContents()) {
-    OvomExtractor::log(2, "Errors getting inventory from DB");
+  if(! loadInventoryDatabaseContents()) {
+    OvomExtractor::log(3, "Errors getting inventory from DB");
+    return 0;
   }
   else {
     OvomExtractor::log(2, "The inventory database contents have been loaded");
   }
   
-  # my $inv = getInventDb();
+# print "\nDEBUG: Let's print inventory contents:\n";
+# printInventoryForDebug(getInventory());
   
-  print "\nLet's print inventory contents:\n";
-  printInventoryForDebug(getInventory());
+# print "\nDEBUG: Let's print inventory DB contents:\n";
+# printInventoryForDebug(getInventDb());
   
-  print "\nLet's print inventory DB contents:\n";
-  printInventoryForDebug(getInventDb());
-  
-  print "\nLet's Update inventory DB contents:\n";
+  OvomExtractor::log(1, "Let's Update inventory DB contents:");
   if( updateAsNeeded() == -1) {
     OvomExtractor::log(3, "Errors updating inventory DB contents. "
                         . "Let's rollback transactions on DataBase");
@@ -594,12 +631,13 @@ sub updateOvomInventoryDatabaseFromVcenter {
   }
   
   # Ok! Commit and disconnect from Database
+  OvomExtractor::log(1, "Let's commit the transaction and disconnect from DB.");
   if( ! OvomDao::transactionCommit()) { 
     OvomExtractor::log(3, "Cannot commit transactions on DataBase");
     return 0;
   }
   if( OvomDao::disconnect() != 1 ) {
-    OvomExtractor::log(3, "Cannot disconnect to DataBase");
+    OvomExtractor::log(3, "Cannot disconnect from DataBase");
     return 0;
   }
   return 1;
@@ -639,9 +677,9 @@ sub pushToInventory {
       #
       my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
-      OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Datacenter "
+      OvomExtractor::log(1, "Pushed a 'virtual' Folder for the Datacenter "
                             . $aEntityView->{name} . " with same mo_ref as a "
-                            . "workaround for base Folders that have its "
+                            . "simple solution for base Folders that have its "
                             . "Datacenter as parent");
     }
     elsif($type eq 'VirtualMachine') {
@@ -666,9 +704,9 @@ sub pushToInventory {
       #
       my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
-      OvomExtractor::log(0, "Pushed a 'virtual' Folder for the Cluster "
+      OvomExtractor::log(1, "Pushed a 'virtual' Folder for the Cluster "
                             . $aEntityView->{name} . " with same mo_ref as a "
-                            . "workaround for hosts of a cluster that have its "
+                            . "simple solution for hosts of a cluster that have its "
                             . "cluster as parent");
     }
     elsif($type eq 'Folder') {
@@ -679,13 +717,13 @@ sub pushToInventory {
             eq $OvomExtractor::configuration{'root_folder.name'}
          && $aEntity->{mo_ref}
             eq $OvomExtractor::configuration{'root_folder.mo_ref'} ) {
-        OvomExtractor::log(1, "pushToInventory: The $type with name '"
-          . $aEntity->{name} . "' and mo_ref '" . $aEntity->{mo_ref}
-          . "' hasn't parent and it seems to be the root for Datacenters. "
-          . "It's a known problem for the parentage of our hierarchy. "
-          . "Let's set itself as its parent as a workaround.");
-        $aEntity->{parent} =
-          $OvomExtractor::configuration{'root_folder.mo_ref'};
+        OvomExtractor::log(1, "pushToInventory: $type found without parent and "
+            . "its name and mo_ref matches with the ones configured to be the "
+            . "root for Datacenters (name '" . $aEntity->{name} . "', mo_ref '"
+            . $aEntity->{mo_ref} ."'). To maintain the integrity of the "
+            . "parentage in our hierarchy (db constraints) let's set itself "
+            . "as its own parent, it's not accepted a NULL parent.");
+        $aEntity->{parent} = $OvomExtractor::configuration{'root_folder.mo_ref'};
       }
     }
     else {
@@ -791,7 +829,7 @@ sub inventory2Csv {
   my($inventoryBaseFolder) = $OvomExtractor::configuration{'inventory.export.root'}
                              . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
 
-  OvomExtractor::log(0, "Let's write inventory into CSV files on "
+  OvomExtractor::log(1, "Let's write inventory into CSV files on "
                         . $inventoryBaseFolder);
 
   # %inventory keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
@@ -819,7 +857,7 @@ sub inventory2Csv {
 #
 # Gets inventory from vCenter and updates globals @hostArray and @vmArray .
 #
-# @return 1 error, 0 ok
+# @return 0 error, 1 ok
 #
 sub updateInventory {
   my @hosts = ();
@@ -829,9 +867,9 @@ sub updateInventory {
   #
   # Let's connect to vC:
   #
-  OvomExtractor::log(0, "Connecting to vCenter");
+  OvomExtractor::log(1, "Connecting to vCenter");
   $timeBefore=Time::HiRes::time;
-  return 1 if(OvomExtractor::connect());
+  return 0 if(! OvomExtractor::connectToVcenter());
   $eTime=Time::HiRes::time - $timeBefore;
   OvomExtractor::log(1, "Profiling: Connecting to vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
@@ -850,9 +888,9 @@ sub updateInventory {
       $entityViews = getViewsFromCsv($aEntityType);
       if( ! defined($entityViews) ) {
         OvomExtractor::log(3, "Can't get $aEntityType list from CSV files");
-        return 1;
+        return 0;
       }
-      OvomExtractor::log(0, "Found " . ($#$entityViews + 1)
+      OvomExtractor::log(1, "Found " . ($#$entityViews + 1)
                             . " ${aEntityType}s on CSV files");
     }
     else {
@@ -877,7 +915,7 @@ sub updateInventory {
 
     if($@) {
       OvomExtractor::log(3, "Errors getting $aEntityType list: $@");
-      return 1;
+      return 0;
     }
     $eTime=Time::HiRes::time - $timeBefore;
     OvomExtractor::log(1, "Profiling: $aEntityType list took "
@@ -893,24 +931,24 @@ sub updateInventory {
   }
 
   #
-  # Let's disconnect to vC
+  # Let's disconnect from vC
   #
-  OvomExtractor::log(0, "Disconnecting to vCenter");
+  OvomExtractor::log(0, "Disconnecting from vCenter");
   $timeBefore=Time::HiRes::time;
-  return 1 if(OvomExtractor::disconnect());
+  return 0 if(! OvomExtractor::disconnectFromVcenter());
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Disconnecting to vCenter took "
+  OvomExtractor::log(1, "Profiling: Disconnecting from vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
 
   ###############################
   # print %inventory to CSV files
   ###############################
-  return 1 if(inventory2Csv());
-  return 0;
+  return 0 if(inventory2Csv());
+  return 1;
 }
 
 #
-# Printt inventory to stdOut.
+# Print inventory to stdOut.
 # Just for debugging purposes
 #
 sub printInventoryForDebug {
@@ -1267,17 +1305,20 @@ sub createFoldersIfNeeded {
   }
   $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder for the vCenter $vCenterFolder");
+    OvomExtractor::log(1, "Creating perfdata.root folder for "
+                        . "the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
   $folder = $vCenterFolder . "/HostSystem";
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder for hosts of the vCenter $folder");
+    OvomExtractor::log(1, "Creating perfdata.root folder for hosts of "
+                        . "the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
   $folder = $vCenterFolder . "/VirtualMachine";
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder for VMs of the vCenter $folder");
+    OvomExtractor::log(1, "Creating perfdata.root folder for VMs of "
+                        . "the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
 
@@ -1291,7 +1332,8 @@ sub createFoldersIfNeeded {
   }
   $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
-    OvomExtractor::log(1, "Creating inventory.export.root folder for the vCenter $vCenterFolder");
+    OvomExtractor::log(1, "Creating inventory.export.root folder for "
+                        . "the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
 

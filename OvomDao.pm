@@ -157,6 +157,11 @@ sub connect {
                           PrintError=>0,
                           ShowErrorStatement=>1
                         });
+    if(! $dbh) {
+      OvomExtractor::log(3, "Errors connecting to Database: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
   };
 
   if($@) {
@@ -180,7 +185,11 @@ sub disconnect {
   OvomExtractor::log(0, "Disconnecting from database");
 
   eval {
-    $dbh->disconnect();
+    if(! $dbh->disconnect() ) {
+      OvomExtractor::log(3, "Errors disconnecting from Database: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
   };
 
   if($@) {

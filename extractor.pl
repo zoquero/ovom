@@ -20,16 +20,16 @@ while(1) {
      % $OvomExtractor::configuration{'inventory.refreshPeriod'} == 0) {
     OvomExtractor::log(1, "Let's update the inventory");
     if(! OvomExtractor::updateOvomInventoryDatabaseFromVcenter()) {
-      OvomExtractor::log(3, "Errors updating inventory");
+      OvomExtractor::log(3, "Can't update inventory");
     }
     else {
-      OvomExtractor::log(3, "The inventory has been updated on memory");
+      OvomExtractor::log(1, "The inventory has been updated on memory");
     }
   }
   else {
     OvomExtractor::log(0,
-      "We will not update the inventory this loop"
-      . " you can adjust inventory.refreshPeriod");
+      "We will not update the inventory this loop. You can adjust it with "
+      . "the 'inventory.refreshPeriod' configuration parameter");
   }
 
   ###################
