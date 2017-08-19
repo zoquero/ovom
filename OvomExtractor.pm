@@ -168,6 +168,9 @@ sub disconnect {
 # It gets the inventory that was stored on DataBase for the last time
 #    from $OvomExtractor::inventDb
 #
+# It also updates the 'Virtual' Folder objects created in pushToInventory
+# for the ClusterComputeResource and Datacenter 
+#
 # @return How many kinds of entityTypes had changes (not how many objects),
 #         -1 if errors.
 #
@@ -395,10 +398,43 @@ sub updateAsNeeded {
                     . $aEntity->{mo_ref} );
         return -1;
       }
+
+      #
+      # Remember that the parent for the base folders for hosts, networks, VMs
+      # and datastores are not folders, are its datacenters.
+      # So in pushToInventory we also create a Folder object
+      # for each Datacenter and ClusterComputeResource .
+      #
+      if( $entityType eq 'Datacenter' ) {
+        #
+        # Let's update the extra 'Virtual' OFolder object
+        #
+        my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
+        if( ! OvomDao::update($extraFolderEntity) ) {
+          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' entity with mo_ref "
+                      . $extraFolderEntity->{mo_ref} );
+          return -1;
+        }
+        OvomExtractor::log(0, "Also updated the 'virtual' Folder for the Datacenter "
+                              . $extraFolderEntity->{mo_ref});
+      }
+      elsif( $entityType eq 'ClusterComputeResource' ) {
+        #
+        # Let's update the extra 'Virtual' OFolder object
+        #
+        my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
+        if( ! OvomDao::update($extraFolderEntity) ) {
+          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' entity with mo_ref "
+                      . $extraFolderEntity->{mo_ref} );
+          return -1;
+        }
+        OvomExtractor::log(0, "Also updated the 'virtual' Folder for the Cluster "
+                              . $extraFolderEntity->{mo_ref});
+      }
     }
   }
   
-  foreach my $entityType (@$entityTypesArrayRef) {
+  foreach my $entityType (reverse @$entityTypesArrayRef) {
     OvomExtractor::log(0, "updateAsNeeded: Deleting "
                           . ($#{$toDelete{$entityType}} + 1) . " ${entityType}s") if $#{$toDelete{$entityType}} >= 0;
     foreach my $aEntity (@{$toDelete{$entityType}}) {
@@ -407,6 +443,39 @@ sub updateAsNeeded {
         OvomExtractor::log(3, "updateAsNeeded can't delete the entity with mo_ref "
                     . $aEntity->{mo_ref} );
         return -1;
+      }
+
+      #
+      # Remember that the parent for the base folders for hosts, networks, VMs
+      # and datastores are not folders, are its datacenters.
+      # So in pushToInventory we also create a Folder object
+      # for each Datacenter and ClusterComputeResource .
+      #
+      if( $entityType eq 'Datacenter' ) {
+        #
+        # Let's delete the extra 'Virtual' OFolder object
+        #
+        my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
+        if( ! OvomDao::delete($extraFolderEntity) ) {
+          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' entity with mo_ref "
+                      . $extraFolderEntity->{mo_ref} );
+          return -1;
+        }
+        OvomExtractor::log(0, "Also delete the 'virtual' Folder for the Datacenter "
+                              . $extraFolderEntity->{mo_ref});
+      }
+      elsif( $entityType eq 'ClusterComputeResource' ) {
+        #
+        # Let's delete the extra 'Virtual' OFolder object
+        #
+        my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
+        if( ! OvomDao::delete($extraFolderEntity) ) {
+          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' entity with mo_ref "
+                      . $extraFolderEntity->{mo_ref} );
+          return -1;
+        }
+        OvomExtractor::log(0, "Also deleted the 'virtual' Folder for the Cluster "
+                              . $extraFolderEntity->{mo_ref});
       }
     }
   }
