@@ -1,4 +1,4 @@
-package OvomExtractor;
+package OInventory;
 use strict;
 use warnings;
 
@@ -33,7 +33,7 @@ use OMockVirtualMachineView;
 our @ISA= qw( Exporter );
 
 # Functions that CAN be exported:
-our @EXPORT_OK = qw( updateInventory getLatestPerformance collectorInit collectorStop readConfiguration log );
+our @EXPORT_OK = qw( updateInventory getLatestPerformance pickerInit pickerStop readConfiguration log );
 
 # # Functions that are exported by default:
 # our @EXPORT = qw( getLatestPerformance );
@@ -117,17 +117,17 @@ sub getInventDb {
 sub connectToVcenter {
 
   if($configuration{'debug.mock.enabled'}) {
-    OvomExtractor::log(1, "In mocking mode. Now we should be connecting to a vCenter...");
+    OInventory::log(1, "In mocking mode. Now we should be connecting to a vCenter...");
     return 1;
   }
 
   my $vCWSUrl = 'https://'
-                . $OvomExtractor::configuration{'vCenter.fqdn'}
+                . $OInventory::configuration{'vCenter.fqdn'}
                 . '/sdk/webService';
   my $user = $ENV{'OVOM_VC_USERNAME'};
   my $pass = $ENV{'OVOM_VC_PASSWORD'};
   if ( ! defined($user) || $user eq '' ||  ! defined($pass) || $pass eq '') {
-    OvomExtractor::log(3, "Can't find username or password for vCenter "
+    OInventory::log(3, "Can't find username or password for vCenter "
                         . "in the environment. Read install instructions.");
     return 0;
   }
@@ -135,10 +135,10 @@ sub connectToVcenter {
     Util::connect($vCWSUrl, $user, $pass);
   };
   if($@) {
-    OvomExtractor::log(3, "Errors connecting to $vCWSUrl: $@");
+    OInventory::log(3, "Errors connecting to $vCWSUrl: $@");
     return 0;
   }
-  OvomExtractor::log(1, "Successfully connected to $vCWSUrl");
+  OInventory::log(1, "Successfully connected to $vCWSUrl");
   return 1;
 }
 
@@ -150,16 +150,16 @@ sub connectToVcenter {
 sub disconnectFromVcenter {
 
   if($configuration{'debug.mock.enabled'}) {
-    OvomExtractor::log(1, "In mocking mode. Now we should be disconnecting from a vCenter...");
+    OInventory::log(1, "In mocking mode. Now we should be disconnecting from a vCenter...");
     return 1;
   }
 
   eval { Util::disconnect(); };
   if($@) {
-    OvomExtractor::log(3, "Errors disconnecting from vCenter : $@");
+    OInventory::log(3, "Errors disconnecting from vCenter : $@");
     return 0;
   }
-  OvomExtractor::log(1, "Successfully disconnected from vCenter");
+  OInventory::log(1, "Successfully disconnected from vCenter");
   return 1;
 }
 
@@ -172,10 +172,10 @@ sub disconnectFromVcenter {
 # noops on the existing objects that haven't changed,
 # and deletes the ones that doesn't exist now in inventory
 #
-# It gets the current inventory from $OvomExtractor::inventory
+# It gets the current inventory from $OInventory::inventory
 #
 # It gets the inventory that was stored on DataBase for the last time
-#    from $OvomExtractor::inventDb
+#    from $OInventory::inventDb
 #
 # It also updates the 'Virtual' Folder objects created in pushToInventory
 # for the ClusterComputeResource and Datacenter 
@@ -184,15 +184,15 @@ sub disconnectFromVcenter {
 #         -1 if errors.
 #
 sub updateAsNeeded {
-  my $databaseHashRef    = OvomExtractor::getInventDb();
+  my $databaseHashRef    = OInventory::getInventDb();
 
   #
   # Reference to the hash of refs to arrays of references
   # to objects (entities) found at vCenter.
   # The keys of the hash should be the entityTypes.
   #
-  my $inventoryHashRef    = OvomExtractor::getInventory();
-  my $entityTypesArrayRef = OvomExtractor::getEntityTypes();
+  my $inventoryHashRef    = OInventory::getInventory();
+  my $entityTypesArrayRef = OInventory::getEntityTypes();
   my $discoveredHashRef;
   my $somethingChanged = 0;
   #
@@ -205,7 +205,7 @@ sub updateAsNeeded {
   my %toUpdate = ();
   my %toDelete = ();
 
-  OvomExtractor::log(0, "Running updateAsNeeded");
+  OInventory::log(0, "Running updateAsNeeded");
 
   ###################################
   # Preconditions for databaseHashRef
@@ -228,7 +228,7 @@ sub updateAsNeeded {
                 . "At least '$entityType' is undefined "
                 . "If it's not the first run then probably "
                 . "there's a bug somewhere in this software";
-      OvomExtractor::log(1, $msg);
+      OInventory::log(1, $msg);
 #     return -1;
     }
     if ( ref($$databaseHashRef{$entityType}) ne 'ARRAY') {
@@ -238,7 +238,7 @@ sub updateAsNeeded {
                 . "is not a reference to an array. "
                 . "If it's not the first run then probably "
                 . "there's a bug somewhere in this software";
-      OvomExtractor::log(1, $msg);
+      OInventory::log(1, $msg);
 #     return -1;
     }
   }
@@ -246,7 +246,7 @@ sub updateAsNeeded {
   ####################################
   # Preconditions for loaded inventory
   ####################################
-# OvomExtractor::printInventoryForDebug();
+# OInventory::printInventoryForDebug();
 
   if( !defined($inventoryHashRef)) {
     Carp::croak("updateAsNeeded: inventory hash is not defined");
@@ -285,7 +285,7 @@ sub updateAsNeeded {
     my @loadedPositionsNotTobeDeleted = ();
 
     if( $#$discovered == -1 && $#$loadedFromDb == -1 ) {
-      OvomExtractor::log(2, "updateAsNeeded: NOP for $entityType: "
+      OInventory::log(2, "updateAsNeeded: NOP for $entityType: "
                           . "Got 0 entities discovered (mem inventory) "
                           . "and 0 entities in inventory DB. "
                           . "Is there anybody out there?");
@@ -349,7 +349,7 @@ sub updateAsNeeded {
             . ($#{$toInsert{$entityType}} + 1) . " toInsert, "
             . ($#{$toUpdate{$entityType}} + 1) . " toUpdate, "
             . ($#{$toDelete{$entityType}} + 1) . " toDelete";
-    OvomExtractor::log(1, "updateAsNeeded: $str ");
+    OInventory::log(1, "updateAsNeeded: $str ");
 
     if(   $#{$toInsert{$entityType}} > -1
        || $#{$toUpdate{$entityType}} > -1
@@ -367,7 +367,7 @@ sub updateAsNeeded {
   foreach my $entityType (@$entityTypesArrayRef) {
  
     # Let's work:
-    OvomExtractor::log(1, "updateAsNeeded: Inserting "
+    OInventory::log(1, "updateAsNeeded: Inserting "
                           . ($#{$toInsert{$entityType}} + 1)
                           . " ${entityType}s")
       if $#{$toInsert{$entityType}} >= 0;
@@ -376,7 +376,7 @@ sub updateAsNeeded {
       # Let's keep parental integrity
       while (my $aEntity = popNextFolderWithParent(\@{$toInsert{$entityType}})) {
         if( ! OvomDao::insert($aEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't insert the entity "
+          OInventory::log(3, "updateAsNeeded can't insert the entity "
                       . " with mo_ref '" . $aEntity->{mo_ref} . "'" );
           return -1;
         }
@@ -385,7 +385,7 @@ sub updateAsNeeded {
         my $s = "Something went wrong and couldn't get next "
               . "Folder with parent. Did you created "
               . "the initial root Folder? Read install instructions.";
-        OvomExtractor::log(3, $s);
+        OInventory::log(3, $s);
         return -1;
       }
     }
@@ -393,7 +393,7 @@ sub updateAsNeeded {
       foreach my $aEntity (@{$toInsert{$entityType}}) {
 #  print "DEBUG: Let's insert the entity " . $aEntity->toCsvRow . "\n";
         if( ! OvomDao::insert($aEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't insert the entity "
+          OInventory::log(3, "updateAsNeeded can't insert the entity "
                               . "with mo_ref " . $aEntity->{mo_ref} );
           return -1;
         }
@@ -402,7 +402,7 @@ sub updateAsNeeded {
   }
   
   foreach my $entityType (@$entityTypesArrayRef) {
-    OvomExtractor::log(1, "updateAsNeeded: Updating "
+    OInventory::log(1, "updateAsNeeded: Updating "
                           . ($#{$toUpdate{$entityType}} + 1)
                           . " ${entityType}s")
       if $#{$toUpdate{$entityType}} >= 0;
@@ -411,7 +411,7 @@ sub updateAsNeeded {
 
 #  print "DEBUG: Let's update the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::update($aEntity) ) {
-        OvomExtractor::log(3, "updateAsNeeded can't update the entity "
+        OInventory::log(3, "updateAsNeeded can't update the entity "
                             . " with mo_ref " . $aEntity->{mo_ref} );
         return -1;
       }
@@ -428,12 +428,12 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
         if( ! OvomDao::update($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' "
+          OInventory::log(3, "updateAsNeeded can't update the 'virtual' "
                               . "entity with mo_ref "
                               . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also updated the 'virtual' Folder for the "
+        OInventory::log(0, "Also updated the 'virtual' Folder for the "
                             . "Datacenter " . $extraFolderEntity->{mo_ref});
       }
       elsif( $entityType eq 'ClusterComputeResource' ) {
@@ -442,12 +442,12 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
         if( ! OvomDao::update($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't update the 'virtual' "
+          OInventory::log(3, "updateAsNeeded can't update the 'virtual' "
                               . "entity with mo_ref "
                               . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also updated the 'virtual' Folder for "
+        OInventory::log(0, "Also updated the 'virtual' Folder for "
                             . "the Cluster " . $extraFolderEntity->{mo_ref});
       }
     }
@@ -455,7 +455,7 @@ sub updateAsNeeded {
   
   foreach my $entityType (reverse @$entityTypesArrayRef) {
 
-    OvomExtractor::log(1, "updateAsNeeded: Deleting "
+    OInventory::log(1, "updateAsNeeded: Deleting "
                           . ($#{$toDelete{$entityType}} + 1)
                           . " ${entityType}s")
       if $#{$toDelete{$entityType}} >= 0;
@@ -463,7 +463,7 @@ sub updateAsNeeded {
     foreach my $aEntity (@{$toDelete{$entityType}}) {
 #  print "DEBUG: Let's delete the entity " . $aEntity->toCsvRow . "\n";
       if( ! OvomDao::delete($aEntity) ) {
-        OvomExtractor::log(3, "updateAsNeeded can't delete the entity "
+        OInventory::log(3, "updateAsNeeded can't delete the entity "
                             . "with mo_ref " . $aEntity->{mo_ref} );
         return -1;
       }
@@ -480,11 +480,11 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
         if( ! OvomDao::delete($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' entity "
+          OInventory::log(3, "updateAsNeeded can't delete the 'virtual' entity "
                               . "with mo_ref " . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also delete the 'virtual' Folder for the "
+        OInventory::log(0, "Also delete the 'virtual' Folder for the "
                               . "Datacenter " . $extraFolderEntity->{mo_ref});
       }
       elsif( $entityType eq 'ClusterComputeResource' ) {
@@ -493,12 +493,12 @@ sub updateAsNeeded {
         #
         my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
         if( ! OvomDao::delete($extraFolderEntity) ) {
-          OvomExtractor::log(3, "updateAsNeeded can't delete the 'virtual' "
+          OInventory::log(3, "updateAsNeeded can't delete the 'virtual' "
                               . "entity with mo_ref "
                               . $extraFolderEntity->{mo_ref} );
           return -1;
         }
-        OvomExtractor::log(0, "Also deleted the 'virtual' Folder for "
+        OInventory::log(0, "Also deleted the 'virtual' Folder for "
                             . "the Cluster " . $extraFolderEntity->{mo_ref});
       }
     }
@@ -519,7 +519,7 @@ sub popNextFolderWithParent {
     if ( ! defined($$entities[$i]->{parent})
         ||         $$entities[$i]->{parent} eq '' ) {
 
-      OvomExtractor::log(3, " Got the entity with mo_ref "
+      OInventory::log(3, " Got the entity with mo_ref "
                 . $$entities[$i]->{mo_ref}
                 . " and name " . $$entities[$i]->{name}
                 . " but without parent at popNextFolderWithParent");
@@ -549,23 +549,23 @@ sub popNextFolderWithParent {
 sub loadInventoryDatabaseContents {
 
   if(OvomDao::connected() != 1) {
-    OvomExtractor::log(3, "Must be previously connected to Database");
+    OInventory::log(3, "Must be previously connected to Database");
     return 0;
   }
  
   foreach my $entityType (@entityTypes) {
-#   $OvomExtractor::inventDb{$entityType} = \();
-    $OvomExtractor::inventDb{$entityType} = [];
-    OvomExtractor::log(0, "Getting all ${entityType}s");
+#   $OInventory::inventDb{$entityType} = \();
+    $OInventory::inventDb{$entityType} = [];
+    OInventory::log(0, "Getting all ${entityType}s");
     my $entities = OvomDao::getAllEntitiesOfType($entityType);
     if (! defined($entities) ) {
       OvomDao::transactionRollback();
       OvomDao::disconnect();
-      OvomExtractor::log(3, "Errors getting ${entityType}s from DataBase");
+      OInventory::log(3, "Errors getting ${entityType}s from DataBase");
       return 0;
     }
 
-    push @{$OvomExtractor::inventDb{$entityType}}, @$entities;
+    push @{$OInventory::inventDb{$entityType}}, @$entities;
   }
   
   return 1;
@@ -587,34 +587,34 @@ sub loadInventoryDatabaseContents {
 sub updateOvomInventoryDatabaseFromVcenter {
 
   # Get both inventories (the alive and the one saved on DB for the last time)
-  OvomExtractor::log(1, "Let's read the inventory from the vCenter.");
+  OInventory::log(1, "Let's read the inventory from the vCenter.");
   my $r = updateInventory();
   if($r > 0) {
-    OvomExtractor::log(2, "The inventory has been updated on mem from vCenter");
+    OInventory::log(2, "The inventory has been updated on mem from vCenter");
   }
   elsif($r == 0) {
-    OvomExtractor::log(2, "The inventory has been revised "
+    OInventory::log(2, "The inventory has been revised "
                         . "but there we found no changes.");
     return 1;
   }
   else {
-    OvomExtractor::log(3, "Errors updating inventory");
+    OInventory::log(3, "Errors updating inventory");
     return 0;
   }
   
-  OvomExtractor::log(1, "Let's read the last inventory saved on DB.");
+  OInventory::log(1, "Let's read the last inventory saved on DB.");
   # Connect to Database
   if(OvomDao::connect() != 1) {
-    OvomExtractor::log(3, "Cannot connect to DataBase");
+    OInventory::log(3, "Cannot connect to DataBase");
     return 0;
   }
   
   if(! loadInventoryDatabaseContents()) {
-    OvomExtractor::log(3, "Errors getting inventory from DB");
+    OInventory::log(3, "Errors getting inventory from DB");
     return 0;
   }
   else {
-    OvomExtractor::log(2, "The inventory database contents have been loaded");
+    OInventory::log(2, "The inventory database contents have been loaded");
   }
   
 # print "\nDEBUG: Let's print inventory contents:\n";
@@ -623,21 +623,21 @@ sub updateOvomInventoryDatabaseFromVcenter {
 # print "\nDEBUG: Let's print inventory DB contents:\n";
 # printInventoryForDebug(getInventDb());
   
-  OvomExtractor::log(1, "Let's Update inventory DB contents:");
+  OInventory::log(1, "Let's Update inventory DB contents:");
   if( updateAsNeeded() == -1) {
-    OvomExtractor::log(3, "Errors updating inventory DB contents. "
+    OInventory::log(3, "Errors updating inventory DB contents. "
                         . "Let's rollback transactions on DataBase");
     return 0;
   }
   
   # Ok! Commit and disconnect from Database
-  OvomExtractor::log(1, "Let's commit the transaction and disconnect from DB.");
+  OInventory::log(1, "Let's commit the transaction and disconnect from DB.");
   if( ! OvomDao::transactionCommit()) { 
-    OvomExtractor::log(3, "Cannot commit transactions on DataBase");
+    OInventory::log(3, "Cannot commit transactions on DataBase");
     return 0;
   }
   if( OvomDao::disconnect() != 1 ) {
-    OvomExtractor::log(3, "Cannot disconnect from DataBase");
+    OInventory::log(3, "Cannot disconnect from DataBase");
     return 0;
   }
   return 1;
@@ -677,7 +677,7 @@ sub pushToInventory {
       #
       my $extraFolderEntity = OFolder->cloneFromDatacenter($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
-      OvomExtractor::log(1, "Pushed a 'virtual' Folder for the Datacenter "
+      OInventory::log(1, "Pushed a 'virtual' Folder for the Datacenter "
                             . $aEntityView->{name} . " with same mo_ref as a "
                             . "simple solution for base Folders that have its "
                             . "Datacenter as parent");
@@ -704,7 +704,7 @@ sub pushToInventory {
       #
       my $extraFolderEntity = OFolder->cloneFromCluster($aEntity);
       push @{$inventory{'Folder'}}, $extraFolderEntity;
-      OvomExtractor::log(1, "Pushed a 'virtual' Folder for the Cluster "
+      OInventory::log(1, "Pushed a 'virtual' Folder for the Cluster "
                             . $aEntityView->{name} . " with same mo_ref as a "
                             . "simple solution for hosts of a cluster that have its "
                             . "cluster as parent");
@@ -714,20 +714,20 @@ sub pushToInventory {
 
       if(! defined($aEntity->{parent})
          && $aEntity->{name}
-            eq $OvomExtractor::configuration{'root_folder.name'}
+            eq $OInventory::configuration{'root_folder.name'}
          && $aEntity->{mo_ref}
-            eq $OvomExtractor::configuration{'root_folder.mo_ref'} ) {
-        OvomExtractor::log(1, "pushToInventory: $type found without parent and "
+            eq $OInventory::configuration{'root_folder.mo_ref'} ) {
+        OInventory::log(1, "pushToInventory: $type found without parent and "
             . "its name and mo_ref matches with the ones configured to be the "
             . "root for Datacenters (name '" . $aEntity->{name} . "', mo_ref '"
             . $aEntity->{mo_ref} ."'). To maintain the integrity of the "
             . "parentage in our hierarchy (db constraints) let's set itself "
             . "as its own parent, it's not accepted a NULL parent.");
-        $aEntity->{parent} = $OvomExtractor::configuration{'root_folder.mo_ref'};
+        $aEntity->{parent} = $OInventory::configuration{'root_folder.mo_ref'};
       }
     }
     else {
-      OvomExtractor::log(3, "Unexpected type '$type' in pushToInventory");
+      OInventory::log(3, "Unexpected type '$type' in pushToInventory");
     }
 
     push @{$inventory{$type}}, $aEntity;
@@ -748,8 +748,8 @@ sub getViewsFromCsv {
   my $entityType = shift;
   my @entities;
   my ($csv, $csvHandler);
-  my $mockingCsvBaseFolder = $OvomExtractor::configuration{'debug.mock.inventExpRoot'}
-                             . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
+  my $mockingCsvBaseFolder = $OInventory::configuration{'debug.mock.inventExpRoot'}
+                             . "/" . $OInventory::configuration{'vCenter.fqdn'} ;
 
   if( $entityType eq "Datacenter"
    || $entityType eq "VirtualMachine"
@@ -758,11 +758,11 @@ sub getViewsFromCsv {
    || $entityType eq "Folder") {
     $csv = "$mockingCsvBaseFolder/$entityType.csv";
 
-    OvomExtractor::log(0, "Reading $entityType entities from inventory CSV file "
+    OInventory::log(0, "Reading $entityType entities from inventory CSV file "
                           . $csv . " for mocking");
 
     if( ! open($csvHandler, "<", $csv) ) {
-      OvomExtractor::log(3, "Could not open mocking CSV file '$csv': $!");
+      OInventory::log(3, "Could not open mocking CSV file '$csv': $!");
       return undef;
     }
 
@@ -772,9 +772,9 @@ sub getViewsFromCsv {
       next if /^\s*$/;
       my @parts = split /$csvSep/;
       if ($#parts < 0) {
-        OvomExtractor::log(3, "Can't parse this line '$_' on file '$csv': $!");
+        OInventory::log(3, "Can't parse this line '$_' on file '$csv': $!");
         if( ! close($csvHandler) ) {
-          OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
+          OInventory::log(3, "Could not close mocking CSV file '$csv': $!");
         }
         return undef;
       }
@@ -794,21 +794,21 @@ sub getViewsFromCsv {
         push @entities, OMockFolderView->new(@parts);
       }
       else {
-        OvomExtractor::log(3, "Unknown entity type '$entityType' "
+        OInventory::log(3, "Unknown entity type '$entityType' "
                             . "passed to getViewsFromCsv");
         if( ! close($csvHandler) ) {
-          OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
+          OInventory::log(3, "Could not close mocking CSV file '$csv': $!");
         }
         return undef;
       }
     }
     if( ! close($csvHandler) ) {
-      OvomExtractor::log(3, "Could not close mocking CSV file '$csv': $!");
+      OInventory::log(3, "Could not close mocking CSV file '$csv': $!");
       return undef;
     }
   }
   else {
-    OvomExtractor::log(3, "Unknown entity type '$entityType' "
+    OInventory::log(3, "Unknown entity type '$entityType' "
                         . "passed to getViewsFromCsv");
     return undef;
   }
@@ -826,26 +826,26 @@ sub getViewsFromCsv {
 sub inventory2Csv {
   my ($csv, $csvHandler);
   my $entityType;
-  my($inventoryBaseFolder) = $OvomExtractor::configuration{'inventory.export.root'}
-                             . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} ;
+  my($inventoryBaseFolder) = $OInventory::configuration{'inventory.export.root'}
+                             . "/" . $OInventory::configuration{'vCenter.fqdn'} ;
 
-  OvomExtractor::log(1, "Let's write inventory into CSV files on "
+  OInventory::log(1, "Let's write inventory into CSV files on "
                         . $inventoryBaseFolder);
 
   # %inventory keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
   foreach my $aEntityType (@entityTypes) {
     $csv = "$inventoryBaseFolder/$aEntityType.csv";
-    OvomExtractor::log(0, "Writing inventory for $aEntityType entities "
+    OInventory::log(0, "Writing inventory for $aEntityType entities "
                         . "on CSV file '$csv'");
     if( ! open($csvHandler, ">", $csv) ) {
-      OvomExtractor::log(3, "Could not open collector CSV file '$csv': $!");
+      OInventory::log(3, "Could not open picker CSV file '$csv': $!");
       return 1;
     }
     foreach my $aEntity (@{$inventory{$aEntityType}}) {
       print $csvHandler $aEntity->toCsvRow() . "\n";
     }
     if( ! close($csvHandler) ) {
-      OvomExtractor::log(3, "Could not close collector CSV file '$csv': $!");
+      OInventory::log(3, "Could not close picker CSV file '$csv': $!");
       return 1;
     }
   }
@@ -867,11 +867,11 @@ sub updateInventory {
   #
   # Let's connect to vC:
   #
-  OvomExtractor::log(1, "Connecting to vCenter");
+  OInventory::log(1, "Connecting to vCenter");
   $timeBefore=Time::HiRes::time;
-  return 0 if(! OvomExtractor::connectToVcenter());
+  return 0 if(! OInventory::connectToVcenter());
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Connecting to vCenter took "
+  OInventory::log(1, "Profiling: Connecting to vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
 
   ##############
@@ -880,17 +880,17 @@ sub updateInventory {
   # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | Datacenter | ClusterComputeResource
 
   foreach my $aEntityType (@entityTypes) {
-    OvomExtractor::log(0, "Getting $aEntityType list");
+    OInventory::log(0, "Getting $aEntityType list");
     my $entityViews;
     $timeBefore=Time::HiRes::time;
 
     if($configuration{'debug.mock.enabled'}) {
       $entityViews = getViewsFromCsv($aEntityType);
       if( ! defined($entityViews) ) {
-        OvomExtractor::log(3, "Can't get $aEntityType list from CSV files");
+        OInventory::log(3, "Can't get $aEntityType list from CSV files");
         return 0;
       }
-      OvomExtractor::log(1, "Found " . ($#$entityViews + 1)
+      OInventory::log(1, "Found " . ($#$entityViews + 1)
                             . " ${aEntityType}s on CSV files");
     }
     else {
@@ -914,15 +914,15 @@ sub updateInventory {
     }
 
     if($@) {
-      OvomExtractor::log(3, "Errors getting $aEntityType list: $@");
+      OInventory::log(3, "Errors getting $aEntityType list: $@");
       return 0;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OvomExtractor::log(1, "Profiling: $aEntityType list took "
+    OInventory::log(1, "Profiling: $aEntityType list took "
                           . sprintf("%.3f", $eTime) . " s");
   
     if (!@$entityViews) {
-      OvomExtractor::log(3, "Can't find ${aEntityType}s in the vCenter");
+      OInventory::log(3, "Can't find ${aEntityType}s in the vCenter");
     }
   
     # load the entity object and push it to $inventory{$aEntityType}
@@ -933,11 +933,11 @@ sub updateInventory {
   #
   # Let's disconnect from vC
   #
-  OvomExtractor::log(0, "Disconnecting from vCenter");
+  OInventory::log(0, "Disconnecting from vCenter");
   $timeBefore=Time::HiRes::time;
-  return 0 if(! OvomExtractor::disconnectFromVcenter());
+  return 0 if(! OInventory::disconnectFromVcenter());
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Disconnecting from vCenter took "
+  OInventory::log(1, "Profiling: Disconnecting from vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
 
   ###############################
@@ -978,22 +978,22 @@ sub printInventoryForDebug {
 # @return 0 ok, 1 errors
 #
 sub getLatestPerformance {
-  OvomExtractor::log(1, "Updating performance");
+  OInventory::log(1, "Updating performance");
 
-  OvomExtractor::log(3, "The new version of getLatestPerformance is still in development ");
+  OInventory::log(3, "The new version of getLatestPerformance is still in development ");
   return 0;
 
   my($aHost, $aVM);
-  foreach $aVM (@{$OvomExtractor::inventory{'VirtualMachine'}}) {
+  foreach $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     if(getVmPerfs($aVM)) {
-      OvomExtractor::log(3, "Errors getting performance from VM $aVM, "
+      OInventory::log(3, "Errors getting performance from VM $aVM, "
                           . "moving to next");
       next;
     }
   }
-  foreach $aHost (@{$OvomExtractor::inventory{'HostSystem'}}) {
+  foreach $aHost (@{$OInventory::inventory{'HostSystem'}}) {
     if(getHostPerfs($aHost)) {
-      OvomExtractor::log(3, "Errors getting performance from Host $aHost, "
+      OInventory::log(3, "Errors getting performance from Host $aHost, "
                           . "moving to next");
       next;
     }
@@ -1011,7 +1011,7 @@ sub getLatestPerformance {
 sub getVmPerfs {
 #   my ($vm) = shift;
 #   my ($counterType);
-#   foreach $counterType (@OvomExtractor::counterTypes) {
+#   foreach $counterType (@OInventory::counterTypes) {
 #     my %vmPerfParams = ();
 #     my $getVmPerfCommand = $configuration{'command.getPerf'} .
 #                              " --server "      . $configuration{'vCenter.fqdn'} .
@@ -1019,7 +1019,7 @@ sub getVmPerfs {
 #                              " --vm "        . $vm;
 #   
 # print "DEBUG: ==== Let's get counter $counterType from vm $vm: ====\n";
-#     OvomExtractor::log(0, "Getting counter '$counterType' from vm '$vm' running '$getVmPerfCommand'");
+#     OInventory::log(0, "Getting counter '$counterType' from vm '$vm' running '$getVmPerfCommand'");
 #     open CMD,'-|', $getVmPerfCommand or die "Can't run $getVmPerfCommand :" . $@;
 #     my $line;
 #     my ($counter, $instance, $description, $units, $sampleInfo);
@@ -1051,14 +1051,14 @@ sub getVmPerfs {
 #       elsif($line =~ /^\s*Sample info\s*:\s*(.+)\s*$/) {
 #         $sampleInfo = $1;
 #         if($previousSampleInfo ne '' && $previousSampleInfo ne $sampleInfo) {
-#           OvomExtractor::log(3, "Different sampleInfo on two counters " . 
+#           OInventory::log(3, "Different sampleInfo on two counters " . 
 #                        "on same vm $vm, same counterType $counterType");
 #           next;
 #         }
 #       }
 #       elsif($line =~ /^\s*Value\s*:\s*(.+)\s*$/) {
 #         my $valTmp = $1;
-# #       OvomExtractor::log(0, "DEBUG.getVmPerfs(): Value pushed for $counter ($units): [" . $valTmp . "]\n");
+# #       OInventory::log(0, "DEBUG.getVmPerfs(): Value pushed for $counter ($units): [" . $valTmp . "]\n");
 #         push @valuesRefArray, \$valTmp;
 #         push @counterUnitsArray, "$counter ($units)";
 #       }
@@ -1069,12 +1069,12 @@ sub getVmPerfs {
 #     close CMD;
 #     my $exit = $? >> 8;
 #     if ($exit ne 0) {
-#       OvomExtractor::log(3, "Bad exit status running $getVmPerfCommand to get vm performance");
+#       OInventory::log(3, "Bad exit status running $getVmPerfCommand to get vm performance");
 #       return 1;
 #     }
 # 
 #     if($#counterUnitsArray < 0 || $#valuesRefArray < 0) {
-#       OvomExtractor::log(3, "Found no counter or no values on vm $vm, counterType $counterType");
+#       OInventory::log(3, "Found no counter or no values on vm $vm, counterType $counterType");
 #       return 1;
 #     }
 #     splice @counterUnitsArray, 0, 0, "epoch(s)"; # time in seconds since 1 Jan 1970 UTC
@@ -1100,7 +1100,7 @@ sub getVmPerfs {
 sub getHostPerfs {
 #   my ($host) = shift;
 #   my ($counterType);
-#   foreach $counterType (@OvomExtractor::counterTypes) {
+#   foreach $counterType (@OInventory::counterTypes) {
 #     my %hostPerfParams = ();
 #     my $getHostPerfCommand = $configuration{'command.getPerf'} .
 #                              " --server "      . $configuration{'vCenter.fqdn'} .
@@ -1108,7 +1108,7 @@ sub getHostPerfs {
 #                              " --host "        . $host;
 #   
 # print "DEBUG: ==== Let's get counter $counterType from host $host: ====\n";
-#     OvomExtractor::log(0, "Getting counter '$counterType' from host '$host' running '$getHostPerfCommand'");
+#     OInventory::log(0, "Getting counter '$counterType' from host '$host' running '$getHostPerfCommand'");
 #     open CMD,'-|', $getHostPerfCommand or die "Can't run $getHostPerfCommand :" . $@;
 #     my $line;
 #     my ($counter, $instance, $description, $units, $sampleInfo);
@@ -1140,14 +1140,14 @@ sub getHostPerfs {
 #       elsif($line =~ /^\s*Sample info\s*:\s*(.+)\s*$/) {
 #         $sampleInfo = $1;
 #         if($previousSampleInfo ne '' && $previousSampleInfo ne $sampleInfo) {
-#           OvomExtractor::log(3, "Different sampleInfo on two counters " . 
+#           OInventory::log(3, "Different sampleInfo on two counters " . 
 #                        "on same host $host, same counterType $counterType");
 #           next;
 #         }
 #       }
 #       elsif($line =~ /^\s*Value\s*:\s*(.+)\s*$/) {
 #         my $valTmp = $1;
-# #       OvomExtractor::log(0, "DEBUG.getHostPerfs(): Value pushed for $counter ($units): [" . $valTmp . "]\n");
+# #       OInventory::log(0, "DEBUG.getHostPerfs(): Value pushed for $counter ($units): [" . $valTmp . "]\n");
 #         push @valuesRefArray, \$valTmp;
 #         push @counterUnitsArray, "$counter ($units)";
 #       }
@@ -1158,12 +1158,12 @@ sub getHostPerfs {
 #     close CMD;
 #     my $exit = $? >> 8;
 #     if ($exit ne 0) {
-#       OvomExtractor::log(3, "Bad exit status running $getHostPerfCommand to get host performance");
+#       OInventory::log(3, "Bad exit status running $getHostPerfCommand to get host performance");
 #       return 1;
 #     }
 # 
 #     if($#counterUnitsArray < 0 || $#valuesRefArray < 0) {
-#       OvomExtractor::log(3, "Found no counter or no values on host $host, counterType $counterType");
+#       OInventory::log(3, "Found no counter or no values on host $host, counterType $counterType");
 #       return 1;
 #     }
 #     splice @counterUnitsArray, 0, 0, "epoch(s)"; # time in seconds since 1 Jan 1970 UTC
@@ -1191,13 +1191,13 @@ sub saveVmPerf {
 #   @counterUnitsArray = @{$vmPerfParamsRef->{'counterUnitsRefArray'}};
 #   @sampleInfo        = @{$vmPerfParamsRef->{'sampleInfoArrayRef'}};
 #   @valuesArrayOfArrayOfRefs = @{$vmPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
-#   OvomExtractor::log(0, "saveHostPerf: vm $vm , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
+#   OInventory::log(0, "saveHostPerf: vm $vm , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
 # 
 #   foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
-#     OvomExtractor::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
+#     OInventory::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
 #   }
 # 
-#   my $outputFile = $OvomExtractor::configuration{'perfdata.root'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/vms/$vm/hour/$counterType.csv";
+#   my $outputFile = $OInventory::configuration{'perfdata.root'} . "/" . $OInventory::configuration{'vCenter.fqdn'} . "/vms/$vm/hour/$counterType.csv";
 # 
 #   my $headFile = $outputFile . ".head";
 #   if (! -f $headFile) {
@@ -1231,13 +1231,13 @@ sub saveHostPerf {
 #   @counterUnitsArray = @{$hostPerfParamsRef->{'counterUnitsRefArray'}};
 #   @sampleInfo        = @{$hostPerfParamsRef->{'sampleInfoArrayRef'}};
 #   @valuesArrayOfArrayOfRefs = @{$hostPerfParamsRef->{'valuesRefOfArrayOfArrayOfRefs'}};
-#   OvomExtractor::log(0, "saveHostPerf: host $host , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
+#   OInventory::log(0, "saveHostPerf: host $host , #counterUnitsArray=$#counterUnitsArray #sampleInfo=$#sampleInfo #valuesArrayOfArrayOfRefs=$#valuesArrayOfArrayOfRefs\n");
 # 
 #   foreach my $refToAnArrayOfValues (@valuesArrayOfArrayOfRefs) {
-#     OvomExtractor::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
+#     OInventory::log(0, "saveHostPerf: A comp of rtaaov: $#{$refToAnArrayOfValues} comps, 0=${$refToAnArrayOfValues}[0],  1=${$refToAnArrayOfValues}[1], ${$refToAnArrayOfValues}[2] ...\n");
 #   }
 # 
-#   my $outputFile = $OvomExtractor::configuration{'perfdata.root'} . "/" . $OvomExtractor::configuration{'vCenter.fqdn'} . "/hosts/$host/hour/$counterType.csv";
+#   my $outputFile = $OInventory::configuration{'perfdata.root'} . "/" . $OInventory::configuration{'vCenter.fqdn'} . "/hosts/$host/hour/$counterType.csv";
 # 
 #   my $headFile = $outputFile . ".head";
 #   if (! -f $headFile) {
@@ -1265,7 +1265,7 @@ sub saveHostPerf {
 #   my @arrayOfArrayRefs     = ();
 #   foreach my $aValuesRefArray (@$valuesArrayOfStrings) {
 #     my @aValuesArray = split /,/, $$aValuesRefArray;
-# #   OvomExtractor::log(0, "DEBUG.getValuesArrayOfArraysFromArrayOfStrings(): $#aValuesArray values: [0]=$aValuesArray[0], [1]=$aValuesArray[1], [2]=$aValuesArray[2], ...\n");
+# #   OInventory::log(0, "DEBUG.getValuesArrayOfArraysFromArrayOfStrings(): $#aValuesArray values: [0]=$aValuesArray[0], [1]=$aValuesArray[1], [2]=$aValuesArray[2], ...\n");
 #     push @arrayOfArrayRefs, \@aValuesArray;
 #   }
 #   return \@arrayOfArrayRefs;
@@ -1298,26 +1298,26 @@ sub createFoldersIfNeeded {
   ##############################
   # Folders for performance data
   ##############################
-  $folder = $OvomExtractor::configuration{'perfdata.root'};
+  $folder = $OInventory::configuration{'perfdata.root'};
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder $folder");
+    OInventory::log(1, "Creating perfdata.root folder $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
-  $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
+  $vCenterFolder = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder for "
+    OInventory::log(1, "Creating perfdata.root folder for "
                         . "the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
   $folder = $vCenterFolder . "/HostSystem";
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder for hosts of "
+    OInventory::log(1, "Creating perfdata.root folder for hosts of "
                         . "the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
   $folder = $vCenterFolder . "/VirtualMachine";
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating perfdata.root folder for VMs of "
+    OInventory::log(1, "Creating perfdata.root folder for VMs of "
                         . "the vCenter $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
@@ -1325,56 +1325,56 @@ sub createFoldersIfNeeded {
   ##############################
   # Folders for inventory
   ##############################
-  $folder = $OvomExtractor::configuration{'inventory.export.root'};
+  $folder = $OInventory::configuration{'inventory.export.root'};
   if(! -d $folder) {
-    OvomExtractor::log(1, "Creating inventory.export.root folder $folder");
+    OInventory::log(1, "Creating inventory.export.root folder $folder");
     mkdir $folder or die "Failed to create $folder: $!";
   }
-  $vCenterFolder = "$folder/" . $OvomExtractor::configuration{'vCenter.fqdn'};
+  $vCenterFolder = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
-    OvomExtractor::log(1, "Creating inventory.export.root folder for "
+    OInventory::log(1, "Creating inventory.export.root folder for "
                         . "the vCenter $vCenterFolder");
     mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
   }
 
 }
 
-sub collectorInit {
+sub pickerInit {
   readConfiguration();
 
   # Regular log
-  my($clf) = $OvomExtractor::configuration{'log.folder'} . "/collector.main.log";
-  $OvomExtractor::ovomGlobals{'collectorMainLogFile'} = $clf;
+  my($clf) = $OInventory::configuration{'log.folder'} . "/picker.main.log";
+  $OInventory::ovomGlobals{'pickerMainLogFile'} = $clf;
 
-  open($OvomExtractor::ovomGlobals{'collectorMainLogHandle'}, ">>", $clf)
-    or die "Could not open collector main log file '$clf': $!";
+  open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>", $clf)
+    or die "Could not open picker main log file '$clf': $!";
 
-  $OvomExtractor::ovomGlobals{'collectorMainLogHandle'}->autoflush;
+  $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
 
   # Error log
-  my($celf) = $OvomExtractor::configuration{'log.folder'} . "/collector.error.log";
-  $OvomExtractor::ovomGlobals{'collectorErrorLogFile'} = $celf;
+  my($celf) = $OInventory::configuration{'log.folder'} . "/picker.error.log";
+  $OInventory::ovomGlobals{'pickerErrorLogFile'} = $celf;
 
-  open($OvomExtractor::ovomGlobals{'collectorErrorLogHandle'}, ">>", $celf)
-    or die "Could not open collector error log file '$celf': $!";
+  open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>", $celf)
+    or die "Could not open picker error log file '$celf': $!";
 
-  $OvomExtractor::ovomGlobals{'collectorErrorLogHandle'}->autoflush;
+  $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;
 
-  OvomExtractor::log(1, "Init: Configuration read and log handlers open");
+  OInventory::log(1, "Init: Configuration read and log handlers open");
   createFoldersIfNeeded();
 }
 
 
-sub collectorStop {
-  OvomExtractor::log(1, "Stopping collector");
+sub pickerStop {
+  OInventory::log(1, "Stopping picker");
 
-  close($OvomExtractor::ovomGlobals{'collectorMainLogHandle'})
-    or die "Could not close collector main log file '" .
-             $OvomExtractor::ovomGlobals{'collectorMainLogFile'} . "': $!";
+  close($OInventory::ovomGlobals{'pickerMainLogHandle'})
+    or die "Could not close picker main log file '" .
+             $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
 
-  close($OvomExtractor::ovomGlobals{'collectorErrorLogHandle'})
-    or die "Could not close collector error log file '" .
-             $OvomExtractor::ovomGlobals{'collectorErrorLogFile'} . "': $!";
+  close($OInventory::ovomGlobals{'pickerErrorLogHandle'})
+    or die "Could not close picker error log file '" .
+             $OInventory::ovomGlobals{'pickerErrorLogFile'} . "': $!";
 }
 
 
@@ -1397,7 +1397,7 @@ sub readConfiguration {
 
 sub log ($$) {
   my ($logLevel, $msg) = @_;
-  return if($OvomExtractor::configuration{'log.level'} gt $logLevel);
+  return if($OInventory::configuration{'log.level'} gt $logLevel);
 
   my $nowStr = strftime('%Y%m%d_%H%M%S', gmtime);
   # gmtime instead of localtime, we want ~UTC
@@ -1419,19 +1419,19 @@ sub log ($$) {
   my $duplicate = 0;
   if($logLevel == 3) {
     # Error !
-    $logHandle = $OvomExtractor::ovomGlobals{'collectorErrorLogHandle'};
-    if($OvomExtractor::configuration{'log.duplicateErrors'}) {
+    $logHandle = $OInventory::ovomGlobals{'pickerErrorLogHandle'};
+    if($OInventory::configuration{'log.duplicateErrors'}) {
       $duplicate = 1;
     }
   }
   else {
     # Main log
-    $logHandle = $OvomExtractor::ovomGlobals{'collectorMainLogHandle'};
+    $logHandle = $OInventory::ovomGlobals{'pickerMainLogHandle'};
   }
   print $logHandle "${nowStr}Z: [$crit] $msg\n";
 
   if($duplicate) {
-    $logHandle = $OvomExtractor::ovomGlobals{'collectorMainLogHandle'};
+    $logHandle = $OInventory::ovomGlobals{'pickerMainLogHandle'};
     print $logHandle "${nowStr}Z: [$crit] $msg\n";
   }
 }

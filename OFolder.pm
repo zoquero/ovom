@@ -149,9 +149,9 @@ sub compare {
     return -1;
   }
   elsif ( ( $self->{name} eq $other->{name}
-         && $self->{name} eq $OvomExtractor::configuration{'root_folder.name'} )
+         && $self->{name} eq $OInventory::configuration{'root_folder.name'} )
        && ( ( ! defined($self->{parent}) || $self->{parent}  eq '' )
-         && $other->{parent} eq $OvomExtractor::configuration{'root_folder.mo_ref'} )) {
+         && $other->{parent} eq $OInventory::configuration{'root_folder.mo_ref'} )) {
     #
     # It's the special root folder that has:
     # name   == 'Datacenters'

@@ -111,7 +111,7 @@ $ mysql -u root       -prootpassword ovomdb < db/deletedb.sql
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_DB_PASSWORD=ovomdbpass  \
               OVOM_VC_USERNAME=vcenteruser \
-              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/extractor.pl\""
+              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\""
 ```
 
 To just ron a loop:
@@ -119,5 +119,5 @@ To just ron a loop:
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_DB_PASSWORD=ovomdbpass  \
               OVOM_VC_USERNAME=vcenteruser \
-              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/extractor.pl\" --once"
+              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\" --once"
 ```
