@@ -1,0 +1,6 @@
+Some things to be done:
+
+* Charset problem: When a folder has non-ascii characters the comparation says that it's different. Appears correctly on console, so it looks like a DB configuration error.
+* when should DBI::finish be called?
+* log rotation
+* getting hardware alarms
