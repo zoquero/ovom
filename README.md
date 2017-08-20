@@ -31,9 +31,9 @@ It's in an initial development stage but its goals are:
 It's in development stage. It's expected to have a release in september 2017 with at least:
 
 * (done! v0.1) Inventory 
-*              Extraction of performance metrics (work in progress)
-*              Show performance graphics
-*              Report alarms
+* Extraction of performance metrics (work in progress)
+* Show performance graphics
+* Report alarms
 
 # Some API links
 * http://www.ovh.com/images/vmWorld/OVH60.pdf
@@ -108,10 +108,16 @@ $ mysql -u root       -prootpassword ovomdb < db/deletedb.sql
 # Execution
 
 ```
-$ "$OVOM_BASE/extractor.pl"
+$ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
+              OVOM_DB_PASSWORD=ovomdbpass  \
+              OVOM_VC_USERNAME=vcenteruser \
+              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/extractor.pl\""
 ```
 
 To just ron a loop:
 ```
-$ "$OVOM_BASE/extractor.pl" --once
+$ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
+              OVOM_DB_PASSWORD=ovomdbpass  \
+              OVOM_VC_USERNAME=vcenteruser \
+              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/extractor.pl\" --once"
 ```
