@@ -22,12 +22,12 @@ use OHost;
 use OVirtualMachine;
 
 # Mocking views to load entities:
-use OMockVirtualMachineView;
-use OMockClusterView;
-use OMockHostView;
-use OMockDatacenterView;
-use OMockFolderView;
-use OMockVirtualMachineView;
+use OMockView::OMockVirtualMachineView;
+use OMockView::OMockClusterView;
+use OMockView::OMockHostView;
+use OMockView::OMockDatacenterView;
+use OMockView::OMockFolderView;
+use OMockView::OMockVirtualMachineView;
 
 
 our @ISA= qw( Exporter );
@@ -588,7 +588,15 @@ sub updateOvomInventoryDatabaseFromVcenter {
 
   # Get both inventories (the alive and the one saved on DB for the last time)
   OInventory::log(1, "Let's read the inventory from the vCenter.");
+
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
   my $r = updateInventory();
+  $eTime=Time::HiRes::time - $timeBefore;
+
+  OInventory::log(1, "Profiling: Update inventory on mem from vCenter took "
+                     . sprintf("%.3f", $eTime) . " s");
+
   if($r > 0) {
     OInventory::log(2, "The inventory has been updated on mem from vCenter");
   }
@@ -608,8 +616,15 @@ sub updateOvomInventoryDatabaseFromVcenter {
     OInventory::log(3, "Cannot connect to DataBase");
     return 0;
   }
+
+  $timeBefore=Time::HiRes::time;
+  $r = loadInventoryDatabaseContents();
+  $eTime=Time::HiRes::time - $timeBefore;
+
+  OInventory::log(1, "Profiling: Get inventory from BD took "
+                     . sprintf("%.3f", $eTime) . " s");
   
-  if(! loadInventoryDatabaseContents()) {
+  if(! $r) {
     OInventory::log(3, "Errors getting inventory from DB");
     return 0;
   }
@@ -624,7 +639,15 @@ sub updateOvomInventoryDatabaseFromVcenter {
 # printInventoryForDebug(getInventDb());
   
   OInventory::log(1, "Let's Update inventory DB contents:");
-  if( updateAsNeeded() == -1) {
+
+  $timeBefore=Time::HiRes::time;
+  $r = updateAsNeeded();
+  $eTime=Time::HiRes::time - $timeBefore;
+
+  OInventory::log(1, "Profiling: update inventory DB contents took "
+                     . sprintf("%.3f", $eTime) . " s");
+
+  if($r == -1) {
     OInventory::log(3, "Errors updating inventory DB contents. "
                         . "Let's rollback transactions on DataBase");
     return 0;
@@ -779,19 +802,19 @@ sub getViewsFromCsv {
         return undef;
       }
       if( $entityType eq "Datacenter") {
-        push @entities, OMockDatacenterView->new(@parts);
+        push @entities, OMockView::OMockDatacenterView->new(@parts);
       }
       elsif( $entityType eq "VirtualMachine") {
-        push @entities, OMockVirtualMachineView->new(@parts);
+        push @entities, OMockView::OMockVirtualMachineView->new(@parts);
       }
       elsif( $entityType eq "HostSystem") {
-        push @entities, OMockHostView->new(@parts);
+        push @entities, OMockView::OMockHostView->new(@parts);
       }
       elsif( $entityType eq "ClusterComputeResource") {
-        push @entities, OMockClusterView->new(@parts);
+        push @entities, OMockView::OMockClusterView->new(@parts);
       }
       elsif( $entityType eq "Folder") {
-        push @entities, OMockFolderView->new(@parts);
+        push @entities, OMockView::OMockFolderView->new(@parts);
       }
       else {
         OInventory::log(3, "Unknown entity type '$entityType' "
@@ -975,7 +998,7 @@ sub printInventoryForDebug {
 #
 # Gets last performance data from hosts and VMs
 #
-# @return 0 ok, 1 errors
+# @return 1 ok, 0 errors
 #
 sub getLatestPerformance {
   OInventory::log(1, "Updating performance");

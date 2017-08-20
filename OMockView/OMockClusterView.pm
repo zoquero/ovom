@@ -1,4 +1,4 @@
-package OMockClusterView;
+package OMockView::OMockClusterView;
 use strict;
 use warnings;
 use Carp;
