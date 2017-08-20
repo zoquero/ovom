@@ -1,6 +1,6 @@
 # Summary
 
-Open vCenter Operations Manager is a tool to manage and monitor operational state and performance of a VMware vCenter infraestructure.
+Open vCenter Operations Manager is a free software tool to manage and monitor operational state and performance of a VMware vCenter infraestructure.
 
 It uses the vCenter Perl SDK API, tested on 6.5.
 
@@ -13,50 +13,74 @@ July the 16th of 2017
 It's in an initial development stage but its goals are:
 
 * Maintain its own Inventory
-* Collect performance metrics:
-    * Collect realtime performance metrics of hosts, clusters and VMs
-    * Store them on plain files
+* Extract performance metrics:
+    * Extract realtime performance metrics of hosts, clusters and VMs
+    * Store them on plain CSV files
     * Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
-* Show performance metrics:
+* Show performance graphics:
     * Offer a simple Web UI to allow have graphs for custom intervals on-demand.
+* Report alarms based on thresholds
 * Suggest changes:
     * vMotion
     * Storage vMotion
     * Hardware scale (more or less hosts for clusters)
     * vHardware scale (more or less vCPUs for VMs)
-* Report alarms
 
 # Development
 
 It's in development stage. It's expected to have a release in september 2017 with at least:
 
-* Inventory
-* Collection of performance metrics
-* Show performance metrics
+* (done! v0.1) Inventory 
+*              Extraction of performance metrics (work in progress)
+*              Show performance graphics
+*              Report alarms
 
 # Some API links
 * http://www.ovh.com/images/vmWorld/OVH60.pdf
 
 # Installation
 
-## Credentials to access vCenter
+## User
+
+```
+$ OVOM_BASE=/opt/ovom
+$ sudo mkdir "$OVOM_BASE"
+$ sudo groupadd ovom
+$ sudo useradd -c "OVOM software" -d /opt/ovom -g ovom -s `which bash`
+```
+
+## Files
+Save this project somewhere like /opt/ovom/ . Let's call it 'OVOM_BASE':
+
+```
+$ git clone https://github.com/zoquero/ovom
+$ sudo mv ovom/*  "$OVOM_BASE"
+$ sudo mv ovom/.* "$OVOM_BASE"
+$ sudo rmdir ovom
+$ sudo chown -R ovom:ovom "$OVOM_BASE"
+```
+
+
+## vCenter access
 By now it just needs inventory access. A role like *Read-only* would be more than enough. In future releases it may need permissions for vMotion and Storage vMotion.
 
-Set the credentials in the environment variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+Just set the credentials in the environment variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
 
 ## Database
 
-Nowadays it just supports MySQL through Perl DBI.
+Nowadays it just supports MySQL through Perl DBI. The changes on code would be minimum to use any other database supported by DBI.
 
-You can use root MySQL user to create the database and tables and use a new dedicated user access those tables.
+You can use *root* MySQL user to create the database and tables and use a new dedicated user access those tables.
 
-*  Set the credentials for that new user in the environment variables **`OVOM_DB_USERNAME`** and **`OVOM_DB_PASSWORD`**
+Configuration steps regarding database:
 
-* Setup Database configuration in **`ovom.conf`**:
+* Set the credentials for that new mysql user in the environment variables **`OVOM_DB_USERNAME`** and **`OVOM_DB_PASSWORD`**
+
+* Set the database configuration in the file **`ovom.conf`**:
     * **`db.hostname`**
     * **`db.name`**
 
-* Creation of database, user, grants, tables and initial data:
+* Create of database, user, grants, tables and initial data:
 ```
 $ mysql -u root       -prootpassword        < db/create_db.sql
 $ mysql -u root       -prootpassword        < db/grants.sql
@@ -81,3 +105,13 @@ $ OVOM_DB_USERNAME=ovomdbuser  \
 $ mysql -u root       -prootpassword ovomdb < db/deletedb.sql 
 ```
 
+# Execution
+
+```
+$ "$OVOM_BASE/extractor.pl"
+```
+
+To just ron a loop:
+```
+$ "$OVOM_BASE/extractor.pl" --once
+```
