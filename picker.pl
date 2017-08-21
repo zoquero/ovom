@@ -7,6 +7,7 @@ use lib $FindBin::Bin;
 use POSIX qw/strftime/;
 use Time::HiRes; ## gettimeofday
 use OInventory;
+use OPerformance;
 
 my $justOneLoop = 0;
 $justOneLoop = 1 if ( defined($ARGV[0]) && $ARGV[0] eq '--once' );
@@ -49,7 +50,7 @@ while(1) {
   ###################
   OInventory::log(1, "Let's get latest performance data");
   $timeBefore=Time::HiRes::time;
-  $r = OInventory::getLatestPerformance();
+  $r = OPerformance::getLatestPerformance();
   $eTime=Time::HiRes::time - $timeBefore;
 
   if(! $r) {
