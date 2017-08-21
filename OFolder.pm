@@ -2,6 +2,8 @@ package OFolder;
 use strict;
 use warnings;
 use Carp;
+use overload
+    '""' => 'stringify';
 
 our $csvSep = ";";
 
@@ -177,6 +179,12 @@ sub compare {
     # Equal object
     return 1;
   }
+}
+
+
+sub stringify {
+    my ($self) = @_;
+    return sprintf "Folder with name='%s' and mo_ref='%s'", $self->{name}, $self->{mo_ref};
 }
 
 1;

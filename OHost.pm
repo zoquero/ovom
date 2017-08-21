@@ -2,6 +2,8 @@ package OHost;
 use strict;
 use warnings;
 use Carp;
+use overload
+    '""' => 'stringify';
 
 #
 # Probably added in a future:
@@ -123,6 +125,12 @@ sub compare {
     # Equal object
     return 1;
   }
+}
+
+
+sub stringify {
+    my ($self) = @_;
+    return sprintf "Host with name='%s' and mo_ref='%s'", $self->{name}, $self->{mo_ref};
 }
 
 1;
