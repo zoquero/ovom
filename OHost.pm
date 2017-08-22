@@ -33,6 +33,7 @@ sub new {
             'name'            => shift @$args,
             'mo_ref'          => shift @$args,
             'parent'          => shift @$args,
+            'view'            => undef,
             'hostFolder'      => shift @$args };
   return OHost->newWithArgsHash($a);
 }
@@ -58,6 +59,7 @@ sub newWithArgsHash {
     name            => $args->{'name'},
     mo_ref          => $args->{'mo_ref'},
     parent          => $args->{'parent'},
+    view            => $args->{'view'},
   }, $class;
   return $self;
 }
@@ -74,7 +76,9 @@ sub newFromView {
   my $a = { 'id'              => undef,
             'name'            => $view->{name},
             'mo_ref'          => $view->{mo_ref}{value},
-            'parent'          => $view->{parent}->{value} };
+            'parent'          => $view->{parent}->{value},
+            'view'            => $view
+  };
   return OHost->newWithArgsHash($a);
 }
 

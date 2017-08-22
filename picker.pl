@@ -17,9 +17,9 @@ OInventory::pickerInit();
 
 my ($timeBefore, $r, $eTime);
 while(1) {
-  ####################
-  # Inventory update #
-  ####################
+  #
+  # Inventory update
+  #
   OInventory::log(1, "Extraction loop #" . $inventoryRefreshCount);
   if($inventoryRefreshCount++
      % $OInventory::configuration{'inventory.refreshPeriod'} == 0) {
@@ -45,9 +45,9 @@ while(1) {
       . "the 'inventory.refreshPeriod' configuration parameter");
   }
 
-  ###################
-  # Get performance #
-  ###################
+  #
+  # Get performance
+  #
   OInventory::log(1, "Let's get latest performance data");
   $timeBefore=Time::HiRes::time;
   $r = OPerformance::getLatestPerformance();
@@ -63,9 +63,9 @@ while(1) {
     last;
   }
 
-  #########################
-  # Sleep until next loop #
-  #########################
+  #
+  # Sleep until next loop
+  #
   my $sleepSecs = $OInventory::configuration{'polling.wait_seconds'};
   OInventory::log(1, "Let's sleep ${sleepSecs}s after a loop");
   sleep($sleepSecs);

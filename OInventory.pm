@@ -887,16 +887,6 @@ sub updateInventory {
   my @vms   = ();
   my ($timeBefore, $eTime);
 
-  #
-  # Let's connect to vC:
-  #
-  OInventory::log(1, "Connecting to vCenter");
-  $timeBefore=Time::HiRes::time;
-  return 0 if(! OInventory::connectToVcenter());
-  $eTime=Time::HiRes::time - $timeBefore;
-  OInventory::log(1, "Profiling: Connecting to vCenter took "
-                        . sprintf("%.3f", $eTime) . " s");
-
   ##############
   # Get entities
   ##############
@@ -952,16 +942,6 @@ sub updateInventory {
     @{$inventory{$aEntityType}} = (); # Let's clean it before
     pushToInventory($entityViews, $aEntityType);
   }
-
-  #
-  # Let's disconnect from vC
-  #
-  OInventory::log(0, "Disconnecting from vCenter");
-  $timeBefore=Time::HiRes::time;
-  return 0 if(! OInventory::disconnectFromVcenter());
-  $eTime=Time::HiRes::time - $timeBefore;
-  OInventory::log(1, "Profiling: Disconnecting from vCenter took "
-                        . sprintf("%.3f", $eTime) . " s");
 
   ###############################
   # print %inventory to CSV files
@@ -1043,6 +1023,7 @@ sub createFoldersIfNeeded {
 }
 
 sub pickerInit {
+  my ($timeBefore, $eTime);
   readConfiguration();
 
   # Regular log
@@ -1065,11 +1046,32 @@ sub pickerInit {
 
   OInventory::log(1, "Init: Configuration read and log handlers open");
   createFoldersIfNeeded();
+
+  #
+  # Let's connect to vC:
+  #
+  OInventory::log(1, "Let's connect to vCenter");
+  $timeBefore=Time::HiRes::time;
+  return 0 if(! OInventory::connectToVcenter());
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: Connecting to vCenter took "
+                        . sprintf("%.3f", $eTime) . " s");
 }
 
 
 sub pickerStop {
+  my ($timeBefore, $eTime);
   OInventory::log(1, "Stopping picker");
+
+  #
+  # Let's disconnect from vC
+  #
+  OInventory::log(0, "Let's disconnect from vCenter");
+  $timeBefore=Time::HiRes::time;
+  return 0 if(! OInventory::disconnectFromVcenter());
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: Disconnecting from vCenter took "
+                        . sprintf("%.3f", $eTime) . " s");
 
   close($OInventory::ovomGlobals{'pickerMainLogHandle'})
     or die "Could not close picker main log file '" .
