@@ -49,6 +49,14 @@ our %allCountersByGIKey = ();
 #
 sub getPerfManager {
   if(! defined($perfManagerView)) {
+
+    if($OInventory::configuration{'debug.mock.enabled'}) {
+      OInventory::log(0, "In mocking mode. Now we should be getting "
+                       . "perfManager from VIM service content...");
+      $perfManagerView = OMockView::OMockPerformanceManager->new();
+      return 1;
+    }
+
     eval {
       $perfManagerView = Vim::get_view(mo_ref => Vim::get_service_content()->perfManager);
     };
