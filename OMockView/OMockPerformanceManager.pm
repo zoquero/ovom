@@ -121,14 +121,29 @@ sub _loadFromCsv {
 sub QueryAvailablePerfMetric {
   my ($self, $entity) = @_;
 
+  if(!defined($entity)) {
+    OInventory::log(3, "Missing entity argument at QueryAvailablePerfMetric");
+    return undef;
+  }
+
   my @perfMetricIds;
   my ($csv, $csvHandler);
   my $mockingCsvBaseFolder = $OInventory::configuration{'debug.mock.perfmgrRoot'};
 
-  $csv = "$mockingCsvBaseFolder/perf_metric_id.csv";
+  if(ref($entity) eq 'OHost') {
+    $csv = "$mockingCsvBaseFolder/perf_metric_id.HostSystem.csv";
+  }
+  elsif(ref($entity) eq 'OVirtualMachine') {
+    $csv = "$mockingCsvBaseFolder/perf_metric_id.VirtualMachine.csv";
+  }
+  else {
+    OInventory::log(3, "Unexpected entity type (". ref($entity) . ") "
+                     . "trying to QueryAvailablePerfMetric");
+    return undef;
+  }
 
-  OInventory::log(1, "Reading performance metric id objects from CSV file "
-                        . $csv . " for mocking");
+  OInventory::log(1, "Reading available performance metric id objects "
+                   . " for '$entity->{mo_ref}' from CSV file $csv for mocking");
 
   if( ! open($csvHandler, "<", $csv) ) {
     OInventory::log(3, "Could not open mocking CSV file '$csv': $!");
@@ -138,7 +153,6 @@ sub QueryAvailablePerfMetric {
   while (my $line = <$csvHandler>) {
     chomp $line;
     next if $line =~ /^\s*$/;
-print "DEBUG.QueryAvailablePerfMetric: line = '$line':\n";
     my @parts = split /$csvSep/, $line, -1;
     if ($#parts < 0) {
       OInventory::log(3, "Can't parse this line '$line' on file '$csv': $!");
@@ -148,17 +162,12 @@ print "DEBUG.QueryAvailablePerfMetric: line = '$line':\n";
       return undef;
     }
 
-print "DEBUG.QueryAvailablePerfMetric: parts: $#parts comps:\n";
-foreach my $z (@parts) {
-  print "DEBUG.QueryAvailablePerfMetric:   parts[] = '$z'\n";
-}
-
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(\@parts);
     if ( ! defined($aPerfMetricId) ) {
       OInventory::log(3, "Errors loading a mocking perf metric id object");
       return undef;
     }
-    OInventory::log(0, "Loaded: $aPerfMetricId");
+#   OInventory::log(0, "Loaded: $aPerfMetricId");
     push @perfMetricIds, $aPerfMetricId;
   }
   if( ! close($csvHandler) ) {

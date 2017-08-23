@@ -47,7 +47,7 @@ sub newWithArgsHash {
     name            => $args->{'name'},
     mo_ref          => $args->{'mo_ref'},
     parent          => $args->{'parent'},
-    view            => $args->{'view  '},
+    view            => $args->{'view'},
   }, $class;
   return $self;
 }

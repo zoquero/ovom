@@ -7,6 +7,7 @@ use POSIX qw/strftime/;
 use Time::Piece;
 use Time::HiRes; ## gettimeofday
 use VMware::VIRuntime;
+use Data::Dumper;
 
 use OInventory;
 
@@ -171,8 +172,18 @@ sub getLatestPerformance {
   $timeBeforeB=Time::HiRes::time;
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     my ($timeBefore, $eTime);
+    my $availablePerfMetricIds;
+    if($OInventory::configuration{'debug.mock.enabled'}) {
+      $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric($aVM);
+    }
+    else {
+      $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
+    }
 
-    my $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
+    OInventory::log(0, "Loaded PerfMetricIds for $aVM:");
+    foreach my $pMI (@$availablePerfMetricIds) {
+      OInventory::log(0, "PerfMetricId with counterId = '$pMI->{counterId}', instance = '$pMI->{instance}'");
+    }
 
     $timeBefore=Time::HiRes::time;
     if(! getVmPerfs($aVM)) {
