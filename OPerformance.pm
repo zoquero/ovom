@@ -134,12 +134,14 @@ sub getLatestPerformance {
   my ($timeBefore,  $eTime);
   my ($timeBeforeB, $eTimeB);
   my $maxErrs = $OInventory::configuration{'perfpicker.max_errs'};
+  my $perfManager;
 
   OInventory::log(0, "Updating performance");
 
   OInventory::log(0, "Let's get perfManager");
   $timeBefore=Time::HiRes::time;
-  if(! getPerfManager()) {
+  $perfManager=getPerfManager();
+  if(! $perfManager) {
     OInventory::log(3, "Errors getting getPerfManager");
     return 0;
   }
@@ -169,6 +171,9 @@ sub getLatestPerformance {
   $timeBeforeB=Time::HiRes::time;
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     my ($timeBefore, $eTime);
+
+    my $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
+
     $timeBefore=Time::HiRes::time;
     if(! getVmPerfs($aVM)) {
       OInventory::log(3, "Errors getting performance from $aVM");
