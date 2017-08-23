@@ -789,13 +789,12 @@ sub getViewsFromCsv {
       return undef;
     }
 
-    local $_;
-    while (<$csvHandler>) {
-      chomp;
-      next if /^\s*$/;
-      my @parts = split /$csvSep/;
+    while (my $line = <$csvHandler>) {
+      chomp $line;
+      next if $line =~ /^\s*$/;
+      my @parts = split /$csvSep/, $line;
       if ($#parts < 0) {
-        OInventory::log(3, "Can't parse this line '$_' on file '$csv': $!");
+        OInventory::log(3, "Can't parse this line '$line' on file '$csv': $!");
         if( ! close($csvHandler) ) {
           OInventory::log(3, "Could not close mocking CSV file '$csv': $!");
         }
@@ -1087,13 +1086,13 @@ sub readConfiguration {
   my $confFile = dirname(abs_path($0)) . '/ovom.conf';
   open(CONFIG, '<:encoding(UTF-8)', $confFile)
     or die "Can't read the configuration file $confFile: $!";
-  while (<CONFIG>) {
-      chomp;              # no newline
-      s/#.*//;            # no comments
-      s/^\s+//;           # no leading white
-      s/\s+$//;           # no trailing white
-      next unless length; # anything left?
-      my ($var, $value) = split(/\s*=\s*/, $_, 2);
+  while (my $line = <CONFIG>) {
+      chomp $line;                # no newline
+      $line =~s/#.*//;            # no comments
+      $line =~s/^\s+//;           # no leading white
+      $line =~s/\s+$//;           # no trailing white
+      next unless length($line);  # anything left?
+      my ($var, $value) = split(/\s*=\s*/, $line, 2);
       $configuration{$var} = $value;
   } 
   close(CONFIG) or die "Can't close the configuration file $confFile: $!";

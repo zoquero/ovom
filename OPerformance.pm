@@ -16,6 +16,8 @@ use OFolder;
 use OCluster;
 use OHost;
 use OVirtualMachine;
+use OMockView::OMockPerfCounterInfo;
+use OMockView::OMockPerformanceManager;
 
 our @ISA= qw( Exporter );
 
@@ -115,11 +117,10 @@ sub initCounterInfo {
     return 0;
   }
 
-  foreach (@$perfCounterInfo) {
-    my $key = $_->key;
-    $allCounters{$key} = $_;
-    $allCountersByGIKey{$_->groupInfo->key} = $_;
-# print "key=$key , groupInfo key = " . $_->groupInfo->key . "\n";
+  foreach my $pCI (@$perfCounterInfo) {
+    my $key = $pCI->key;
+    $allCounters{$key} = $pCI;
+    $allCountersByGIKey{$pCI->groupInfo->key} = $pCI;
   }
   return 1;
 }
