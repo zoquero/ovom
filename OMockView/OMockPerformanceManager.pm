@@ -119,9 +119,11 @@ sub _loadFromCsv {
 #
 #
 sub QueryAvailablePerfMetric {
-  my ($self, $entity) = @_;
+  my ($self, %args) = @_;
 
-  if(!defined($entity)) {
+  my $entityView = $args{'entity'};
+
+  if(!defined($entityView)) {
     OInventory::log(3, "Missing entity argument at QueryAvailablePerfMetric");
     return undef;
   }
@@ -130,20 +132,20 @@ sub QueryAvailablePerfMetric {
   my ($csv, $csvHandler);
   my $mockingCsvBaseFolder = $OInventory::configuration{'debug.mock.perfmgrRoot'};
 
-  if(ref($entity) eq 'OHost') {
+  if(ref($entityView) eq 'HostSystem' || ref($entityView) eq "OMockView::OMockHostView") {
     $csv = "$mockingCsvBaseFolder/perf_metric_id.HostSystem.csv";
   }
-  elsif(ref($entity) eq 'OVirtualMachine') {
+  elsif(ref($entityView) eq 'VirtualMachine' || ref($entityView) eq "OMockView::OMockVirtualMachineView") {
     $csv = "$mockingCsvBaseFolder/perf_metric_id.VirtualMachine.csv";
   }
   else {
-    OInventory::log(3, "Unexpected entity type (". ref($entity) . ") "
+    OInventory::log(3, "Unexpected entity type (". ref($entityView) . ") "
                      . "trying to QueryAvailablePerfMetric");
     return undef;
   }
 
   OInventory::log(1, "Reading available performance metric id objects "
-                   . " for '$entity->{mo_ref}' from CSV file $csv for mocking");
+                   . "for '$entityView->{mo_ref}->{value}' from CSV file $csv for mocking");
 
   if( ! open($csvHandler, "<", $csv) ) {
     OInventory::log(3, "Could not open mocking CSV file '$csv': $!");

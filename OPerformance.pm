@@ -126,6 +126,68 @@ sub initCounterInfo {
   return 1;
 }
 
+sub filterPerfMetricIds {
+  my ($groupInfoArray, $perfMetricIds) = @_;
+  my @r;
+  foreach my $aGroupInfo (@$groupInfoArray) {
+print "DEBUG.filterPerfMetricIds: Looking for aGroupInfo = $aGroupInfo \n";
+    if(!defined($allCountersByGIKey{$aGroupInfo})) {
+      my $keys = join ", ", keys(%allCountersByGIKey);
+      OInventory::log(2, "Looking for perfCounters of groupInfo '$aGroupInfo' "
+                       . "but this group is not found in the perfCounterInfo "
+                       . "array got from perfManagerView->perfCounter ($keys). "
+                       . "It's probably a typo in configuration");
+      next;
+    }
+
+    foreach my $aPMI (@$perfMetricIds) {
+print "Dumper( allCountersByGIKey{ aGroupInfo}) : \n";
+print Dumper($allCountersByGIKey{$aGroupInfo});
+die "Let's start debuggging here";
+       if (exists {$allCountersByGIKey{$aGroupInfo}}->{$aPMI->counterId}) {
+          push @r, $aPMI;
+print "DEBUG.filterPerfMetricIds: aGroupInfo FOUND \n";
+       }
+print "DEBUG.filterPerfMetricIds: aGroupInfo not found \n";
+    }
+  }
+
+print "DEBUG.filterPerfMetricIds: returning an array of " . ($#r + 1) . " ents \n";
+  return \@r;
+}
+
+#
+# Gets the desired groupInfo perfCounters for a entity
+#
+# @arg The entity
+# @return a reference to an array with the groupInfo list ("cpu", "mem", ...)
+#
+#
+sub getDesiredGroupInfoForEntity {
+  my ($entity) = @_;
+  my @groupInfo;
+  if (!defined($entity)) {
+    OInventory::log(3, "Missing parameters at getDesiredGroupInfoForEntity");
+    return undef;
+  }
+
+
+  if(ref($entity) eq 'HostSystem' || ref($entity) eq "OHost") {
+   @groupInfo = split /;/,
+                  $OInventory::configuration{'perfpicker.groupInfo.host'};
+  } 
+  elsif(ref($entity) eq 'VirtualMachine' || ref($entity) eq "OVirtualMachine") {
+   @groupInfo = split /;/,
+                  $OInventory::configuration{'perfpicker.groupInfo.vm'};
+  }
+  else {
+    OInventory::log(3, "Unexpected entity type (". ref($entity) . ") "
+                     . "trying to getDesiredGroupInfoForEntity");
+    return undef;
+  }
+  return \@groupInfo;
+}
+
 #
 # Gets last performance data from hosts and VMs
 #
@@ -173,17 +235,38 @@ sub getLatestPerformance {
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     my ($timeBefore, $eTime);
     my $availablePerfMetricIds;
-    if($OInventory::configuration{'debug.mock.enabled'}) {
-      $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric($aVM);
-    }
-    else {
-      $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
-    }
+    my $filteredPerfMetricIds;
+    my $desiredGroupInfo;
+
+    $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
 
     OInventory::log(0, "Loaded PerfMetricIds for $aVM:");
     foreach my $pMI (@$availablePerfMetricIds) {
-      OInventory::log(0, "PerfMetricId with counterId = '$pMI->{counterId}', instance = '$pMI->{instance}'");
+      OInventory::log(0, "PerfMetricId with counterId = '" . $pMI->counterId . "', instance = '" . $pMI->instance . "'");
     }
+
+    $desiredGroupInfo = getDesiredGroupInfoForEntity($aVM);
+    if(!defined($desiredGroupInfo) || $#$desiredGroupInfo == -1) {
+      OInventory::log(2, "There are not desired groupInfo of perfCounters "
+                       . "configured for this entity. Review configuration.");
+      next;
+    }
+    my $txt = join ", ", @$desiredGroupInfo;
+    OInventory::log(0, "There are " . ($#$desiredGroupInfo + 1) . " desired "
+                     . "groupInfo of perfCounters configured "
+                     . "for this entity: $txt");
+
+    $filteredPerfMetricIds = filterPerfMetricIds($desiredGroupInfo, $availablePerfMetricIds);
+    if(!defined($filteredPerfMetricIds) || $#$filteredPerfMetricIds == -1) {
+      OInventory::log(2, "Once filtered, none of the " 
+                       . $#$availablePerfMetricIds . " available perf metrics "
+                       . "was configured to be gathered. Review configuration.");
+      next;
+    }
+    $txt = join ", ", @$filteredPerfMetricIds;
+    OInventory::log(0, "Once filtered, " . ($#$filteredPerfMetricIds + 1) 
+                       . " of the " . $#$availablePerfMetricIds . " available "
+                       . "perf metrics were configured to be gathered: $txt");
 
     $timeBefore=Time::HiRes::time;
     if(! getVmPerfs($aVM)) {
