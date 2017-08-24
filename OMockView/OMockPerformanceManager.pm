@@ -23,7 +23,7 @@ sub new {
     _perfCounter => undef,
   }, $class;
 
-  if($self->_loadFromCsv()) {
+  if($self->_loadPerfCounterInfoFromCsv()) {
     return $self;
   }
   else {
@@ -45,7 +45,7 @@ sub perfCounter {
 #
 # @return 1 if ok, 0 if error
 #
-sub _loadFromCsv {
+sub _loadPerfCounterInfoFromCsv {
   my $self = shift;
   my @countersInfo;
   my ($csv, $csvHandler);

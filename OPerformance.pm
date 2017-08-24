@@ -121,14 +121,40 @@ sub initCounterInfo {
   foreach my $pCI (@$perfCounterInfo) {
     my $key = $pCI->key;
     $allCounters{$key} = $pCI;
-    $allCountersByGIKey{$pCI->groupInfo->key} = $pCI;
+    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
   }
   return 1;
 }
 
+#
+# Return just the desired perfMetricIds
+#
+# @arg ref to the array of groupInfo key strings
+#        (ex.: "["cpu", "mem", "network"])
+# @arg ref to and array of perfMetricIds objects
+#        (fields: counterId, instance)
+#        Typically they are the available ones for a entity.
+# @param
+#
 sub filterPerfMetricIds {
   my ($groupInfoArray, $perfMetricIds) = @_;
   my @r;
+
+#print "DEBUG.filterPerfMetricIds: print groupInfoArray:\n";
+#foreach my $z (@$groupInfoArray) {
+#print "DEBUG.filterPerfMetricIds:   [] = $z:\n";
+#}
+#
+#print "DEBUG.filterPerfMetricIds: print perfMetricIds:\n";
+#foreach my $z (@$perfMetricIds) {
+#print "DEBUG.filterPerfMetricIds:   [] = $z:\n";
+#}
+#die "die on first loop";
+
+  #
+  # First let's verify that allCountersByGIKey
+  # hash has all the groupInfoArray elements as keys
+  #
   foreach my $aGroupInfo (@$groupInfoArray) {
 print "DEBUG.filterPerfMetricIds: Looking for aGroupInfo = $aGroupInfo \n";
     if(!defined($allCountersByGIKey{$aGroupInfo})) {
@@ -141,14 +167,16 @@ print "DEBUG.filterPerfMetricIds: Looking for aGroupInfo = $aGroupInfo \n";
     }
 
     foreach my $aPMI (@$perfMetricIds) {
-print "Dumper( allCountersByGIKey{ aGroupInfo}) : \n";
-print Dumper($allCountersByGIKey{$aGroupInfo});
-die "Let's start debuggging here";
-       if (exists {$allCountersByGIKey{$aGroupInfo}}->{$aPMI->counterId}) {
-          push @r, $aPMI;
+
+       foreach my $aC (@{$allCountersByGIKey{$aGroupInfo}}) {
+print "DEBUG.filterPerfMetricIds: testing if " . $aC->key . " equals " . $aPMI->counterId . " \n";
+         if($aC->key eq $aPMI->counterId) {
 print "DEBUG.filterPerfMetricIds: aGroupInfo FOUND \n";
+print "Note: Here, could save the whole counter instad of just the small counterId object\n";
+           push @r, $aPMI;
+           last;
+         }
        }
-print "DEBUG.filterPerfMetricIds: aGroupInfo not found \n";
     }
   }
 
@@ -256,17 +284,20 @@ sub getLatestPerformance {
                      . "groupInfo of perfCounters configured "
                      . "for this entity: $txt");
 
-    $filteredPerfMetricIds = filterPerfMetricIds($desiredGroupInfo, $availablePerfMetricIds);
+    $filteredPerfMetricIds = filterPerfMetricIds($desiredGroupInfo,
+                                                 $availablePerfMetricIds);
     if(!defined($filteredPerfMetricIds) || $#$filteredPerfMetricIds == -1) {
       OInventory::log(2, "Once filtered, none of the " 
-                       . $#$availablePerfMetricIds . " available perf metrics "
-                       . "was configured to be gathered. Review configuration.");
+                       . ($#$availablePerfMetricIds + 1) . " available perf "
+                       . "metrics was configured to be gathered. "
+                       . "Review configuration.");
       next;
     }
     $txt = join ", ", @$filteredPerfMetricIds;
     OInventory::log(0, "Once filtered, " . ($#$filteredPerfMetricIds + 1) 
-                       . " of the " . $#$availablePerfMetricIds . " available "
-                       . "perf metrics were configured to be gathered: $txt");
+                       . " of the " . ($#$availablePerfMetricIds + 1)
+                       . " available perf metrics were configured "
+                       . "to be gathered: $txt");
 
     $timeBefore=Time::HiRes::time;
     if(! getVmPerfs($aVM)) {
