@@ -118,12 +118,12 @@ sub initCounterInfo {
     return 0;
   }
 
-  foreach my $pCI (@$perfCounterInfo) {
-    my $key = $pCI->key;
-    $allCounters{$key} = $pCI;
-    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
-  }
-  return 1;
+	  foreach my $pCI (@$perfCounterInfo) {
+	    my $key = $pCI->key;
+	    $allCounters{$key} = $pCI;
+	    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+	  }
+	  return 1;
 }
 
 #
@@ -135,8 +135,8 @@ sub initCounterInfo {
 #        (fields: counterId, instance)
 #        Typically they are the available ones for a entity.
 # @param
-#
-sub filterPerfMetricIds {
+	#
+	sub filterPerfMetricIds {
   my ($groupInfoArray, $perfMetricIds) = @_;
   my @r;
 
@@ -156,7 +156,6 @@ sub filterPerfMetricIds {
   # hash has all the groupInfoArray elements as keys
   #
   foreach my $aGroupInfo (@$groupInfoArray) {
-print "DEBUG.filterPerfMetricIds: Looking for aGroupInfo = $aGroupInfo \n";
     if(!defined($allCountersByGIKey{$aGroupInfo})) {
       my $keys = join ", ", keys(%allCountersByGIKey);
       OInventory::log(2, "Looking for perfCounters of groupInfo '$aGroupInfo' "
@@ -169,10 +168,11 @@ print "DEBUG.filterPerfMetricIds: Looking for aGroupInfo = $aGroupInfo \n";
     foreach my $aPMI (@$perfMetricIds) {
 
        foreach my $aC (@{$allCountersByGIKey{$aGroupInfo}}) {
-print "DEBUG.filterPerfMetricIds: testing if " . $aC->key . " equals " . $aPMI->counterId . " \n";
          if($aC->key eq $aPMI->counterId) {
-print "DEBUG.filterPerfMetricIds: aGroupInfo FOUND \n";
-print "Note: Here, could save the whole counter instad of just the small counterId object\n";
+#
+# TO_DO: Here we could save the whole counter
+#        instead of just the small counterId object
+#
            push @r, $aPMI;
            last;
          }
@@ -180,7 +180,6 @@ print "Note: Here, could save the whole counter instad of just the small counter
     }
   }
 
-print "DEBUG.filterPerfMetricIds: returning an array of " . ($#r + 1) . " ents \n";
   return \@r;
 }
 
@@ -268,9 +267,11 @@ sub getLatestPerformance {
 
     $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
 
-    OInventory::log(0, "Loaded PerfMetricIds for $aVM:");
+    OInventory::log(0, "Available PerfMetricIds for $aVM:");
     foreach my $pMI (@$availablePerfMetricIds) {
-      OInventory::log(0, "PerfMetricId with counterId = '" . $pMI->counterId . "', instance = '" . $pMI->instance . "'");
+      OInventory::log(0, " * PerfMetricId with "
+                       . "counterId = '" . $pMI->counterId . "', "
+                       . "instance = '"  . $pMI->instance  . "'");
     }
 
     $desiredGroupInfo = getDesiredGroupInfoForEntity($aVM);
@@ -301,7 +302,8 @@ sub getLatestPerformance {
 
     $timeBefore=Time::HiRes::time;
     if(! getVmPerfs($aVM)) {
-      OInventory::log(3, "Errors getting performance from $aVM");
+      OInventory::log(3, "Errors getting performance from VM with mo_ref '"
+                       . $aVM->{mo_ref} . "'");
       if(! --$maxErrs) {
         OInventory::log(3, "Too many errors when getting performance from "
                          . "vCenter. We'll try again on next picker's loop");
@@ -319,7 +321,8 @@ sub getLatestPerformance {
     my ($timeBefore, $eTime);
     $timeBefore=Time::HiRes::time;
     if(! getHostPerfs($aHost)) {
-      OInventory::log(3, "Errors getting performance from $aHost");
+      OInventory::log(3, "Errors getting performance from host with mo_ref '"
+                       . $aHost->{mo_ref} . "'");
       if(! --$maxErrs) {
         OInventory::log(3, "Max number of errors reached when getting "
                          . "performance from vCenter. We will try again "

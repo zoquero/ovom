@@ -114,6 +114,9 @@ sub _loadPerfCounterInfoFromCsv {
 #                   'instance' => 'SWAPFILE'
 #                 }, 'PerfMetricId' ),
 #
+# Those "counterID" are the "key" field for the perfCounters
+# got from perfManagerView->perfCounter
+#
 # @arg reference to the entity view object
 # @return reference to array of OMockPerfMetricId objects, undef if errors
 #
@@ -144,8 +147,10 @@ sub QueryAvailablePerfMetric {
     return undef;
   }
 
-  OInventory::log(1, "Reading available performance metric id objects "
-                   . "for '$entityView->{mo_ref}->{value}' from CSV file $csv for mocking");
+  OInventory::log(1, "QueryAvailablePerfMetric: Reading perfMetric objects "
+                   . "for the entity with mo_ref '"
+                   . $entityView->{mo_ref}->{value}
+                   . "' from CSV file $csv for mocking");
 
   if( ! open($csvHandler, "<", $csv) ) {
     OInventory::log(3, "Could not open mocking CSV file '$csv': $!");
@@ -176,6 +181,11 @@ sub QueryAvailablePerfMetric {
     OInventory::log(3, "Could not close mocking CSV file '$csv': $!");
     return undef;
   }
+
+  OInventory::log(0, "QueryAvailablePerfMetric returns "
+                   . ($#perfMetricIds + 1) . " perfMetricIds "
+                   . "for the entity with mo_ref '"
+                   . $entityView->{mo_ref}->{value});
 
   return \@perfMetricIds;
 }
