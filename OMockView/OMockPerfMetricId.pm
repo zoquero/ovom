@@ -37,7 +37,7 @@ sub counterId {
 
 sub stringify {
   my ($self) = @_;
-  return sprintf "'%s' with counterId='%s', instance='%s'", ref($self), $self->{_counterId}, $self->{_instance};
+  return sprintf "'%s': {counterId='%s',instance='%s'}", ref($self), $self->{_counterId}, $self->{_instance};
 }
 
 1;

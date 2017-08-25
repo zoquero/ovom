@@ -19,6 +19,7 @@ use OHost;
 use OVirtualMachine;
 use OMockView::OMockPerfCounterInfo;
 use OMockView::OMockPerformanceManager;
+use OMockView::OMockPerfQuerySpec;
 
 our @ISA= qw( Exporter );
 
@@ -215,6 +216,95 @@ sub getDesiredGroupInfoForEntity {
   return \@groupInfo;
 }
 
+
+sub getRefreshRate {
+  my ($entity) = @_;
+
+  die "getRefreshRate: deprecated";
+
+  #
+  # "Deprecated. It looks like that it will keep on being 20 seconds.
+  # If it changes in a future then we'll have to use API:
+  #
+
+#  my $historicalIntervals = $perfmgr_view->historicalInterval;
+
+#  my $providerSummary = $perfManagerView->QueryPerfProviderSummary(entity => $entity);
+#  This providerSummary is a PerfProviderSummary object like this:
+# 
+#  $VAR1 = bless( {
+#                   'entity' => bless( {
+#                                        'value' => 'vm-12xxx',
+#                                        'type' => 'VirtualMachine'
+#                                      }, 'ManagedObjectReference' ),
+#                   'currentSupported' => '1',
+#                   'refreshRate' => '20',
+#                   'summarySupported' => '1'
+#                 }, 'PerfProviderSummary' );
+}
+
+
+#
+# Gets PerfQuerySpec object
+#
+# @arg the entity view
+# @arg ref to array of metricIds
+# @arg format (ex.: 'csv')
+# @arg intervalId (typically '20' for realtime)
+# @return the object if ok, else undef
+#
+sub getPerfQuerySpec {
+  my $r;
+  my ($entity, $metricId, $format, $intervalId) = @_;
+
+  if(! defined($entity) || ! defined($metricId)
+  || ! defined($format) || ! defined($intervalId)) {
+    OInventory::log(3, "Missing arguments at getPerfQuerySpec");
+    return undef;
+  }
+  if($OInventory::configuration{'debug.mock.enabled'}) {
+    $r = OMockView::OMockPerfQuerySpec->new(entity     => $entity,
+                                            metricId   => $metricId,
+                                            format     => $format,
+                                            intervalId => $intervalId);
+  }
+  else {
+    $r = PerfQuerySpec->new(entity     => $entity,
+                            metricId   => $metricId,
+                            format     => $format,
+                            intervalId => $intervalId);
+  }
+  if (! defined($r)) {
+    OInventory::log(3, "Could not get PerfQuerySpec for entity with mo_ref '" 
+                     . $entity->{name} . "', " . $#${$metricId} 
+                     . " metricIds, $format format and $intervalId intervalId");
+  }
+  return $r;
+}
+
+#
+# Gets PerfQuerySpec object
+#
+# @arg the entity view
+# @arg ref to array of metricIds
+# @arg format (ex.: 'csv')
+# @arg intervalId (typically '20' for realtime)
+# @return the object if ok, else undef
+#
+sub getPerfData {
+  my $r;
+  my ($perfQuerySpec) = @_;
+
+  if (! defined ($perfQuerySpec)) {
+    OInventory::log(3, "Missing arguments at getPerfData");
+    return undef;
+  }
+
+  my $perfManager=getPerfManager();
+  return $perfManager->QueryPerf(querySpec => $perfQuerySpec);
+}
+
+
 #
 # Gets last performance data from hosts and VMs
 #
@@ -265,13 +355,14 @@ sub getLatestPerformance {
     my $filteredPerfMetricIds;
     my $desiredGroupInfo;
 
+    # TO_DO : move it to a getAvailablePerfMetric function
     $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
 
     OInventory::log(0, "Available PerfMetricIds for $aVM:");
     foreach my $pMI (@$availablePerfMetricIds) {
-      OInventory::log(0, " * PerfMetricId with "
-                       . "counterId = '" . $pMI->counterId . "', "
-                       . "instance = '"  . $pMI->instance  . "'");
+      OInventory::log(0, " * PerfMetricId: {"
+                       . "counterId='" . $pMI->counterId . "', "
+                       . "instance='"  . $pMI->instance  . "'}");
     }
 
     $desiredGroupInfo = getDesiredGroupInfoForEntity($aVM);
@@ -294,11 +385,47 @@ sub getLatestPerformance {
                        . "Review configuration.");
       next;
     }
-    $txt = join ", ", @$filteredPerfMetricIds;
-    OInventory::log(0, "Once filtered, " . ($#$filteredPerfMetricIds + 1) 
-                       . " of the " . ($#$availablePerfMetricIds + 1)
-                       . " available perf metrics were configured "
-                       . "to be gathered: $txt");
+    if($OInventory::configuration{'log.level'} == 0) {
+      $txt = '';
+      foreach my $aFPMI (@$filteredPerfMetricIds) {
+        $txt .= "{counterId='" .  $aFPMI->counterId . "',";
+        $txt .= "instance='"   .  $aFPMI->instance  . "'} ";
+      }
+      OInventory::log(0, "Once filtered, " . ($#$filteredPerfMetricIds + 1) 
+                         . " of the " . ($#$availablePerfMetricIds + 1)
+                         . " available perf metrics were configured "
+                         . "to be gathered: $txt");
+    }
+
+    #
+    # Let's get the perf query spec to later retrieve perf data:
+    #
+    my $perfQuerySpec = getPerfQuerySpec(entity     => $aVM->{view},
+                                         metricId   => $filteredPerfMetricIds,
+                                         format     => 'csv',
+                                         intervalId => 20); # 20s hardcoded
+    if(! defined($perfQuerySpec)) {
+      OInventory::log(3, "Could not get QuerySpec for entity");
+      next;
+    }
+
+    my $perfData = getPerfData($perfQuerySpec);
+    if(! defined($perfData)) {
+      OInventory::log(3, "Could not get perfData for entity");
+      next;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
     $timeBefore=Time::HiRes::time;
     if(! getVmPerfs($aVM)) {
@@ -312,9 +439,9 @@ sub getLatestPerformance {
       next;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Updating performance for VM "
-                     . "(name='" . $aVM->{name} . "', mo_ref='"
-                     . $aVM->{mo_ref} . "') took "
+    OInventory::log(0, "Profiling: Updating performance for VM: "
+                     . "{name='" . $aVM->{name} . "',mo_ref='"
+                     . $aVM->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
   foreach my $aHost (@{$OInventory::inventory{'HostSystem'}}) {
@@ -332,9 +459,9 @@ sub getLatestPerformance {
       next;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Updating performance for Host "
-                     . "(name='" . $aHost->{name} . "', mo_ref='"
-                     . $aHost->{mo_ref} . "') took "
+    OInventory::log(0, "Profiling: Updating performance for Host: "
+                     . "{name='" . $aHost->{name} . "',mo_ref='"
+                     . $aHost->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
 
