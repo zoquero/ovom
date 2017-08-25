@@ -49,7 +49,7 @@ our %allCountersByGIKey = ();
 #   * historicalInterval : array of PerfInterval objects that describe
 #                          the intervals of performance data
 #
-# @return 1 ok, 0 errors
+# @return ref to perfManagerView if ok, undef if error
 #
 sub getPerfManager {
   if(! defined($perfManagerView)) {
@@ -58,23 +58,25 @@ sub getPerfManager {
       OInventory::log(0, "In mocking mode. Now we should be getting "
                        . "perfManager from VIM service content...");
       $perfManagerView = OMockView::OMockPerformanceManager->new();
-      return 1;
+      return $perfManagerView;
     }
 
     eval {
       $perfManagerView = Vim::get_view(mo_ref => Vim::get_service_content()->perfManager);
     };
     if($@) {
+      $perfManagerView = undef;
       OInventory::log(3, "Can't get perfManager from VIM service content: $@");
-      return 0;
+      return undef;
     }
     if(! defined($perfManagerView)) {
       OInventory::log(3, "Can't get perfManager from VIM service content.");
-      return 0;
+      return undef;
     }
   }
-  return 1;
-} 
+  OInventory::log(0, "Returning cached perfManager");
+  return $perfManagerView;
+}
 
 
 #
@@ -112,7 +114,12 @@ sub initCounterInfo {
   my $perfCounterInfo;
 
   eval {
-    $perfCounterInfo = $perfManagerView->perfCounter;
+    my $perfManager = getPerfManager();
+    if ( ! defined($perfManager) ) {
+      OInventory::log(3, "Can't get perfManager");
+      return 0;
+    }
+    $perfCounterInfo = $perfManager->perfCounter;
   };
   if($@) {
     OInventory::log(3, "Can't get perfCounter from perfManagerView: $@");
@@ -136,21 +143,10 @@ sub initCounterInfo {
 #        (fields: counterId, instance)
 #        Typically they are the available ones for a entity.
 # @param
-	#
-	sub filterPerfMetricIds {
+#
+sub filterPerfMetricIds {
   my ($groupInfoArray, $perfMetricIds) = @_;
   my @r;
-
-#print "DEBUG.filterPerfMetricIds: print groupInfoArray:\n";
-#foreach my $z (@$groupInfoArray) {
-#print "DEBUG.filterPerfMetricIds:   [] = $z:\n";
-#}
-#
-#print "DEBUG.filterPerfMetricIds: print perfMetricIds:\n";
-#foreach my $z (@$perfMetricIds) {
-#print "DEBUG.filterPerfMetricIds:   [] = $z:\n";
-#}
-#die "die on first loop";
 
   #
   # First let's verify that allCountersByGIKey
@@ -247,48 +243,47 @@ sub getRefreshRate {
 #
 # Gets PerfQuerySpec object
 #
-# @arg the entity view
-# @arg ref to array of metricIds
-# @arg format (ex.: 'csv')
-# @arg intervalId (typically '20' for realtime)
+# @arg hash with:
+#       {entity}:     the entity view
+#       {metricId}:   ref to array of metricIds
+#       {format} :    format (ex.: 'csv')
+#       {intervalId}: intervalId (typically '20' for realtime)
 # @return the object if ok, else undef
 #
 sub getPerfQuerySpec {
   my $r;
-  my ($entity, $metricId, $format, $intervalId) = @_;
+  my (%args) = @_;
 
-  if(! defined($entity) || ! defined($metricId)
-  || ! defined($format) || ! defined($intervalId)) {
-    OInventory::log(3, "Missing arguments at getPerfQuerySpec");
+  if(! defined ($args{'entity'}) || ! defined ($args{'metricId'})
+  || ! defined ($args{'format'}) || ! defined ($args{'intervalId'})) {
+    OInventory::log(3, "getPerfQuerySpec constructor needs a hash of args");
     return undef;
   }
+
   if($OInventory::configuration{'debug.mock.enabled'}) {
-    $r = OMockView::OMockPerfQuerySpec->new(entity     => $entity,
-                                            metricId   => $metricId,
-                                            format     => $format,
-                                            intervalId => $intervalId);
+    $r = OMockView::OMockPerfQuerySpec->new(entity     => $args{entity},
+                                            metricId   => $args{metricId},
+                                            format     => $args{format},
+                                            intervalId => $args{intervalId});
   }
   else {
-    $r = PerfQuerySpec->new(entity     => $entity,
-                            metricId   => $metricId,
-                            format     => $format,
-                            intervalId => $intervalId);
+    $r = PerfQuerySpec->new(entity     => $args{entity},
+                            metricId   => $args{metricId},
+                            format     => $args{format},
+                            intervalId => $args{intervalId});
   }
   if (! defined($r)) {
     OInventory::log(3, "Could not get PerfQuerySpec for entity with mo_ref '" 
-                     . $entity->{name} . "', " . $#${$metricId} 
-                     . " metricIds, $format format and $intervalId intervalId");
+                     . $args{entity}->{name} . "', " . $#${$args{metricId}} 
+                     . " metricIds, $args{format} format and $args{intervalId} intervalId");
   }
   return $r;
 }
 
 #
-# Gets PerfQuerySpec object
+# Get PerfData object
 #
-# @arg the entity view
-# @arg ref to array of metricIds
-# @arg format (ex.: 'csv')
-# @arg intervalId (typically '20' for realtime)
+# @arg the querySpec
 # @return the object if ok, else undef
 #
 sub getPerfData {
@@ -299,8 +294,17 @@ sub getPerfData {
     OInventory::log(3, "Missing arguments at getPerfData");
     return undef;
   }
+  if ( ref($perfQuerySpec) ne 'PerfQuerySpec'
+    && ref($perfQuerySpec) ne 'OMockView::OMockPerfQuerySpec' ) {
+    OInventory::log(3, "getPerfData argument must be a PerfQuerySpec");
+    return undef;
+  }
 
   my $perfManager=getPerfManager();
+  if(! $perfManager) {
+    OInventory::log(3, "Errors getting getPerfManager");
+    return undef;
+  }
   return $perfManager->QueryPerf(querySpec => $perfQuerySpec);
 }
 
@@ -321,7 +325,7 @@ sub getLatestPerformance {
   OInventory::log(0, "Let's get perfManager");
   $timeBefore=Time::HiRes::time;
   $perfManager=getPerfManager();
-  if(! $perfManager) {
+  if( ! defined($perfManager) ) {
     OInventory::log(3, "Errors getting getPerfManager");
     return 0;
   }
@@ -356,7 +360,7 @@ sub getLatestPerformance {
     my $desiredGroupInfo;
 
     # TO_DO : move it to a getAvailablePerfMetric function
-    $availablePerfMetricIds = $perfManagerView->QueryAvailablePerfMetric(entity => $aVM->{view});
+    $availablePerfMetricIds = $perfManager->QueryAvailablePerfMetric(entity => $aVM->{view});
 
     OInventory::log(0, "Available PerfMetricIds for $aVM:");
     foreach my $pMI (@$availablePerfMetricIds) {
