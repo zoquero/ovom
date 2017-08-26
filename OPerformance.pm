@@ -385,23 +385,7 @@ sub savePerfData {
     }
   
     OInventory::log(0, "Saving perf data for the " . ref($entityView)
-                     . " name='" . $entityView->{name} . "',mo_ref='"
-                     . $mo_ref . "'");
-  
-#    if(  ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'HostSystem'
-#      || ref($entityView) eq 'OMockView::OMockHostView' ) {
-#      $csvFolder = $vCenterFolder . "/HostSystem";
-#    }
-#    elsif(   ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'VirtualMachine'
-#          || ref($entityView) eq 'OMockView::OMockVirtualMachineView' ) {
-#      $csvFolder = $vCenterFolder . "/VirtualMachine";
-#    }
-#    else {
-#      OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
-#                       . "' instead of HostSystem or VirtualMachine");
-#      return 0;
-#    }
-  
+                     . " with mo_ref='" . $mo_ref . "'");
   
     foreach my $p (@{$perfData->value}) {
       my $instance  = $p->id->instance;
@@ -409,7 +393,7 @@ sub savePerfData {
       my $value     = $p->value;
       my $csvPath   = join($basenameSeparator, ($csvFolder . "/" . $mo_ref, $counterId, $instance));
       my $csvPathLatest = $csvPath . ".latest.csv";
-  # print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
+# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
       OInventory::log(0, "Saving in $csvPathLatest");
   
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
@@ -525,8 +509,18 @@ sub getLatestPerformance {
 #   print "DEBUG:   groupInfo key = '$aK'\n";
 # }
 
-  $timeBeforeB=Time::HiRes::time;
+
+  my @entities;
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
+    push @entities, $aVM;
+  }
+  foreach my $aHost (@{$OInventory::inventory{'HostSystem'}}) {
+    push @entities, $aHost;
+  }
+
+  $timeBeforeB=Time::HiRes::time;
+# foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) 
+  foreach my $aVM (@entities) {
     my ($timeBefore, $eTime);
     my $availablePerfMetricIds;
     my $filteredPerfMetricIds;
@@ -603,20 +597,10 @@ sub getLatestPerformance {
       next;
     }
 
-    savePerfData($perfData);
-
-
-
-
-
-
-
-
-
     $timeBefore=Time::HiRes::time;
-    if(! getVmPerfs($aVM)) {
-      OInventory::log(3, "Errors getting performance from VM with mo_ref '"
-                       . $aVM->{mo_ref} . "'");
+    if(! savePerfData($perfData)) {
+      OInventory::log(3, "Errors getting performance from " . ref($aVM)
+                       . " with mo_ref '" . $aVM->{mo_ref} . "'");
       if(! --$maxErrs) {
         OInventory::log(3, "Too many errors when getting performance from "
                          . "vCenter. We'll try again on next picker's loop");
@@ -625,31 +609,32 @@ sub getLatestPerformance {
       next;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Updating performance for VM: "
+    OInventory::log(0, "Profiling: Getting and saving performance for "
+                     . ref($aVM) . ": "
                      . "{name='" . $aVM->{name} . "',mo_ref='"
                      . $aVM->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
-  foreach my $aHost (@{$OInventory::inventory{'HostSystem'}}) {
-    my ($timeBefore, $eTime);
-    $timeBefore=Time::HiRes::time;
-    if(! getHostPerfs($aHost)) {
-      OInventory::log(3, "Errors getting performance from host with mo_ref '"
-                       . $aHost->{mo_ref} . "'");
-      if(! --$maxErrs) {
-        OInventory::log(3, "Max number of errors reached when getting "
-                         . "performance from vCenter. We will try again "
-                         . "on next picker's loop");
-        return 0;
-      }
-      next;
-    }
-    $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Updating performance for Host: "
-                     . "{name='" . $aHost->{name} . "',mo_ref='"
-                     . $aHost->{mo_ref} . "'} took "
-                     . sprintf("%.3f", $eTime) . " s");
-  }
+#  foreach my $aHost (@{$OInventory::inventory{'HostSystem'}}) {
+#    my ($timeBefore, $eTime);
+#    $timeBefore=Time::HiRes::time;
+#    if(! getHostPerfs($aHost)) {
+#      OInventory::log(3, "Errors getting performance from host with mo_ref '"
+#                       . $aHost->{mo_ref} . "'");
+#      if(! --$maxErrs) {
+#        OInventory::log(3, "Max number of errors reached when getting "
+#                         . "performance from vCenter. We will try again "
+#                         . "on next picker's loop");
+#        return 0;
+#      }
+#      next;
+#    }
+#    $eTime=Time::HiRes::time - $timeBefore;
+#    OInventory::log(0, "Profiling: Updating performance for Host: "
+#                     . "{name='" . $aHost->{name} . "',mo_ref='"
+#                     . $aHost->{mo_ref} . "'} took "
+#                     . sprintf("%.3f", $eTime) . " s");
+#  }
 
   $eTimeB=Time::HiRes::time - $timeBeforeB;
   OInventory::log(1, "Profiling: Getting the whole data performance took "
