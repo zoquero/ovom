@@ -284,7 +284,9 @@ sub getPerfQuerySpec {
 # Get PerfData object
 #
 # @arg the querySpec
-# @return the PerfEntityMetricCSV object if ok, else undef
+# @return the return value of perfManager->QueryPerf
+#                    (an array of PerfEntityMetricCSV objects) if ok,
+#                    else undef
 #
 sub getPerfData {
   my $r;
@@ -311,106 +313,137 @@ sub getPerfData {
 #
 # Save perf data to disk
 #
-# @arg PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
+# @arg array of PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
 # @return 1 ok, 0 errors
 #
 sub savePerfData {
-  my $perfData = shift;
+  my $perfDataArray = shift;
 
-  if( ! defined($perfData) ) {
+  if( ! defined($perfDataArray) ) {
     OInventory::log(3, "savePerfData: expects a PerfEntityMetricCSV");
     return 0;
   }
 
-  if( ref($perfData) ne 'PerfEntityMetricCSV'
-   && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') {
-    OInventory::log(3, "savePerfData: Got unexpected '" . ref($perfData)
-                     . "' instead of PerfEntityMetricCSV");
+# if( ref($perfData) ne 'PerfEntityMetricCSV'
+#  && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV')
+  if( ref($perfDataArray) ne 'ARRAY') {
+    OInventory::log(3, "savePerfData: Got unexpected '" . ref($perfDataArray)
+                     . "' instead of ARRAY of PerfEntityMetricCSV");
     return 0;
   }
 
-  my $sampleInfoCSV = $perfData->sampleInfoCSV;
-  # array of OMockPerfMetricSeriesCSV objects:
-  my $entityView    = $perfData->entity;
+  OInventory::log(0, "Saving perf data for " . ($#$perfDataArray + 1)
+                   . " PerfEntityMetricCSVs");
 
-#print "DEBUG: Let's print perfData for a VM:\n";
-#print "DEBUG: * sampleInfoCSV = '" . substr($sampleInfoCSV, 0, 15) . "...'\n";
-#print "DEBUG: * entityView mo_ref = $entityView->{mo_ref}->{value} \n";
-## print "DEBUG: * value: Primer fent dump:\n" . print Dumper($perfData->value) . "\n";
-#print "DEBUG: * value: i ara valor a valor:\n";
-#foreach my $p (@{$perfData->value}) {
-#print "DEBUG: ** id= '" . $p->id->instance . "',counterId='" . $p->id->counterId . "',value='" . substr($p->value, 0, 15) . "...'\n";
-#}
+  foreach my $perfData (@$perfDataArray) {
 
-  my ($folder, $vCenterFolder, $csvFolder, $basenameSeparator);
-
-  OInventory::log(0, "Saving perf data for the " . ref($entityView)
-                   . " name='" . $entityView->{name} . "',mo_ref='"
-                   . $entityView->{mo_ref}->{value} . "'");
-
-  #
-  # Path strings for performance data were already tested
-  # and folders were created at OInventory::createFoldersIfNeeded()
-  #
-  $folder = $OInventory::configuration{'perfdata.root'};
-  $vCenterFolder     = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
-  $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
-
-  if( ref($entityView) eq 'HostSystem'
-   || ref($entityView) eq 'OMockView::OMockHostView') {
-    $csvFolder = $vCenterFolder . "/HostSystem";
-  }
-  elsif( ref($entityView) eq 'VirtualMachine'
-      || ref($entityView) eq 'OMockView::OMockVirtualMachineView') {
-    $csvFolder = $vCenterFolder . "/VirtualMachine";
-  }
-  else {
-    OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
-                     . "' instead of HostSystem or VirtualMachine");
-    return 0;
-  }
-
-
-  foreach my $p (@{$perfData->value}) {
-    my $instance  = $p->id->instance;
-    my $counterId = $p->id->counterId;
-    my $value     = $p->value;
-    my $csvPath   = join($basenameSeparator, ($csvFolder . "/" . $entityView->{mo_ref}->{value}, $counterId, $instance));
-    my $csvPathLatest = $csvPath . ".latest.csv";
-# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
-    OInventory::log(0, "Saving in $csvPathLatest");
-
-    my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
-    my @values = split /,/, $value;
-    if($#$timestamps < 3) {
-      OInventory::log(3, "Too few perf data values for mo_ref=" 
-                       . $entityView->{mo_ref}->{value} 
-                       . ",counterId=$counterId,instance=$instance");
-      return 0;
-    }
-    if($#$timestamps != $#values) {
-      OInventory::log(3, "Got different # of timestamps (" . ($#$timestamps + 1) 
-                       . ") than values  (" . ($#values + 1) . ") for mo_ref=" 
-                       . $entityView->{mo_ref}->{value} 
-                       . ",counterId=$counterId,instance=$instance");
+    if( ref($perfData) ne 'PerfEntityMetricCSV'
+     && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') {
+      OInventory::log(3, "savePerfData: Got unexpected '" . ref($perfData)
+                       . "' in the array instead of PerfEntityMetricCSV");
       return 0;
     }
 
-    my $pDHandle;
-    if(!open($pDHandle, ">", $csvPathLatest)) {
-      OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
+    my ($folder, $vCenterFolder, $csvFolder, $basenameSeparator);
+    my $sampleInfoCSV = $perfData->sampleInfoCSV;
+    #  Array of OMockPerfMetricSeriesCSV objects:
+    my $entityView    = $perfData->entity;
+  
+    #
+    # Path strings for performance data were already tested
+    # and folders were created at OInventory::createFoldersIfNeeded()
+    #
+    $folder = $OInventory::configuration{'perfdata.root'};
+    $vCenterFolder     = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
+    $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+
+    #
+    # TO_DO: When mocking, here we should get also a OMockManagedObjectReference
+    # instead of a OMockHostView or OMockVirtualMachineView, for simplicity
+    #
+    my $mo_ref;
+    if(ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'HostSystem') {
+      $mo_ref = $entityView->{value};
+      $csvFolder = $vCenterFolder . "/HostSystem";
+    }
+    elsif(ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'VirtualMachine') {
+      $mo_ref = $entityView->{value};
+      $csvFolder = $vCenterFolder . "/VirtualMachine";
+    }
+    elsif(ref($entityView) eq 'OMockView::OMockHostView') {
+      $mo_ref = $entityView->{mo_ref}->{value};
+      $csvFolder = $vCenterFolder . "/HostSystem";
+    }
+    elsif(ref($entityView) eq 'OMockView::OMockVirtualMachineView') {
+      $mo_ref = $entityView->{mo_ref}->{value};
+      $csvFolder = $vCenterFolder . "/VirtualMachine";
+    }
+    else {
+      OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
+                       . "' instead of HostSystem or VirtualMachine");
       return 0;
     }
-
-    for(my $i = 0; $i <=$#$timestamps; $i++) {
-      print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+  
+    OInventory::log(0, "Saving perf data for the " . ref($entityView)
+                     . " name='" . $entityView->{name} . "',mo_ref='"
+                     . $mo_ref . "'");
+  
+#    if(  ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'HostSystem'
+#      || ref($entityView) eq 'OMockView::OMockHostView' ) {
+#      $csvFolder = $vCenterFolder . "/HostSystem";
+#    }
+#    elsif(   ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'VirtualMachine'
+#          || ref($entityView) eq 'OMockView::OMockVirtualMachineView' ) {
+#      $csvFolder = $vCenterFolder . "/VirtualMachine";
+#    }
+#    else {
+#      OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
+#                       . "' instead of HostSystem or VirtualMachine");
+#      return 0;
+#    }
+  
+  
+    foreach my $p (@{$perfData->value}) {
+      my $instance  = $p->id->instance;
+      my $counterId = $p->id->counterId;
+      my $value     = $p->value;
+      my $csvPath   = join($basenameSeparator, ($csvFolder . "/" . $mo_ref, $counterId, $instance));
+      my $csvPathLatest = $csvPath . ".latest.csv";
+  # print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
+      OInventory::log(0, "Saving in $csvPathLatest");
+  
+      my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
+      my @values = split /,/, $value;
+      if($#$timestamps < 3) {
+        OInventory::log(3, "Too few perf data values for mo_ref=" 
+                         . $mo_ref 
+                         . ",counterId=$counterId,instance=$instance");
+        return 0;
+      }
+      if($#$timestamps != $#values) {
+        OInventory::log(3, "Got different # of timestamps (" . ($#$timestamps + 1) 
+                         . ") than values  (" . ($#values + 1) . ") for mo_ref=" 
+                         . $mo_ref 
+                         . ",counterId=$counterId,instance=$instance");
+        return 0;
+      }
+  
+      my $pDHandle;
+      if(!open($pDHandle, ">", $csvPathLatest)) {
+        OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
+        return 0;
+      }
+  
+      for(my $i = 0; $i <=$#$timestamps; $i++) {
+        print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+      }
+  
+      if(!close($pDHandle)) {
+        OInventory::log(3, "Could not close perf data file $csvPathLatest: $!");
+        return 0;
+      }
+      OInventory::log(0, "Saved in $csvPathLatest");
     }
-
-    if(!close($pDHandle)) {
-      OInventory::log(3, "Could not close perf data file $csvPathLatest: $!");
-      return 0;
-    }
-    OInventory::log(0, "Saved in $csvPathLatest");
   }
 
   return 1;
@@ -562,13 +595,11 @@ sub getLatestPerformance {
       OInventory::log(3, "Could not get perfData for entity");
       next;
     }
-    if( ref($perfData) ne 'PerfEntityMetricCSV'
-     && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') {
+#   if( ref($perfData) ne 'PerfEntityMetricCSV'
+#    && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') 
+    if( ref($perfData) ne 'ARRAY') {
       OInventory::log(3, "Got unexpected " . ref($perfData)
-                       . " instead of PerfEntityMetricCSV for entity");
-
-print "Let's dump the wrong perfData :\n" . Dumper($perfData);
-die "stop";
+                       . " instead of array of PerfEntityMetricCSV for entity");
       next;
     }
 

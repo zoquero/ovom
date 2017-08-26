@@ -227,8 +227,8 @@ sub QueryAvailablePerfMetric {
 #                  }, 'PerfEntityMetricCSV' )
 #         ];
 #
-# @arg reference to the PerfQuerySpec object
-# @return reference to a OMockPerfEntityMetricCSV object, undef if errors
+# @arg ref to the PerfQuerySpec object
+# @return ref to an array of OMockPerfEntityMetricCSV objects, undef if errors
 #
 sub QueryPerf {
   my ($self, %args) = @_;
@@ -263,7 +263,7 @@ sub QueryPerf {
                                 value         => \@perfMetricSeriesCSV,
                                 entity        => $perfQuerySpec->{_entity});
   OInventory::log(3, "Mocking: $str");
-  return $perfEntityMetricCsv;
+  return [$perfEntityMetricCsv];
 }
 
 1;
