@@ -1,5 +1,6 @@
 Some things to be done:
 
+* apply timeout to the calls in OPerformance::getLatestPerformance() after getting perfManager and before calling QueryPerf, for getting counterInfo, available perfMetricIds, ...
 * aggressively cache retrieved objects at OPerformance::getLatestPerformance()
 * aggressively cache OPerformance::getPerfManager()
 * mocking PerfManager and perfCounterInfo to work offline
