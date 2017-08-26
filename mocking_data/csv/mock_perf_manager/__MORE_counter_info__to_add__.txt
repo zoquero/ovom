@@ -1,0 +1,340 @@
+    statsType        => shift @$args,
+    perDeviceLevel   => shift @$args,
+    nameInfoKey      => shift @$args,
+    nameInfoLabel    => shift @$args,
+    nameInfoSummary  => shift @$args,
+    groupInfoKey     => shift @$args,
+    groupInfoLabel   => shift @$args,
+    groupInfoSummary => shift @$args,
+    key              => shift @$args,
+    level            => shift @$args,
+    rollupType       => shift @$args,
+    unitInfoKey      => shift @$args,
+    unitInfoLabel    => shift @$args,
+    unitInfoSummary  => shift @$args,
+
+rate;4;usage;Usage;CPU usage as a percentage during the interval;cpu;CPU;CPU;1;4;none;percent;%;Percentage
+delta;3;ready;Ready;Time that the virtual machine was ready, but could not get scheduled to run on the physical CPU during last measurement interval;cpu;CPU;CPU;12;1;summation;millisecond;ms;Millisecond
+absolute;4;capacity.demand;CPU Capacity Demand;The amount of CPU resources a VM would use if there were no CPU contention or CPU limit;cpu;CPU;CPU;18;4;average;megaHertz;MHz;Megahertz
+
+
+                                  bless( {
+                                           'rollupType' => bless( {
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                }, 'ElementDescription' ),
+                                           'nameInfo' => bless( {
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                 }, 'ElementDescription' ),
+                                           'statsType' => bless( {
+                                                                 }, 'PerfStatsType' )
+                                         }, 'PerfCounterInfo' ),
+
+
+
+                                  bless( {
+                                           'rollupType' => bless( {
+                                                                    'val' => 'none'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'key' => 'percent',
+                                                                  'summary' => 'Percentage',
+                                                                  'label' => '%'
+                                                                }, 'ElementDescription' ),
+                                           'key' => '23',
+                                           'level' => '4',
+                                           'perDeviceLevel' => '4',
+                                           'nameInfo' => bless( {
+                                                                  'label' => 'Host consumed %',
+                                                                  'summary' => 'Percentage of host physical memory that has been consumed',
+                                                                  'key' => 'usage'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'mem',
+                                                                   'summary' => 'Memory',
+                                                                   'label' => 'Memory'
+                                                                 }, 'ElementDescription' ),
+                                           'statsType' => bless( {
+                                                                   'val' => 'absolute'
+                                                                 }, 'PerfStatsType' )
+                                         }, 'PerfCounterInfo' ),
+
+                                  bless( {
+                                           'statsType' => bless( {
+                                                                   'val' => 'absolute'
+                                                                 }, 'PerfStatsType' ),
+                                           'groupInfo' => bless( {
+                                                                   'label' => 'Memory',
+                                                                   'summary' => 'Memory',
+                                                                   'key' => 'mem'
+                                                                 }, 'ElementDescription' ),
+                                           'nameInfo' => bless( {
+                                                                  'label' => 'Granted',
+                                                                  'summary' => 'Amount of host physical memory or physical memory that is mapped for a virtual machine or a host',
+                                                                  'key' => 'granted'
+                                                                }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '4',
+                                           'level' => '4',
+                                           'key' => '30',
+                                           'rollupType' => bless( {
+                                                                    'val' => 'minimum'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'key' => 'kiloBytes',
+                                                                  'summary' => 'Kilobyte',
+                                                                  'label' => 'KB'
+                                                                }, 'ElementDescription' )
+                                         }, 'PerfCounterInfo' ),
+
+                                  bless( {
+                                           'nameInfo' => bless( {
+                                                                  'summary' => 'Amount of guest physical memory that is being actively read or written by guest. Activeness is estimated by ESXi',
+                                                                  'label' => 'Active',
+                                                                  'key' => 'active'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'mem',
+                                                                   'label' => 'Memory',
+                                                                   'summary' => 'Memory'
+                                                                 }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '4',
+                                           'statsType' => bless( {
+                                                                   'val' => 'absolute'
+                                                                 }, 'PerfStatsType' ),
+                                           'rollupType' => bless( {
+                                                                    'val' => 'maximum'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'label' => 'KB',
+                                                                  'summary' => 'Kilobyte',
+                                                                  'key' => 'kiloBytes'
+                                                                }, 'ElementDescription' ),
+                                           'key' => '35',
+                                           'level' => '4'
+                                         }, 'PerfCounterInfo' ),
+
+                                  bless( {
+                                           'statsType' => bless( {
+                                                                   'val' => 'absolute'
+                                                                 }, 'PerfStatsType' ),
+                                           'nameInfo' => bless( {
+                                                                  'summary' => 'Amount by which reservation can be raised',
+                                                                  'label' => 'Reservation available',
+                                                                  'key' => 'unreserved'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'summary' => 'Memory',
+                                                                   'label' => 'Memory',
+                                                                   'key' => 'mem'
+                                                                 }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '3',
+                                           'key' => '45',
+                                           'level' => '2',
+                                           'unitInfo' => bless( {
+                                                                  'key' => 'kiloBytes',
+                                                                  'label' => 'KB',
+                                                                  'summary' => 'Kilobyte'
+                                                                }, 'ElementDescription' ),
+                                           'rollupType' => bless( {
+                                                                    'val' => 'average'
+                                                                  }, 'PerfSummaryType' )
+                                         }, 'PerfCounterInfo' ),
+
+
+                                  bless( {
+                                           'statsType' => bless( {
+                                                                   'val' => 'delta'
+                                                                 }, 'PerfStatsType' ),
+                                           'perDeviceLevel' => '3',
+                                           'nameInfo' => bless( {
+                                                                  'key' => 'commandsAborted',
+                                                                  'label' => 'Commands aborted',
+                                                                  'summary' => 'Number of SCSI commands aborted during the collection interval'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'disk',
+                                                                   'summary' => 'Disk',
+                                                                   'label' => 'Disk'
+                                                                 }, 'ElementDescription' ),
+                                           'key' => '134',
+                                           'level' => '2',
+                                           'rollupType' => bless( {
+                                                                    'val' => 'summation'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'summary' => 'Number',
+                                                                  'label' => 'num',
+                                                                  'key' => 'number'
+                                                                }, 'ElementDescription' )
+                                         }, 'PerfCounterInfo' ),
+
+
+                                  bless( {
+                                           'rollupType' => bless( {
+                                                                    'val' => 'summation'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'key' => 'number',
+                                                                  'summary' => 'Number',
+                                                                  'label' => 'num'
+                                                                }, 'ElementDescription' ),
+                                           'key' => '135',
+                                           'level' => '2',
+                                           'nameInfo' => bless( {
+                                                                  'summary' => 'Number of SCSI-bus reset commands issued during the collection interval',
+                                                                  'label' => 'Bus resets',
+                                                                  'key' => 'busResets'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'disk',
+                                                                   'label' => 'Disk',
+                                                                   'summary' => 'Disk'
+                                                                 }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '3',
+                                           'statsType' => bless( {
+                                                                   'val' => 'delta'
+                                                                 }, 'PerfStatsType' )
+                                         }, 'PerfCounterInfo' ),
+
+
+                                  bless( {
+                                           'statsType' => bless( {
+                                                                   'val' => 'rate'
+                                                                 }, 'PerfStatsType' ),
+                                           'nameInfo' => bless( {
+                                                                  'label' => 'Average read requests per second',
+                                                                  'summary' => 'Average number of read commands issued per second to the datastore during the collection interval',
+                                                                  'key' => 'numberReadAveraged'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'datastore',
+                                                                   'summary' => 'Datastore',
+                                                                   'label' => 'Datastore'
+                                                                 }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '3',
+                                           'key' => '178',
+                                           'level' => '1',
+                                           'rollupType' => bless( {
+                                                                    'val' => 'average'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'label' => 'num',
+                                                                  'summary' => 'Number',
+                                                                  'key' => 'number'
+                                                                }, 'ElementDescription' )
+                                         }, 'PerfCounterInfo' ),
+
+
+                                  bless( {
+                                           'statsType' => bless( {
+                                                                   'val' => 'delta'
+                                                                 }, 'PerfStatsType' ),
+                                           'perDeviceLevel' => '3',
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'net',
+                                                                   'label' => 'Network',
+                                                                   'summary' => 'Network'
+                                                                 }, 'ElementDescription' ),
+                                           'nameInfo' => bless( {
+                                                                  'key' => 'droppedRx',
+                                                                  'label' => 'Receive packets dropped',
+                                                                  'summary' => 'Number of receives dropped'
+                                                                }, 'ElementDescription' ),
+                                           'level' => '2',
+                                           'key' => '431',
+                                           'rollupType' => bless( {
+                                                                    'val' => 'summation'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'key' => 'number',
+                                                                  'summary' => 'Number',
+                                                                  'label' => 'num'
+                                                                }, 'ElementDescription' )
+                                         }, 'PerfCounterInfo' ),
+
+
+                                  bless( {
+                                           'perDeviceLevel' => '3',
+                                           'nameInfo' => bless( {
+                                                                  'summary' => 'Number of transmits dropped',
+                                                                  'label' => 'Transmit packets dropped',
+                                                                  'key' => 'droppedTx'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'key' => 'net',
+                                                                   'label' => 'Network',
+                                                                   'summary' => 'Network'
+                                                                 }, 'ElementDescription' ),
+                                           'statsType' => bless( {
+                                                                   'val' => 'delta'
+                                                                 }, 'PerfStatsType' ),
+                                           'rollupType' => bless( {
+                                                                    'val' => 'summation'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'key' => 'number',
+                                                                  'label' => 'num',
+                                                                  'summary' => 'Number'
+                                                                }, 'ElementDescription' ),
+                                           'key' => '432',
+                                           'level' => '2'
+                                         }, 'PerfCounterInfo' ),
+
+
+
+                                  bless( {
+                                           'key' => '12436',
+                                           'level' => '3',
+                                           'unitInfo' => bless( {
+                                                                  'label' => 'num',
+                                                                  'summary' => 'Number',
+                                                                  'key' => 'number'
+                                                                }, 'ElementDescription' ),
+                                           'rollupType' => bless( {
+                                                                    'val' => 'average'
+                                                                  }, 'PerfSummaryType' ),
+                                           'statsType' => bless( {
+                                                                   'val' => 'absolute'
+                                                                 }, 'PerfStatsType' ),
+                                           'nameInfo' => bless( {
+                                                                  'key' => 'throughput.vds.arpUnknown',
+                                                                  'label' => 'VXLAN Network Found Matched ARP Entry Marked as Unknown Throughput',
+                                                                  'summary' => 'Count of transmitted packets whose matched arp entry is marked as unknown for this network'
+                                                                }, 'ElementDescription' ),
+                                           'groupInfo' => bless( {
+                                                                   'summary' => 'Network',
+                                                                   'label' => 'Network',
+                                                                   'key' => 'net'
+                                                                 }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '3'
+                                         }, 'PerfCounterInfo' ),
+
+
+                                  bless( {
+                                           'rollupType' => bless( {
+                                                                    'val' => 'average'
+                                                                  }, 'PerfSummaryType' ),
+                                           'unitInfo' => bless( {
+                                                                  'label' => "\x{2103}",
+                                                                  'summary' => 'Temperature in degrees Celsius',
+                                                                  'key' => 'celsius'
+                                                                }, 'ElementDescription' ),
+                                           'level' => '4',
+                                           'key' => '16737',
+                                           'groupInfo' => bless( {
+                                                                   'summary' => 'GPU',
+                                                                   'label' => 'GPU',
+                                                                   'key' => 'gpu'
+                                                                 }, 'ElementDescription' ),
+                                           'nameInfo' => bless( {
+                                                                  'summary' => 'The temperature of a GPU in degrees celsius',
+                                                                  'label' => 'Temperature',
+                                                                  'key' => 'temperature'
+                                                                }, 'ElementDescription' ),
+                                           'perDeviceLevel' => '4',
+                                           'statsType' => bless( {
+                                                                   'val' => 'absolute'
+                                                                 }, 'PerfStatsType' )
+                                         }, 'PerfCounterInfo' ),
+
