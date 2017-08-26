@@ -6,6 +6,15 @@ use Carp;
 use overload
     '""' => 'stringify';
 
+#
+# bless( {
+#          'value' => '42,83,...',
+#          'id' => bless( {
+#                           'instance' => '',
+#                           'counterId' => '2'
+#                         }, 'PerfMetricId' )
+#        }, 'PerfMetricSeriesCSV' ),
+#
 sub new {
   my ($class, %args) = @_;
 
@@ -14,19 +23,22 @@ sub new {
     return undef;
   }
 
-  if( ref($args{'id'}) ne 'PerfMetricId'
-   && ref($args{'id'}) ne 'OMockView::OMockPerfMetricId' ) {
-    Carp::croak("The constructor of OMockPerfMetricSeriesCSV needs a ref to a PerfMetricId as second argument");
+  if(ref($args{'value'}) ne '') {
+    Carp::croak("args{value} must be a string with values "
+              . "in constructor of OMockPerfMetricSeriesCSV");
+    return undef;
+  }
+  if($args{'value'} eq '') {
+    Carp::croak("empty args{value} in constructor of OMockPerfMetricSeriesCSV");
     return undef;
   }
 
-# bless( {
-#          'value' => '42,83,...',
-#          'id' => bless( {
-#                           'instance' => '',
-#                           'counterId' => '2'
-#                         }, 'PerfMetricId' )
-#        }, 'PerfMetricSeriesCSV' ),
+  if( ref($args{'id'}) ne 'PerfMetricId'
+   && ref($args{'id'}) ne 'OMockView::OMockPerfMetricId' ) {
+    Carp::croak("args{id} is not a PerfMetricId in constructor "
+              . "of OMockPerfMetricSeriesCSV");
+    return undef;
+  }
 
   my $self = bless {
     _value => $args{'value'},
@@ -35,10 +47,15 @@ sub new {
   return $self;
 }
 
-# sub instance {
-#   my ($self) = @_;
-#   return $self->{_instance};
-# }
+sub value {
+  my ($self) = @_;
+  return $self->{_value};
+}
+
+sub id {
+  my ($self) = @_;
+  return $self->{_id};
+}
 
 sub stringify {
   my ($self) = @_;

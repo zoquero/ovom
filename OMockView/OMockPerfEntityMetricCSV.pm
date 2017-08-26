@@ -6,14 +6,6 @@ use Carp;
 use overload
     '""' => 'stringify';
 
-sub new {
-  my ($class, %args) = @_;
-
-  if(! defined ($args{'sampleInfoCSV'}) || ! defined ($args{'value'})
-  || ! defined ($args{'entity'})) {
-    Carp::croak("The constructor needs a hash of args");
-    return undef;
-  }
 
 # $VAR1 = [
 #           bless( {
@@ -42,18 +34,55 @@ sub new {
 #                  }, 'PerfEntityMetricCSV' )
 #         ];
 
+sub new {
+  my ($class, %args) = @_;
+
+  if(! defined ($args{'sampleInfoCSV'})
+  || ! defined ($args{'value'})
+  || ! defined ($args{'entity'})) {
+    Carp::croak("OMockPerfEntityMetricCSV constructor needs a hash of args");
+    return undef;
+  }
+
+  if($args{'sampleInfoCSV'} eq '') {
+    Carp::croak("OMockPerfEntityMetricCSV args{sampleInfoCSV} is empty");
+    return undef;
+  }
+
+  if(ref($args{'value'}) ne 'ARRAY') {
+    Carp::croak("OMockPerfEntityMetricCSV args{value} must be "
+              . "an array of OMockPerfMetricSeriesCSV");
+    return undef;
+  }
+
+  if(! defined($args{'entity'}->{mo_ref}) ) {
+    Carp::croak("OMockPerfEntityMetricCSV args{entity} doesn't seem an entity");
+    return undef;
+  }
+
   my $self = bless {
-    _sampleInfoCSV      => $args{'sampleInfoCSV'},
-    _value    => $args{'value'},
-    _entity      => $args{'entity'},
+    _sampleInfoCSV => $args{'sampleInfoCSV'},
+    _value         => $args{'value'},
+    _entity        => $args{'entity'},
   }, $class;
   return $self;
 }
 
-# sub instance {
-#   my ($self) = @_;
-#   return $self->{_instance};
-# }
+sub sampleInfoCSV {
+  my ($self) = @_;
+  return $self->{_sampleInfoCSV};
+}
+
+# array of OMockPerfMetricSeriesCSV objects
+sub value {
+  my ($self) = @_;
+  return $self->{_value};
+}
+
+sub entity {
+  my ($self) = @_;
+  return $self->{_entity};
+}
 
 sub stringify {
   my ($self) = @_;

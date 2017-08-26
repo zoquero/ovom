@@ -284,7 +284,7 @@ sub getPerfQuerySpec {
 # Get PerfData object
 #
 # @arg the querySpec
-# @return the object if ok, else undef
+# @return the PerfEntityMetricCSV object if ok, else undef
 #
 sub getPerfData {
   my $r;
@@ -307,6 +307,146 @@ sub getPerfData {
   }
   return $perfManager->QueryPerf(querySpec => $perfQuerySpec);
 }
+
+#
+# Save perf data to disk
+#
+# @arg PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
+# @return 1 ok, 0 errors
+#
+sub savePerfData {
+  my $perfData = shift;
+
+  if( ! defined($perfData) ) {
+    OInventory::log(3, "savePerfData: expects a PerfEntityMetricCSV");
+    return 0;
+  }
+
+  if( ref($perfData) ne 'PerfEntityMetricCSV'
+   && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') {
+    OInventory::log(3, "savePerfData: Got unexpected '" . ref($perfData)
+                     . "' instead of PerfEntityMetricCSV");
+    return 0;
+  }
+
+  my $sampleInfoCSV = $perfData->sampleInfoCSV;
+  # array of OMockPerfMetricSeriesCSV objects:
+  my $entityView    = $perfData->entity;
+
+#print "DEBUG: Let's print perfData for a VM:\n";
+#print "DEBUG: * sampleInfoCSV = '" . substr($sampleInfoCSV, 0, 15) . "...'\n";
+#print "DEBUG: * entityView mo_ref = $entityView->{mo_ref}->{value} \n";
+## print "DEBUG: * value: Primer fent dump:\n" . print Dumper($perfData->value) . "\n";
+#print "DEBUG: * value: i ara valor a valor:\n";
+#foreach my $p (@{$perfData->value}) {
+#print "DEBUG: ** id= '" . $p->id->instance . "',counterId='" . $p->id->counterId . "',value='" . substr($p->value, 0, 15) . "...'\n";
+#}
+
+  my ($folder, $vCenterFolder, $csvFolder, $basenameSeparator);
+
+  OInventory::log(0, "Saving perf data for the " . ref($entityView)
+                   . " name='" . $entityView->{name} . "',mo_ref='"
+                   . $entityView->{mo_ref}->{value} . "'");
+
+  #
+  # Path strings for performance data were already tested
+  # and folders were created at OInventory::createFoldersIfNeeded()
+  #
+  $folder = $OInventory::configuration{'perfdata.root'};
+  $vCenterFolder     = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
+  $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+
+  if( ref($entityView) eq 'HostSystem'
+   || ref($entityView) eq 'OMockView::OMockHostView') {
+    $csvFolder = $vCenterFolder . "/HostSystem";
+  }
+  elsif( ref($entityView) eq 'VirtualMachine'
+      || ref($entityView) eq 'OMockView::OMockVirtualMachineView') {
+    $csvFolder = $vCenterFolder . "/VirtualMachine";
+  }
+  else {
+    OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
+                     . "' instead of HostSystem or VirtualMachine");
+    return 0;
+  }
+
+
+  foreach my $p (@{$perfData->value}) {
+    my $instance  = $p->id->instance;
+    my $counterId = $p->id->counterId;
+    my $value     = $p->value;
+    my $csvPath   = join($basenameSeparator, ($csvFolder . "/" . $entityView->{mo_ref}->{value}, $counterId, $instance));
+    my $csvPathLatest = $csvPath . ".latest.csv";
+# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
+    OInventory::log(0, "Saving in $csvPathLatest");
+
+    my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
+    my @values = split /,/, $value;
+    if($#$timestamps < 3) {
+      OInventory::log(3, "Too few perf data values for mo_ref=" 
+                       . $entityView->{mo_ref}->{value} 
+                       . ",counterId=$counterId,instance=$instance");
+      return 0;
+    }
+    if($#$timestamps != $#values) {
+      OInventory::log(3, "Got different # of timestamps (" . ($#$timestamps + 1) 
+                       . ") than values  (" . ($#values + 1) . ") for mo_ref=" 
+                       . $entityView->{mo_ref}->{value} 
+                       . ",counterId=$counterId,instance=$instance");
+      return 0;
+    }
+
+    my $pDHandle;
+    if(!open($pDHandle, ">", $csvPathLatest)) {
+      OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
+      return 0;
+    }
+
+    for(my $i = 0; $i <=$#$timestamps; $i++) {
+      print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+    }
+
+    if(!close($pDHandle)) {
+      OInventory::log(3, "Could not close perf data file $csvPathLatest: $!");
+      return 0;
+    }
+    OInventory::log(0, "Saved in $csvPathLatest");
+  }
+
+  return 1;
+}
+
+#
+# Get array of timestamps from a "sampleInfoCSV" string
+#
+# Gets a string like '20,2017-08-20T07:52:00Z,20,2017-08-20T07:52:20Z,20,...'
+# and returns a ref to an array like 'epoch0,epoch1,...',
+# where each epoch is the timestamp converted to epoch
+#
+# @arg a string like '20,2017-08-20T07:52:00Z,20,2017-08-20T07:52:20Z,20,...'
+# @return a ref to an array like 'epoch0,epoch1,...', where each epoch is the timestamp converted to epoch
+#
+sub getSampleInfoArrayRefFromString {
+  my $rawSampleInfoStrRef = shift;
+  my @sampleInfoArray = ();
+  my @tmpArray = split /,/, $rawSampleInfoStrRef;
+  my $z = 0;
+#print "DEBUG.gsiarfs: init\n";
+  for my $i (0 .. $#tmpArray) {
+    if ($i % 2) {
+#print "DEBUG:.gsiarfs: push = " . $tmpArray[$i] . "\n";
+
+      # 2017-07-20T05:49:40Z
+      $tmpArray[$i] =~ s/Z$/\+0000/;
+      my $t = Time::Piece->strptime($tmpArray[$i], "%Y-%m-%dT%H:%M:%S%z");
+#     print $tmpArray[$i] . " = " . $t->epoch . "\n";
+
+      push @sampleInfoArray, $t->epoch;
+    }
+  }
+  return \@sampleInfoArray;
+}
+
 
 
 #
@@ -413,15 +553,26 @@ sub getLatestPerformance {
       next;
     }
 
+    #
+    # Let's get perfData
+    #
+    # PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
     my $perfData = getPerfData($perfQuerySpec);
     if(! defined($perfData)) {
       OInventory::log(3, "Could not get perfData for entity");
       next;
     }
+    if( ref($perfData) ne 'PerfEntityMetricCSV'
+     && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') {
+      OInventory::log(3, "Got unexpected " . ref($perfData)
+                       . " instead of PerfEntityMetricCSV for entity");
 
+print "Let's dump the wrong perfData :\n" . Dumper($perfData);
+die "stop";
+      next;
+    }
 
-
-
+    savePerfData($perfData);
 
 
 

@@ -37,6 +37,7 @@ It's in development stage. It's expected to have a release in september 2017 wit
 
 # Some API links
 * http://www.ovh.com/images/vmWorld/OVH60.pdf
+* http://www.virtuallyghetto.com/2011/11/when-do-vsphere-morefs-change.html
 
 # Installation
 
