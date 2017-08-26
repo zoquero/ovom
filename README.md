@@ -37,6 +37,7 @@ It's in development stage. It's expected to have a release in september 2017 wit
 
 # Some API links
 * http://www.ovh.com/images/vmWorld/OVH60.pdf
+* http://www.virtuallyghetto.com/2011/11/when-do-vsphere-morefs-change.html
 
 # Installation
 
@@ -111,7 +112,7 @@ $ mysql -u root       -prootpassword ovomdb < db/deletedb.sql
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_DB_PASSWORD=ovomdbpass  \
               OVOM_VC_USERNAME=vcenteruser \
-              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/extractor.pl\""
+              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\""
 ```
 
 To just ron a loop:
@@ -119,5 +120,5 @@ To just ron a loop:
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_DB_PASSWORD=ovomdbpass  \
               OVOM_VC_USERNAME=vcenteruser \
-              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/extractor.pl\" --once"
+              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\" --once"
 ```

@@ -4,7 +4,7 @@ use warnings;
 use DBI;
 use Time::HiRes; ## gettimeofday
 use Carp;
-use OvomExtractor;
+use OInventory;
 
 
 our $dbh;
@@ -121,7 +121,7 @@ sub connect {
   my $c = 0;
 
   ## Let's test before if this handle is already active:
-  OvomExtractor::log(0, "Testing if the db handle "
+  OInventory::log(0, "Testing if the db handle "
                       . "is already active before connecting to DB");
   eval {
     if($dbh && $dbh->{Active}) {
@@ -129,26 +129,26 @@ sub connect {
     }
   };
   if($@) {
-    OvomExtractor::log(3, "Errors checking if handle active "
+    OInventory::log(3, "Errors checking if handle active "
                         . "before connecting to database: $@");
     return 0;
   }
   if($c == 1) {
-    OvomExtractor::log(3, "BUG! Handle already active before connecting to DB");
+    OInventory::log(3, "BUG! Handle already active before connecting to DB");
     return 0;
   }
 
-  my $connStr  = "dbi:mysql:dbname=" . $OvomExtractor::configuration{'db.name'}
-               . ";host=" . $OvomExtractor::configuration{'db.hostname'};
+  my $connStr  = "dbi:mysql:dbname=" . $OInventory::configuration{'db.name'}
+               . ";host=" . $OInventory::configuration{'db.hostname'};
   my $username = $ENV{'OVOM_DB_USERNAME'}; 
   my $passwd   = $ENV{'OVOM_DB_PASSWORD'}; 
   if(  ! defined($username) || $username eq ''
     || ! defined($passwd)   || $passwd   eq '') {
-    OvomExtractor::log(3, "Can't get DB username or password (check environment "
+    OInventory::log(3, "Can't get DB username or password (check environment "
                         . "variables OVOM_DB_USERNAME and OVOM_DB_PASSWORD)");
     return 0;
   }
-  OvomExtractor::log(0, "Connecting to database with connection string: '$connStr'");
+  OInventory::log(0, "Connecting to database with connection string: '$connStr'");
 
   eval {
     $dbh = DBI->connect($connStr, $username, $passwd,
@@ -158,19 +158,19 @@ sub connect {
                           ShowErrorStatement=>1
                         });
     if(! $dbh) {
-      OvomExtractor::log(3, "Errors connecting to Database: "
+      OInventory::log(3, "Errors connecting to Database: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors connecting to Database: $@");
+    OInventory::log(3, "Errors connecting to Database: $@");
     return 0
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: Connecting to DB "
+  OInventory::log(1, "Profiling: Connecting to DB "
                         . "with connection string: '$connStr' took "
                         . sprintf("%.3f", $eTime) . " s");
   return 1;
@@ -182,22 +182,22 @@ sub connect {
 # @return: 1 (ok), 0 (errors)
 #
 sub disconnect {
-  OvomExtractor::log(0, "Disconnecting from database");
+  OInventory::log(0, "Disconnecting from database");
 
   eval {
     if(! $dbh->disconnect() ) {
-      OvomExtractor::log(3, "Errors disconnecting from Database: "
+      OInventory::log(3, "Errors disconnecting from Database: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors disconnecting from Database: $@");
+    OInventory::log(3, "Errors disconnecting from Database: $@");
     return 0;
   }
 
-  OvomExtractor::log(1, "Successfully disconnected from database");
+  OInventory::log(1, "Successfully disconnected from database");
   return 1;
 }
 
@@ -208,7 +208,7 @@ sub disconnect {
 #
 sub connected {
   my $r = -1;
-  OvomExtractor::log(0, "Checking if connected to database");
+  OInventory::log(0, "Checking if connected to database");
 
   eval {
     if($dbh && $dbh->{Active}) {
@@ -220,11 +220,11 @@ sub connected {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors checking if connected to database: $@");
+    OInventory::log(3, "Errors checking if connected to database: $@");
     return -1;
   }
 
-  OvomExtractor::log(1, "Successfully checked if connected to database ($r)");
+  OInventory::log(1, "Successfully checked if connected to database ($r)");
   return $r;
 }
 
@@ -233,18 +233,18 @@ sub connected {
 # @deprecated We always use AutoCommit off
 #
 sub transactionBegin {
-  OvomExtractor::log(0, "Begining DB transaction");
+  OInventory::log(0, "Begining DB transaction");
 
   eval {
     $dbh->begin_work();
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors begining DB transaction: $@");
+    OInventory::log(3, "Errors begining DB transaction: $@");
     return 1;
   }
 
-  OvomExtractor::log(1, "Successfully begined DB transaction");
+  OInventory::log(1, "Successfully begined DB transaction");
   return 0;
 }
 
@@ -255,45 +255,45 @@ sub transactionBegin {
 # @return 1 if ok, 0 if errors.
 #
 sub transactionCommit {
-  OvomExtractor::log(0, "Commiting DB transaction");
+  OInventory::log(0, "Commiting DB transaction");
 
   eval {
     if (! $dbh->commit() ) {
-      OvomExtractor::log(3, "Errors commiting DB transaction: "
+      OInventory::log(3, "Errors commiting DB transaction: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors commiting DB transaction: $@");
+    OInventory::log(3, "Errors commiting DB transaction: $@");
     return 0;
   }
 
-  OvomExtractor::log(1, "Successfully commited DB transaction");
+  OInventory::log(1, "Successfully commited DB transaction");
   return 1;
 }
 
 
 sub transactionRollback {
-  OvomExtractor::log(0, "Rolling back DB transaction");
+  OInventory::log(0, "Rolling back DB transaction");
 
   eval {
     $dbh->commit();
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors rolling back DB transaction: $@");
+    OInventory::log(3, "Errors rolling back DB transaction: $@");
     return 1;
   }
 
-  OvomExtractor::log(1, "Successfully rolled back DB transaction");
+  OInventory::log(1, "Successfully rolled back DB transaction");
   return 0;
 }
 
 sub select {
 die "deprecated method, must be deleted";
-  OvomExtractor::log(0, "Selecting from DB");
+  OInventory::log(0, "Selecting from DB");
 
   eval {
     $dbh->commit();
@@ -314,11 +314,11 @@ die "deprecated method, must be deleted";
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors getting from DB: $@");
+    OInventory::log(3, "Errors getting from DB: $@");
     return 1;
   }
 
-  OvomExtractor::log(1, "Successfully selected from DB");
+  OInventory::log(1, "Successfully selected from DB");
   return 0;
 }
 
@@ -337,7 +337,7 @@ sub getAllEntitiesOfType {
   $timeBefore=Time::HiRes::time;
   my $stmt;
   my $sthRes;
-  OvomExtractor::log(0, "Getting all entities of type $entityType");
+  OInventory::log(0, "Getting all entities of type $entityType");
 
   if($entityType eq 'Folder') {
     $stmt = $sqlFolderSelectAll;
@@ -402,12 +402,12 @@ sub getAllEntitiesOfType {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors getting all ${entityType}s from DB: $@");
+    OInventory::log(3, "Errors getting all ${entityType}s from DB: $@");
     return undef;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: select all ${entityType}s took "
+  OInventory::log(1, "Profiling: select all ${entityType}s took "
                         . sprintf("%.3f", $eTime) . " s "
                         . "and returned " . ($#r + 1) . " entities");
   return \@r;
@@ -474,7 +474,7 @@ sub update {
     return 0;
   }
 
-  OvomExtractor::log(1, "Updating into db the $oClassName: "
+  OInventory::log(1, "Updating into db the $oClassName: "
                         . $entity->toCsvRow());
 
   my $sthRes;
@@ -557,12 +557,12 @@ sub update {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors updating a $oClassName into DB: $@");
+    OInventory::log(3, "Errors updating a $oClassName into DB: $@");
     return 0;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: updating " . $sthRes . " $oClassName took "
+  OInventory::log(1, "Profiling: updating " . $sthRes . " $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
   return 1;
 }
@@ -616,11 +616,11 @@ sub delete {
   }
 
   if(defined($entity->{name})) {
-    OvomExtractor::log(0, "Deleting from DB the $oClassName "
+    OInventory::log(0, "Deleting from DB the $oClassName "
                           . $entity->toCsvRow());
   }
   else {
-    OvomExtractor::log(0, "Deleting from DB the $oClassName with mo_ref = '"
+    OInventory::log(0, "Deleting from DB the $oClassName with mo_ref = '"
                           . $entity->{mo_ref} . "'");
   }
   my @data;
@@ -652,12 +652,12 @@ sub delete {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors deleting a $oClassName from DB: $@");
+    OInventory::log(3, "Errors deleting a $oClassName from DB: $@");
     return 0;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: deleting a $oClassName took "
+  OInventory::log(1, "Profiling: deleting a $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
   return 1;
 }
@@ -715,7 +715,7 @@ sub loadEntityByMoRef {
     return undef;
   }
 
-  OvomExtractor::log(0, "selecting from db a ${entityType} with mo_ref = " . $moRef);
+  OInventory::log(0, "selecting from db a ${entityType} with mo_ref = " . $moRef);
 
   eval {
     my $sth = $dbh->prepare_cached($stmt)
@@ -763,12 +763,12 @@ sub loadEntityByMoRef {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors getting a ${entityType} from DB: $@");
+    OInventory::log(3, "Errors getting a ${entityType} from DB: $@");
     return undef;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: select a ${entityType} took "
+  OInventory::log(1, "Profiling: select a ${entityType} took "
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
 }
@@ -834,7 +834,7 @@ sub insert {
     return 0;
   }
 
-  OvomExtractor::log(1, "Inserting into db the $oClassName: "
+  OInventory::log(1, "Inserting into db the $oClassName: "
                         . $entity->toCsvRow());
 
   my @data;
@@ -945,12 +945,12 @@ sub insert {
   };
 
   if($@) {
-    OvomExtractor::log(3, "Errors inserting a $oClassName into DB: $@");
+    OInventory::log(3, "Errors inserting a $oClassName into DB: $@");
     return 0;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OvomExtractor::log(1, "Profiling: insert a $oClassName took "
+  OInventory::log(1, "Profiling: insert a $oClassName took "
                         . sprintf("%.3f", $eTime) . " s");
   return 1;
 }

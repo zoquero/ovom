@@ -1,4 +1,4 @@
-package OMockHostView;
+package OMockView::OMockFolderView;
 use strict;
 use warnings;
 use Carp;

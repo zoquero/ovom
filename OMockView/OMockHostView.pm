@@ -1,4 +1,4 @@
-package OMockVirtualMachineView;
+package OMockView::OMockHostView;
 use strict;
 use warnings;
 use Carp;

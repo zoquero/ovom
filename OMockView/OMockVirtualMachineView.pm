@@ -1,4 +1,4 @@
-package OMockFolderView;
+package OMockView::OMockVirtualMachineView;
 use strict;
 use warnings;
 use Carp;
