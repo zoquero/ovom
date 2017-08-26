@@ -62,15 +62,28 @@ sub getPerfManager {
     }
 
     eval {
+      local $SIG{ALRM} = sub { die "Timeout getting perfManager" };
+      my $maxSecs = $OInventory::configuration{'api.timeout'};
+      alarm $maxSecs;
+      OInventory::log(0, "Getting perfManager with ${maxSecs}s timeout");
       $perfManagerView = Vim::get_view(mo_ref => Vim::get_service_content()->perfManager);
+      alarm 0;
     };
     if($@) {
-      $perfManagerView = undef;
-      OInventory::log(3, "Can't get perfManager from VIM service content: $@");
-      return undef;
+      if ($@ =~ /Timeout getting perfManager/) {
+        OInventory::log(3, "Timeout! could not get perfManager from "
+                         . "VIM service in a timely fashion: $@");
+        $perfManagerView = undef;
+        return undef;
+      }
+      else {
+        OInventory::log(3, "Can't get perfManager from VIM service: $@");
+        $perfManagerView = undef;
+        return undef;
+      }
     }
     if(! defined($perfManagerView)) {
-      OInventory::log(3, "Can't get perfManager from VIM service content.");
+      OInventory::log(3, "Can't get perfManager from VIM service.");
       return undef;
     }
   }
@@ -307,7 +320,6 @@ sub getPerfData {
     OInventory::log(3, "Errors getting getPerfManager");
     return undef;
   }
-print "Calling QueryPerf for : \n" . Dumper($perfQuerySpec) . "\n";
 
   eval {
     local $SIG{ALRM} = sub { die "Timeout calling QueryPerf" };
@@ -500,6 +512,9 @@ sub getLatestPerformance {
 
   OInventory::log(0, "Updating performance");
 
+  #
+  # Get perfManager
+  #
   OInventory::log(0, "Let's get perfManager");
   $timeBefore=Time::HiRes::time;
   $perfManager=getPerfManager();
@@ -596,9 +611,7 @@ sub getLatestPerformance {
     #
     # PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
     $timeBefore=Time::HiRes::time;
-print "abans\n";
     my $perfData = getPerfData($perfQuerySpec);
-print "despres\n";
     if(! defined($perfData)) {
       OInventory::log(3, "Could not get perfData for entity");
       next;

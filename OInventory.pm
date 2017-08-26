@@ -132,7 +132,12 @@ sub connectToVcenter {
     return 0;
   }
   eval {
+    local $SIG{ALRM} = sub { die "Timeout connecting to vCenter" };
+    my $maxSecs = $OInventory::configuration{'api.timeout'};
+    alarm $maxSecs;
+    OInventory::log(0, "Connecting to vCenter, with ${maxSecs}s timeout");
     Util::connect($vCWSUrl, $user, $pass);
+    alarm 0;
   };
   if($@) {
     OInventory::log(3, "Errors connecting to $vCWSUrl: $@");
@@ -154,7 +159,13 @@ sub disconnectFromVcenter {
     return 1;
   }
 
-  eval { Util::disconnect(); };
+  eval {
+    local $SIG{ALRM} = sub { die "Timeout disconnecting from vCenter" };
+    my $maxSecs = $OInventory::configuration{'api.timeout'};
+    alarm $maxSecs;
+    Util::disconnect();
+    alarm 0;
+  };
   if($@) {
     OInventory::log(3, "Errors disconnecting from vCenter : $@");
     return 0;
@@ -908,20 +919,36 @@ sub updateInventory {
     else {
       if ($aEntityType eq 'Datacenter') {
         eval {
+          local $SIG{ALRM} = sub {die "Timeout calling Vim::find_entity_views"};
+          my $maxSecs = $OInventory::configuration{'api.timeout'};
+          alarm $maxSecs;
           $entityViews = Vim::find_entity_views(
             'view_type'  => $aEntityType,
 #           'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
             'properties' => ['name','parent','datastoreFolder','vmFolder','hostFolder','networkFolder']
           );
+          alarm 0;
         };
+        if ($@) {
+          OInventory::log(3, "Vim::find_entity_views failed: $@");
+          return undef;
+        }
       }
       else {
         eval {
+          local $SIG{ALRM} = sub {die "Timeout calling Vim::find_entity_views"};
+          my $maxSecs = $OInventory::configuration{'api.timeout'};
+          alarm $maxSecs;
           $entityViews = Vim::find_entity_views(
             'view_type'  => $aEntityType,
             'properties' => ['name','parent']
           );
+          alarm 0;
         };
+        if ($@) {
+          OInventory::log(3, "Vim::find_entity_views failed: $@");
+          return undef;
+        }
       }
     }
 
