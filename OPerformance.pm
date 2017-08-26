@@ -307,7 +307,28 @@ sub getPerfData {
     OInventory::log(3, "Errors getting getPerfManager");
     return undef;
   }
-  return $perfManager->QueryPerf(querySpec => $perfQuerySpec);
+print "Calling QueryPerf for : \n" . Dumper($perfQuerySpec) . "\n";
+
+  eval {
+    local $SIG{ALRM} = sub { die "Timeout calling QueryPerf" };
+    my $maxSecs = $OInventory::configuration{'api.timeout'};
+    alarm $maxSecs;
+    OInventory::log(0, "Calling QueryPerf, with a timeout of $maxSecs seconds");
+    $r = $perfManager->QueryPerf(querySpec => $perfQuerySpec);
+    alarm 0;
+  };
+  if ($@) {
+    if ($@ =~ /Timeout calling QueryPerf/) {
+      OInventory::log(3, "Timeout! perfManager->QueryPerf did not respond "
+                       . "in a timely fashion: $@");
+      return undef;
+    } else {
+      OInventory::log(3, "perfManager->QueryPerf failed: $@");
+      return undef;
+    }
+  }
+
+  return $r;
 }
 
 #
@@ -500,16 +521,6 @@ sub getLatestPerformance {
   OInventory::log(1, "Profiling: Initiating counter info took "
                      . sprintf("%.3f", $eTime) . " s");
 
-# print "DEBUG: === keys for all counters: ===\n";
-# foreach my $aK (keys %allCounters) {
-#   print "DEBUG:   key = '$aK'\n";
-# }
-# print "DEBUG: === groupInfo keys for all counters: ===\n";
-# foreach my $aK (keys %allCountersByGIKey) {
-#   print "DEBUG:   groupInfo key = '$aK'\n";
-# }
-
-
   my @entities;
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     push @entities, $aVM;
@@ -520,23 +531,23 @@ sub getLatestPerformance {
 
   $timeBeforeB=Time::HiRes::time;
 # foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) 
-  foreach my $aVM (@entities) {
+  foreach my $aEntity (@entities) {
     my ($timeBefore, $eTime);
     my $availablePerfMetricIds;
     my $filteredPerfMetricIds;
     my $desiredGroupInfo;
 
     # TO_DO : move it to a getAvailablePerfMetric function
-    $availablePerfMetricIds = $perfManager->QueryAvailablePerfMetric(entity => $aVM->{view});
+    $availablePerfMetricIds = $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
 
-    OInventory::log(0, "Available PerfMetricIds for $aVM:");
+    OInventory::log(0, "Available PerfMetricIds for $aEntity:");
     foreach my $pMI (@$availablePerfMetricIds) {
       OInventory::log(0, " * PerfMetricId: {"
                        . "counterId='" . $pMI->counterId . "', "
                        . "instance='"  . $pMI->instance  . "'}");
     }
 
-    $desiredGroupInfo = getDesiredGroupInfoForEntity($aVM);
+    $desiredGroupInfo = getDesiredGroupInfoForEntity($aEntity);
     if(!defined($desiredGroupInfo) || $#$desiredGroupInfo == -1) {
       OInventory::log(2, "There are not desired groupInfo of perfCounters "
                        . "configured for this entity. Review configuration.");
@@ -571,7 +582,7 @@ sub getLatestPerformance {
     #
     # Let's get the perf query spec to later retrieve perf data:
     #
-    my $perfQuerySpec = getPerfQuerySpec(entity     => $aVM->{view},
+    my $perfQuerySpec = getPerfQuerySpec(entity     => $aEntity->{view},
                                          metricId   => $filteredPerfMetricIds,
                                          format     => 'csv',
                                          intervalId => 20); # 20s hardcoded
@@ -584,7 +595,10 @@ sub getLatestPerformance {
     # Let's get perfData
     #
     # PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
+    $timeBefore=Time::HiRes::time;
+print "abans\n";
     my $perfData = getPerfData($perfQuerySpec);
+print "despres\n";
     if(! defined($perfData)) {
       OInventory::log(3, "Could not get perfData for entity");
       next;
@@ -596,11 +610,17 @@ sub getLatestPerformance {
                        . " instead of array of PerfEntityMetricCSV for entity");
       next;
     }
+    $eTime=Time::HiRes::time - $timeBefore;
+    OInventory::log(1, "Profiling: Getting performance for "
+                     . ref($aEntity) . ": "
+                     . "{name='" . $aEntity->{name} . "',mo_ref='"
+                     . $aEntity->{mo_ref} . "'} took "
+                     . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
     if(! savePerfData($perfData)) {
-      OInventory::log(3, "Errors getting performance from " . ref($aVM)
-                       . " with mo_ref '" . $aVM->{mo_ref} . "'");
+      OInventory::log(3, "Errors getting performance from " . ref($aEntity)
+                       . " with mo_ref '" . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
         OInventory::log(3, "Too many errors when getting performance from "
                          . "vCenter. We'll try again on next picker's loop");
@@ -609,36 +629,15 @@ sub getLatestPerformance {
       next;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Getting and saving performance for "
-                     . ref($aVM) . ": "
-                     . "{name='" . $aVM->{name} . "',mo_ref='"
-                     . $aVM->{mo_ref} . "'} took "
+    OInventory::log(1, "Profiling: Saving performance for "
+                     . ref($aEntity) . ": "
+                     . "{name='" . $aEntity->{name} . "',mo_ref='"
+                     . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
-#  foreach my $aHost (@{$OInventory::inventory{'HostSystem'}}) {
-#    my ($timeBefore, $eTime);
-#    $timeBefore=Time::HiRes::time;
-#    if(! getHostPerfs($aHost)) {
-#      OInventory::log(3, "Errors getting performance from host with mo_ref '"
-#                       . $aHost->{mo_ref} . "'");
-#      if(! --$maxErrs) {
-#        OInventory::log(3, "Max number of errors reached when getting "
-#                         . "performance from vCenter. We will try again "
-#                         . "on next picker's loop");
-#        return 0;
-#      }
-#      next;
-#    }
-#    $eTime=Time::HiRes::time - $timeBefore;
-#    OInventory::log(0, "Profiling: Updating performance for Host: "
-#                     . "{name='" . $aHost->{name} . "',mo_ref='"
-#                     . $aHost->{mo_ref} . "'} took "
-#                     . sprintf("%.3f", $eTime) . " s");
-#  }
-
   $eTimeB=Time::HiRes::time - $timeBeforeB;
   OInventory::log(1, "Profiling: Getting the whole data performance took "
-                     . sprintf("%.3f", $eTime) . " s");
+                     . sprintf("%.3f", $eTimeB) . " s");
 
   return 1;
 }
