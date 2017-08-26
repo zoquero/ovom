@@ -31,7 +31,8 @@ It's in an initial development stage but its goals are:
 It's in development stage. It's expected to have a release in september 2017 with at least:
 
 * (done! v0.1) Inventory 
-* Extraction of performance metrics (work in progress)
+* (done! v0.2) Extraction of performance metrics
+* RRDB on perf data (work in progress)
 * Show performance graphics
 * Report alarms
 
