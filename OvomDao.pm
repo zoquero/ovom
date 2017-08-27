@@ -341,7 +341,7 @@ die "deprecated method, must be deleted";
 
 
 #
-# Get all folders from DB.
+# Get all entities of a type from DB.
 #
 # @return undef (if errors),
 #         or a reference to array of references to entity objects (if ok)
@@ -370,6 +370,9 @@ sub getAllEntitiesOfType {
   }
   elsif($entityType eq 'VirtualMachine') {
     $stmt = $sqlVirtualMachineSelectAll;
+  }
+  elsif($entityType eq 'PerfCounterInfo') {
+    $stmt = $sqlPerfCounterInfoSelectAll;
   }
   else {
     Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
@@ -410,6 +413,10 @@ sub getAllEntitiesOfType {
         $e = OVirtualMachine->new(\@data);
         push @r, $e;
       }
+      elsif($entityType eq 'PerfCounterInfo') {
+        $e = OMockView->OMockPerfCounterInfo->new(\@data);
+        push @r, $e;
+      }
       else {
         Carp::croak("Not implemented for $entityType "
                   . "in OvomDao.getAllEntitiesOfType");
@@ -417,7 +424,6 @@ sub getAllEntitiesOfType {
       }
     }
   };
-
   if($@) {
     OInventory::log(3, "Errors getting all ${entityType}s from DB: $@");
     return undef;
@@ -440,55 +446,69 @@ sub update {
 
   # Pre-conditions
   if (! defined ($entity)) {
-    Carp::croak("OvomDao.update needs an entity");
-    return 0;
-  }
-  if (! defined ($entity->{oclass_name})) {
-    Carp::croak("OvomDao.update: the parameter doesn't look like an entity");
-    return 0;
-  }
-  my $oClassName = $entity->{oclass_name};
-  if($oClassName ne 'OCluster'
-  && $oClassName ne 'ODatacenter'
-  && $oClassName ne 'OFolder'
-  && $oClassName ne 'OHost'
-  && $oClassName ne 'OVirtualMachine') {
-    Carp::croak("OvomDao.update needs an entity");
+    Carp::croak("OvomDao.update missing entity parameter");
     return 0;
   }
 
-  if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
-    Carp::croak("Trying to update a $oClassName without mo_ref");
-    return 0;
-  }
-  if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
-    Carp::croak("Trying to update a $oClassName without name");
-    return 0;
-  }
-  if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
-    Carp::croak("Trying to update a $oClassName without parent");
-    return 0;
-  }
+  my $oClassName = ref($entity);
 
+  # 0 = Datacenter           (entity with parent)
+  # 1 = Entity no-Datacenter (entity with parent and has folder like networkF )
+  # 2 = PerfCounterInfo      (hasn't parent, a regular update)
+  my $updateType = -1;
   my $stmt;
-  if($oClassName eq 'OFolder') {
+  if(   $oClassName eq 'Folder' 
+     || $oClassName eq 'OMockView::OMockFolderView') {
     $stmt = $sqlFolderUpdate;
+    $updateType = 1;
   }
-  elsif($oClassName eq 'ODatacenter') {
+  elsif($oClassName eq 'Datacenter'
+     || $oClassName eq 'OMockView::OMockDatacenterView') {
     $stmt = $sqlDatacenterUpdate;
+    $updateType = 0;
   }
-  elsif($oClassName eq 'OCluster') {
+  elsif($oClassName eq 'OCluster'
+     || $oClassName eq 'OMockView::OMockClusterView') {
     $stmt = $sqlClusterUpdate;
+    $updateType = 1;
   }
-  elsif($oClassName eq 'OHost') {
+  elsif($oClassName eq 'Host'
+     || $oClassName eq 'OMockView::OMockHostView') {
     $stmt = $sqlHostUpdate;
+    $updateType = 1;
   }
-  elsif($oClassName eq 'OVirtualMachine') {
+  elsif($oClassName eq 'VirtualMachine'
+     || $oClassName eq 'OMockView::OMockVirtualMachineView') {
     $stmt = $sqlVirtualMachineUpdate;
+    $updateType = 1;
+  }
+  elsif($oClassName eq 'PerfCounterInfo'
+     || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
+    $stmt = $sqlPerfCounterInfoUpdate;
+    $updateType = 2;
   }
   else {
-    Carp::croak("Statement unimplemented for $oClassName in OvomDao.update");
+    Carp::croak("Statement unimplemented for "
+              . "unexpected class $oClassName in OvomDao.update");
     return 0;
+  }
+
+  #
+  # Sanity check: Entities need mo_ref , name and parent
+  #
+  if($updateType == 0 || $updateType == 1) {
+    if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
+      Carp::croak("Trying to update a $oClassName without mo_ref");
+      return 0;
+    }
+    if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
+      Carp::croak("Trying to update a $oClassName without name");
+      return 0;
+    }
+    if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
+      Carp::croak("Trying to update a $oClassName without parent");
+      return 0;
+    }
   }
 
   OInventory::log(1, "Updating into db the $oClassName: "
@@ -515,11 +535,17 @@ sub update {
       return 0;
     }
 
-    if($oClassName eq 'OFolder' || $oClassName eq 'OHost' || $oClassName eq 'OCluster' || $oClassName eq 'OVirtualMachine') {
+    # PerfCounterInfo
+    if($updateType == 2) {
+      $sthRes = $sth->execute($entity->{name}, $entity->key);
+    }
+    # Host, Cluster, VirtualMachine, ...
+    elsif($updateType == 1) {
       $sthRes = $sth->execute($entity->{name}, $loadedParentId,
                               $entity->{mo_ref});
     }
-    elsif($oClassName eq 'ODatacenter') {
+    # Datacenter
+    elsif($updateType == 0) {
       #
       # First have to extract the folder id
       # for datastoreFolder, vmFolder, hostFolder and networkFolder
@@ -593,53 +619,63 @@ sub delete {
   my $entity = shift;
 
   # Pre-conditions
-  if (! defined ($entity)) {
-    Carp::croak("OvomDao.delete needs an entity");
+  if (! defined($entity)) {
+    Carp::croak("OvomDao.delete needs an object as argument");
     return 0;
   }
-  if (! defined ($entity->{oclass_name})) {
-    Carp::croak("OvomDao.delete: the parameter doesn't look like an entity");
-    return 0;
-  }
-  my $oClassName = $entity->{oclass_name};
-  if($oClassName ne 'OCluster'
-  && $oClassName ne 'ODatacenter'
-  && $oClassName ne 'OFolder'
-  && $oClassName ne 'OHost'
-  && $oClassName ne 'OVirtualMachine') {
-    Carp::croak("OvomDao.delete needs an entity");
+  my $oClassName = ref($entity);
+  if ($oClassName eq '') {
+    Carp::croak("OvomDao.delete needs an object");
     return 0;
   }
 
+  my $keyName;
+  my $keyValue;
   my $stmt;
-  if($oClassName eq 'OFolder') {
+  if(   $oClassName eq 'Folder'
+     || $oClassName eq 'OMockView::OMockFolderView') {
     $stmt = $sqlFolderDelete;
+    $keyName  = 'mo_ref';
+    $keyValue = $entity->{mo_ref};
   }
-  elsif($oClassName eq 'ODatacenter') {
+  elsif($oClassName eq 'Datacenter'
+     || $oClassName eq 'OMockView::OMockDatacenterView') {
     $stmt = $sqlDatacenterDelete;
+    $keyName  = 'mo_ref';
+    $keyValue = $entity->{mo_ref};
   }
-  elsif($oClassName eq 'OCluster') {
+  elsif($oClassName eq 'Cluster'
+     || $oClassName eq 'OMockView::OMockClusterView') {
     $stmt = $sqlClusterDelete;
+    $keyName  = 'mo_ref';
+    $keyValue = $entity->{mo_ref};
   }
-  elsif($oClassName eq 'OHost') {
+  elsif($oClassName eq 'Host'
+     || $oClassName eq 'OMockView::OMockHostView') {
     $stmt = $sqlHostDelete;
+    $keyName  = 'mo_ref';
+    $keyValue = $entity->{mo_ref};
   }
-  elsif($oClassName eq 'OVirtualMachine') {
+  elsif($oClassName eq 'VirtualMachine'
+     || $oClassName eq 'OMockView::OMockVirtualMachineView') {
     $stmt = $sqlVirtualMachineDelete;
+    $keyName  = 'mo_ref';
+    $keyValue = $entity->{mo_ref};
+  }
+  elsif($oClassName eq 'PerfCounterInfo'
+     || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
+    $stmt = $sqlPerfCounterInfoDelete;
+    $keyName  = 'key';
+    $keyValue = $entity->key;
   }
   else {
-    Carp::croak("Statement stil unimplemented in OvomDao.delete");
+    Carp::croak("Statement stil unimplemented "
+              . "for '$oClassName' in OvomDao.delete");
     return 0;
   }
 
-  if(defined($entity->{name})) {
-    OInventory::log(0, "Deleting from DB the $oClassName "
-                          . $entity->toCsvRow());
-  }
-  else {
-    OInventory::log(0, "Deleting from DB the $oClassName with mo_ref = '"
-                          . $entity->{mo_ref} . "'");
-  }
+  OInventory::log(0, "Deleting from DB the $oClassName "
+                   . "with $keyName='$keyValue'");
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -647,7 +683,7 @@ sub delete {
   eval {
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croak("Can't prepare statement for deleting a $oClassName: "
+      Carp::croak("Can't prepare statement to delete a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -656,7 +692,7 @@ sub delete {
     $sthRes = $sth->execute($entity->{mo_ref});
 
     if(! $sthRes) {
-      Carp::croak("Can't execute the statement for deleting a $oClassName: "
+      Carp::croak("Can't execute the statement to delete a $oClassName: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       $sth->finish();
       return 0;
@@ -731,7 +767,7 @@ sub loadEntityByMoRef {
     $stmt = $sqlPerfCounterInfoSelectByKey;
   }
   else {
-    Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
+    Carp::croak("loadEntityByMoRef not implemented for '$entityType'");
     return undef;
   }
 
@@ -806,7 +842,7 @@ sub insert {
   my $entity = shift;
 
   # Pre-conditions
-  if (! defined ($entity)) {
+  if (! defined($entity)) {
     Carp::croak("OvomDao.insert needs an entity");
     return 0;
   }
@@ -814,15 +850,7 @@ sub insert {
     Carp::croak("OvomDao.insert: the parameter doesn't look like an entity");
     return 0;
   }
-  my $oClassName = $entity->{oclass_name};
-  if($oClassName ne 'OCluster'
-  && $oClassName ne 'ODatacenter'
-  && $oClassName ne 'OFolder'
-  && $oClassName ne 'OHost'
-  && $oClassName ne 'OVirtualMachine') {
-    Carp::croak("OvomDao.insert needs an entity");
-    return 0;
-  }
+  my $oClassName = ref($entity);
 
   if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
     Carp::croak("Trying to insert a $oClassName without mo_ref");
@@ -837,47 +865,77 @@ sub insert {
     return 0;
   }
 
+  # 0 = Datacenter           (entity with parent)
+  # 1 = Entity no-Datacenter (entity with parent and has folder like networkF )
+  # 2 = PerfCounterInfo      (hasn't parent, a regular update)
+  my $insertType = -1;
   my $stmt;
-  if($oClassName    eq 'OFolder') {
+  if(   $oClassName    eq 'Folder'
+     || $oClassName eq 'OMockView::OMockFolderView') {
     $stmt = $sqlFolderInsert;
+    $insertType = 1;
   }
-  elsif($oClassName eq 'ODatacenter') {
+  elsif($oClassName eq 'Datacenter'
+     || $oClassName eq 'OMockView::OMockDatacenterView') {
     $stmt = $sqlDatacenterInsert;
+    $insertType = 0;
   }
-  elsif($oClassName eq 'OHost') {
+  elsif($oClassName eq 'Host'
+     || $oClassName eq 'OMockView::OMockHostView') {
     $stmt = $sqlHostInsert;
+    $insertType = 1;
   }
-  elsif($oClassName eq 'OCluster') {
+  elsif($oClassName eq 'Cluster'
+     || $oClassName eq 'OMockView::OMockClusterView') {
     $stmt = $sqlClusterInsert;
+    $insertType = 1;
   }
-  elsif($oClassName eq 'OVirtualMachine') {
+  elsif($oClassName eq 'VirtualMachine'
+     || $oClassName eq 'OMockView::OMockVirtualMachineView') {
     $stmt = $sqlVirtualMachineInsert;
+    $insertType = 1;
+  }
+  elsif($oClassName eq 'PerfCounterInfo'
+     || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
+    $stmt = $sqlPerfCounterInfoInsert;
+    $insertType = 2;
   }
   else {
-    Carp::croak("Statement unimplemented for $oClassName in OvomDao.insert");
+    Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
     return 0;
   }
 
-  OInventory::log(1, "Inserting into db the $oClassName: "
-                        . $entity->toCsvRow());
+  if($insertType == 0 || $insertType == 1) {
+    OInventory::log(1, "Inserting into db the $oClassName: "
+                     . $entity->toCsvRow());
+  }
+  else {
+    OInventory::log(1, "Inserting into db the $oClassName "
+                     . "with key='" . $entity->key . "'");
+  }
 
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
 
+  my $loadedParentId;
   eval {
-    my $parentFolder = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
-    if( ! defined($parentFolder) ) {
-      Carp::croak("Can't find the parent for the $oClassName "
-                . "with mo_ref " . $entity->{mo_ref});
-      return 0;
+
+    if($insertType == 0 || $insertType == 1) {
+      my $parentFolder = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
+      if( ! defined($parentFolder) ) {
+        Carp::croak("Can't find the parent for the $oClassName "
+                  . "with mo_ref " . $entity->{mo_ref});
+        return 0;
+      }
+      $loadedParentId = $parentFolder->{id};
+      if( ! defined($loadedParentId) ) {
+        Carp::croak("Can't get the id of the parent for the $oClassName "
+                  . "with mo_ref " . $entity->{mo_ref});
+        return 0;
+      }
     }
-    my $loadedParentId = $parentFolder->{id};
-    if( ! defined($loadedParentId) ) {
-      Carp::croak("Can't get the id of the parent for the $oClassName "
-                . "with mo_ref " . $entity->{mo_ref});
-      return 0;
-    }
+
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
       Carp::croak("Can't prepare statement for inserting a $oClassName: "
@@ -886,10 +944,13 @@ sub insert {
     }
 
     my $sthRes;
-    if($oClassName eq 'OFolder' || $oClassName eq 'OHost' || $oClassName eq 'OCluster' || $oClassName eq 'OVirtualMachine') {
+    if($insertType == 1) {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
-    elsif($oClassName eq 'ODatacenter') {
+    elsif($insertType == 2) {
+      $sthRes = $sth->execute($entity->PENDING_TO_DEFINE, $entity->key);
+    }
+    elsif($insertType == 0) {
       #
       # First have to extract the folder id
       # for datastoreFolder, vmFolder, hostFolder and networkFolder
@@ -962,8 +1023,7 @@ sub insert {
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
-      Carp::croak("Didn't inserted any $oClassName, "
-                . "trying to insert the one with mo_ref " . $entity->{mo_ref});
+      Carp::croak("Couldn't insert a $oClassName");
       return 0;
     }
   };
