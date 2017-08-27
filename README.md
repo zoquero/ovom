@@ -80,16 +80,6 @@ $ mysql -u root       -prootpassword ovomdb < db/ddl.sql
 $ mysql -u root       -prootpassword ovomdb < db/data.sql
 ```
 
-## Run sample
-
-```
-Ex.:
-$ OVOM_DB_USERNAME=ovomdbuser  \
-  OVOM_DB_PASSWORD=ovomdbpass  \
-  OVOM_VC_USERNAME=vcenteruser \
-  OVOM_VC_PASSWORD=vcenterpass ./testdao.pl 
-```
-
 # Uninstallation
 
 * Remove authorizations (revoke grants), user and database:

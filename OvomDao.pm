@@ -109,6 +109,23 @@ our $sqlVirtualMachineUpdate = 'UPDATE virtualmachine '
                              . 'set name = ?, parent = ? where moref = ?';
 our $sqlVirtualMachineDelete = 'DELETE FROM virtualmachine where moref = ?';
 
+####################################
+# SQL Statements for PerfCounterInfo
+####################################
+our $sqlPerfCounterInfoSelectAll 
+                             = 'SELECT a.stats_type, a.per_device_level, a.name_info_key, a.name_info_label, a.name_info_summary, a.group_info_key, a.group_info_label, a.group_info_summary, a.pci_key, a.pci_level, a.rollup_type, a.unit_info_key, a.unit_info_label, a.unit_info_summary '
+                             . 'FROM perf_counter_info as a';
+our $sqlPerfCounterInfoSelectByKey     = 'SELECT a.stats_type, a.per_device_level, a.name_info_key, a.name_info_label, a.name_info_summary, a.group_info_key, a.group_info_label, a.group_info_summary, a.pci_key, a.pci_level, a.rollup_type, a.unit_info_key, a.unit_info_label, a.unit_info_summary '
+                             . 'FROM perf_counter_info as a '
+                             . 'where a.pci_key = ?';
+our $sqlPerfCounterInfoInsert
+                             = 'INSERT INTO perf_counter_info (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level) '
+                             . 'VALUES (?, ?, ?)';
+our $sqlPerfCounterInfoUpdate
+                             = 'UPDATE perf_counter_info set pci_key = ?, name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?';
+our $sqlPerfCounterInfoDelete
+                             = 'DELETE FROM perf_counter_info where moref = ?';
+
 
 #
 # Connect to DataBase
@@ -666,7 +683,7 @@ sub delete {
 # Get an Entity from DB by mo_ref.
 #
 # @arg mo_ref
-# @arg entity type (OFolder | ODatacenter | OCluster | OHost | OVirtualMachine)
+# @arg entity type (OFolder | ODatacenter | OCluster | OHost | OVirtualMachine | PerfCounterInfo)
 # @return undef (if errors), or a reference to an Entity object (if ok)
 #
 sub loadEntityByMoRef {
@@ -709,6 +726,9 @@ sub loadEntityByMoRef {
   }
   elsif($entityType eq 'OVirtualMachine') {
     $stmt = $sqlVirtualMachineSelectByMoref;
+  }
+  elsif($entityType eq 'PerfCounterInfo') {
+    $stmt = $sqlPerfCounterInfoSelectByKey;
   }
   else {
     Carp::croak("Not implemented in OvomDao.loadEntityByMoRef");
@@ -754,6 +774,9 @@ sub loadEntityByMoRef {
       elsif($entityType eq 'OVirtualMachine') {
         $r = OVirtualMachine->new(\@data);
       }
+      elsif($entityType eq 'PerfCounterInfo') {
+        $r = OMockView::OMockPerfCounterInfo->new(\@data);
+      }
       else {
         Carp::croak("Not implemented for $entityType "
                   . "in OvomDao.loadEntityByMoRef");
@@ -772,6 +795,7 @@ sub loadEntityByMoRef {
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
 }
+
 
 #
 # Insert an object into DB

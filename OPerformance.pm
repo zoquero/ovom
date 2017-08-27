@@ -10,6 +10,7 @@ use VMware::VIRuntime;
 use Data::Dumper;
 
 use OInventory;
+use OvomDao;
 
 # Our entities:
 use ODatacenter;
@@ -91,6 +92,62 @@ sub getPerfManager {
   return $perfManagerView;
 }
 
+#
+# Update a perfCounterInfo if needed
+#
+# @return  2 (if updated),
+#          1 (if inserted),
+#          0 (if it doesn't need to be update),
+#         -1 (if errors)
+#
+sub updatePciIfNeeded {
+  my $pCI = shift;
+  my $ret = -2;
+
+print "DEBUG: updatePciIfNeeded for pCI key " . $pCI->key . "\n";
+  # Pre-conditions
+  if (! defined($pCI)) {
+    OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo");
+    return -1;
+  }
+  if (    ref($pCI) ne 'OMockView::OMockPerfCounterInfo'
+       && ref($pCI) ne 'PerfCounterInfo') {
+    OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo "
+                     . "and got a " . ref($pCI));
+    return -1;
+  }
+
+  my $loadedPci = OvomDao::loadEntityByMoRef($pCI->key, 'PerfCounterInfo');
+  if( ! defined($loadedPci)) {
+    OInventory::log(0, "Can't find the perfCounterInfo with key="
+                     . $pCI->key . " on DB. Let's insert it");
+    if( ! OvomDao::insert($pCI) ) {
+      OInventory::log(3, "updateAsNeeded can't insert the PerfCounterInfo "
+                  . " with key '" . $pCI->key . "'" );
+      return -1;
+    }
+    $ret = 1;
+  }
+  else {
+    my $comp = $loadedPci->compare($pCI);
+    if ($comp == 1) {
+# print "DEBUG: It's equal. It hasn't to change in DB
+      # Equal, Nop
+    }
+    elsif ($comp == 0) {
+      # Changed (same mo_ref but some other attribute differs)
+# print "DEBUG: It has to be UPDATED into DB.
+      OvomDao::update($pCI);
+    }
+    else {
+      # Errors
+      return -1;
+    }
+  }
+
+die "Pending to implement Dao::insert , Dao::update for PerfCounterInfo and OMockPerfCounterInfo::compare";
+  return 0;
+}
 
 #
 # Initiate counter info
@@ -139,12 +196,34 @@ sub initCounterInfo {
     return 0;
   }
 
-	  foreach my $pCI (@$perfCounterInfo) {
-	    my $key = $pCI->key;
-	    $allCounters{$key} = $pCI;
-	    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
-	  }
-	  return 1;
+  foreach my $pCI (@$perfCounterInfo) {
+    #
+    # Reference it from allCounters and allCountersByGIKey vars
+    #
+    my $key = $pCI->key;
+    $allCounters{$key} = $pCI;
+    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+
+    #
+    # Store it on DataBase
+    #
+    my $r = updatePciIfNeeded($pCI);
+    if( $r == 2 ) {
+      OInventory::log(2, "The perfCounter key=" . $pCI->key . " changed on DB");
+    }
+    elsif( $r == 1 ) {
+      OInventory::log(2, "New perfCounter key=" . $pCI->key . " inserted on DB");
+    }
+    elsif( $r == 0 ) {
+      OInventory::log(0, "The perfCounter key=" . $pCI->key
+                       . " was already on DB with same values");
+    }
+    else {
+      OInventory::log(3, "Could not update the perfCounter key="
+                       . $pCI->key . " on DB");
+    }
+  }
+  return 1;
 }
 
 #
@@ -512,6 +591,16 @@ sub getLatestPerformance {
 
   OInventory::log(0, "Updating performance");
 
+
+  #
+  # Connect to Database
+  #
+  OInventory::log(1, "Let's connect to DB to update perfCounters");
+  if(OvomDao::connect() != 1) {
+    OInventory::log(3, "Cannot connect to DataBase");
+    return 0;
+  }
+
   #
   # Get perfManager
   #
@@ -648,6 +737,21 @@ sub getLatestPerformance {
                      . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
+
+  #
+  # Ok! Commit and disconnect from Database
+  #
+  OInventory::log(1, "Let's commit the transaction and disconnect from DB.");
+  if( ! OvomDao::transactionCommit()) {
+    OInventory::log(3, "Cannot commit transactions on DataBase");
+    return 0;
+  }
+  if( OvomDao::disconnect() != 1 ) {
+    OInventory::log(3, "Cannot disconnect from DataBase");
+    return 0;
+  }
+
+
   $eTimeB=Time::HiRes::time - $timeBeforeB;
   OInventory::log(1, "Profiling: Getting the whole data performance took "
                      . sprintf("%.3f", $eTimeB) . " s");
