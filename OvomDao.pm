@@ -414,7 +414,7 @@ sub getAllEntitiesOfType {
         push @r, $e;
       }
       elsif($entityType eq 'PerfCounterInfo') {
-        $e = OMockView->OMockPerfCounterInfo->new(\@data);
+        $e = OPerfCounterInfo->new(\@data);
         push @r, $e;
       }
       else {
@@ -489,7 +489,7 @@ sub update {
     $desc = $oClassName . ": " . $entity->toCsvRow();
   }
   elsif($oClassName eq 'PerfCounterInfo'
-     || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
+     || $oClassName eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoUpdate;
     $updateType = 2;
     $desc = $oClassName . ": key=" . $entity->key;
@@ -665,7 +665,7 @@ sub delete {
            . "',name='" . $entity->{name} . "'";
   }
   elsif($oClassName eq 'PerfCounterInfo'
-     || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
+     || $oClassName eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoDelete;
     $desc  = "$oClassName with key='" . $entity->key . "'";
   }
@@ -812,7 +812,7 @@ sub loadEntityByMoRef {
         $r = OVirtualMachine->new(\@data);
       }
       elsif($entityType eq 'PerfCounterInfo') {
-        $r = OMockView::OMockPerfCounterInfo->new(\@data);
+        $r = OPerfCounterInfo->new(\@data);
       }
       else {
         Carp::croak("Not implemented for $entityType "
@@ -891,7 +891,7 @@ sub insert {
            . "',name='" . $entity->{name} . "'";
   }
   elsif($oClassName eq 'PerfCounterInfo'
-     || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
+     || $oClassName eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoInsert;
     $insertType = 2;
     $desc  = "$oClassName with key='" . $entity->key . "'";

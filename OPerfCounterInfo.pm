@@ -1,4 +1,4 @@
-package OMockView::OMockPerfCounterInfo;
+package OPerfCounterInfo;
 use strict;
 use warnings;
 use Carp;
@@ -9,10 +9,10 @@ sub new {
   my ($class, $args) = @_;
 
   if(! defined ($args) || ref($args) ne 'ARRAY') {
-    Carp::croak("OMockPerfCounterInfo needs a ref to array of values");
+    Carp::croak("OPerfCounterInfo needs a ref to array of values");
   }
   if($#$args < 13) {
-    Carp::croak("Array with few many values for OMockPerfCounterInfo");
+    Carp::croak("Array with few many values for OPerfCounterInfo");
   }
 
   my $self = bless {

@@ -5,7 +5,7 @@ use Carp;
 use Data::Dumper;
 
 use OInventory;
-use OMockView::OMockPerfCounterInfo;
+use OPerfCounterInfo;
 use OMockView::OMockNameInfo;
 use OMockView::OMockGroupInfo;
 use OMockView::OMockUnitInfo;
@@ -21,7 +21,7 @@ our $csvSep = ";";
 sub new {
   my ($class, @args) = @_;
   my $self = bless {
-    # array of OMockPerfCounterInfo objects
+    # array of OPerfCounterInfo objects
     _perfCounter => undef,
   }, $class;
 
@@ -40,7 +40,7 @@ sub perfCounter {
 }
 
 #
-# Loads OMockPerfCounterInfo objects from CSV files.
+# Loads OPerfCounterInfo objects from CSV files.
 #
 # Usefull for Mocking when debugging,
 # to fill OMockPerfManager->perfCounter array
@@ -75,7 +75,7 @@ sub _loadPerfCounterInfoFromCsv {
       return 0;
     }
 
-    my $aCounterInfo = OMockView::OMockPerfCounterInfo->new(\@parts);
+    my $aCounterInfo = OPerfCounterInfo->new(\@parts);
     if ( ! defined($aCounterInfo) ) {
       OInventory::log(3, "Errors loading a mocking counterInfo object");
       return 0;

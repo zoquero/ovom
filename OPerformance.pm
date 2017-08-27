@@ -18,7 +18,7 @@ use OFolder;
 use OCluster;
 use OHost;
 use OVirtualMachine;
-use OMockView::OMockPerfCounterInfo;
+use OPerfCounterInfo;
 use OMockView::OMockPerformanceManager;
 use OMockView::OMockPerfQuerySpec;
 
@@ -110,7 +110,7 @@ print "DEBUG: updatePciIfNeeded for pCI key " . $pCI->key . "\n";
     OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo");
     return -1;
   }
-  if (    ref($pCI) ne 'OMockView::OMockPerfCounterInfo'
+  if (    ref($pCI) ne 'OPerfCounterInfo'
        && ref($pCI) ne 'PerfCounterInfo') {
     OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo "
                      . "and got a " . ref($pCI));
@@ -145,7 +145,7 @@ print "DEBUG: updatePciIfNeeded for pCI key " . $pCI->key . "\n";
     }
   }
 
-die "Pending to implement Dao::insert , Dao::update for PerfCounterInfo and OMockPerfCounterInfo::compare";
+die "Pending to implement Dao::insert , Dao::update for PerfCounterInfo and OPerfCounterInfo::compare";
   return 0;
 }
 
