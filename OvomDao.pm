@@ -457,35 +457,42 @@ sub update {
   # 2 = PerfCounterInfo      (hasn't parent, a regular update)
   my $updateType = -1;
   my $stmt;
-  if(   $oClassName eq 'Folder' 
+  my $desc;
+  if(   $oClassName eq 'OFolder' 
      || $oClassName eq 'OMockView::OMockFolderView') {
     $stmt = $sqlFolderUpdate;
     $updateType = 1;
+    $desc = $oClassName . ": " . $entity->toCsvRow();
   }
-  elsif($oClassName eq 'Datacenter'
+  elsif($oClassName eq 'ODatacenter'
      || $oClassName eq 'OMockView::OMockDatacenterView') {
     $stmt = $sqlDatacenterUpdate;
     $updateType = 0;
+    $desc = $oClassName . ": " . $entity->toCsvRow();
   }
   elsif($oClassName eq 'OCluster'
      || $oClassName eq 'OMockView::OMockClusterView') {
     $stmt = $sqlClusterUpdate;
     $updateType = 1;
+    $desc = $oClassName . ": " . $entity->toCsvRow();
   }
-  elsif($oClassName eq 'Host'
+  elsif($oClassName eq 'OHost'
      || $oClassName eq 'OMockView::OMockHostView') {
     $stmt = $sqlHostUpdate;
     $updateType = 1;
+    $desc = $oClassName . ": " . $entity->toCsvRow();
   }
-  elsif($oClassName eq 'VirtualMachine'
+  elsif($oClassName eq 'OVirtualMachine'
      || $oClassName eq 'OMockView::OMockVirtualMachineView') {
     $stmt = $sqlVirtualMachineUpdate;
     $updateType = 1;
+    $desc = $oClassName . ": " . $entity->toCsvRow();
   }
   elsif($oClassName eq 'PerfCounterInfo'
      || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
     $stmt = $sqlPerfCounterInfoUpdate;
     $updateType = 2;
+    $desc = $oClassName . ": key=" . $entity->key;
   }
   else {
     Carp::croak("Statement unimplemented for "
@@ -511,8 +518,7 @@ sub update {
     }
   }
 
-  OInventory::log(1, "Updating into db the $oClassName: "
-                        . $entity->toCsvRow());
+  OInventory::log(1, "Updating into db the $desc");
 
   my $sthRes;
   my @data;
@@ -520,17 +526,15 @@ sub update {
   $timeBefore=Time::HiRes::time;
 
   eval {
-    my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
+    my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'Folder');
     if(! defined($parentFolder)) {
-      Carp::croak("Can't load the parent of a $oClassName."
-                 . " Child's  mo_ref = " . $entity->{mo_ref}
-                 . " parent's id     = " . $entity->{parent});
+      Carp::croak("Can't load the parent of the $desc");
       return 0;
     }
     my $loadedParentId = $parentFolder->{id};
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croak("Can't prepare statement for updating a $oClassName: "
+      Carp::croak("Can't prepare statement for updating the $desc: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -552,22 +556,22 @@ sub update {
       #
       my $e;
       my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
-      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'Folder');
       die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
       $datastoreFolderPid = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'Folder');
       die "Can't load the vmFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
       $vmFolderPid        = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'Folder');
       die "Can't load the hostFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
       $hostFolderPid      = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'Folder');
       die "Can't load the networkFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
@@ -582,25 +586,24 @@ sub update {
                               $entity->{mo_ref});
     }
     else {
-      Carp::croak("Statement execution stil unimplemented in OvomDao.update");
+      Carp::croak("Statement execution still unimplemented in OvomDao.update");
       return 0;
     }
 
     if(! $sthRes) {
-      Carp::croak("Can't execute the statement for updating a $oClassName: "
+      Carp::croak("Can't execute the statement for updating the $desc: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       $sth->finish();
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
-      Carp::croak("Didn't updated any $oClassName, "
-                . "trying to update the one with mo_ref " . $entity->{mo_ref});
+      Carp::croak("Didn't updated any $oClassName trying to update the $desc");
       return 0;
     }
   };
 
   if($@) {
-    OInventory::log(3, "Errors updating a $oClassName into DB: $@");
+    OInventory::log(3, "Errors updating the $desc into DB: $@");
     return 0;
   }
 
@@ -629,44 +632,42 @@ sub delete {
     return 0;
   }
 
-  my $keyName;
-  my $keyValue;
+  my $desc;
   my $stmt;
-  if(   $oClassName eq 'Folder'
+  if(   $oClassName eq 'OFolder'
      || $oClassName eq 'OMockView::OMockFolderView') {
     $stmt = $sqlFolderDelete;
-    $keyName  = 'mo_ref';
-    $keyValue = $entity->{mo_ref};
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'Datacenter'
+  elsif($oClassName eq 'ODatacenter'
      || $oClassName eq 'OMockView::OMockDatacenterView') {
     $stmt = $sqlDatacenterDelete;
-    $keyName  = 'mo_ref';
-    $keyValue = $entity->{mo_ref};
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'Cluster'
+  elsif($oClassName eq 'OCluster'
      || $oClassName eq 'OMockView::OMockClusterView') {
     $stmt = $sqlClusterDelete;
-    $keyName  = 'mo_ref';
-    $keyValue = $entity->{mo_ref};
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'Host'
+  elsif($oClassName eq 'OHost'
      || $oClassName eq 'OMockView::OMockHostView') {
     $stmt = $sqlHostDelete;
-    $keyName  = 'mo_ref';
-    $keyValue = $entity->{mo_ref};
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'VirtualMachine'
+  elsif($oClassName eq 'OVirtualMachine'
      || $oClassName eq 'OMockView::OMockVirtualMachineView') {
     $stmt = $sqlVirtualMachineDelete;
-    $keyName  = 'mo_ref';
-    $keyValue = $entity->{mo_ref};
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
   elsif($oClassName eq 'PerfCounterInfo'
      || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
     $stmt = $sqlPerfCounterInfoDelete;
-    $keyName  = 'key';
-    $keyValue = $entity->key;
+    $desc  = "$oClassName with key='" . $entity->key . "'";
   }
   else {
     Carp::croak("Statement stil unimplemented "
@@ -674,8 +675,7 @@ sub delete {
     return 0;
   }
 
-  OInventory::log(0, "Deleting from DB the $oClassName "
-                   . "with $keyName='$keyValue'");
+  OInventory::log(0, "Deleting from DB the $desc");
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
@@ -683,7 +683,7 @@ sub delete {
   eval {
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croak("Can't prepare statement to delete a $oClassName: "
+      Carp::croak("Can't prepare statement to delete the $desc: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -692,25 +692,25 @@ sub delete {
     $sthRes = $sth->execute($entity->{mo_ref});
 
     if(! $sthRes) {
-      Carp::croak("Can't execute the statement to delete a $oClassName: "
+      Carp::croak("Can't execute the statement to delete the $desc: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       $sth->finish();
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
       Carp::croak("Didn't deleted any $oClassName, "
-                . "trying to delete the one with mo_ref " . $entity->{mo_ref});
+                . "trying to delete the $desc");
       return 0;
     }
   };
 
   if($@) {
-    OInventory::log(3, "Errors deleting a $oClassName from DB: $@");
+    OInventory::log(3, "Errors deleting the $desc from DB: $@");
     return 0;
   }
 
   $eTime=Time::HiRes::time - $timeBefore;
-  OInventory::log(1, "Profiling: deleting a $oClassName took "
+  OInventory::log(1, "Profiling: deleting the $desc took "
                         . sprintf("%.3f", $eTime) . " s");
   return 1;
 }
@@ -719,7 +719,8 @@ sub delete {
 # Get an Entity from DB by mo_ref.
 #
 # @arg mo_ref
-# @arg entity type (OFolder | ODatacenter | OCluster | OHost | OVirtualMachine | PerfCounterInfo)
+# @arg entity type (  Folder | Datacenter | ClusterComputeResource
+#                   | HostSystem | VirtualMachine | PerfCounterInfo)
 # @return undef (if errors), or a reference to an Entity object (if ok)
 #
 sub loadEntityByMoRef {
@@ -748,19 +749,19 @@ sub loadEntityByMoRef {
     return undef;
   }
 
-  if ($entityType eq 'OFolder') {
+  if ($entityType eq 'Folder') {
     $stmt = $sqlFolderSelectByMoref;
   }
-  elsif($entityType eq 'ODatacenter') {
+  elsif($entityType eq 'Datacenter') {
     $stmt = $sqlDatacenterSelectByMoref;
   }
-  elsif($entityType eq 'OCluster') {
+  elsif($entityType eq 'ClusterComputeResource') {
     $stmt = $sqlClusterSelectByMoref;
   }
-  elsif($entityType eq 'OHost') {
+  elsif($entityType eq 'HostSystem') {
     $stmt = $sqlHostSelectByMoref;
   }
-  elsif($entityType eq 'OVirtualMachine') {
+  elsif($entityType eq 'VirtualMachine') {
     $stmt = $sqlVirtualMachineSelectByMoref;
   }
   elsif($entityType eq 'PerfCounterInfo') {
@@ -795,19 +796,19 @@ sub loadEntityByMoRef {
         return undef;
       }
 
-      if ($entityType eq 'OFolder') {
+      if ($entityType eq 'Folder') {
         $r = OFolder->new(\@data);
       }
-      elsif($entityType eq 'ODatacenter') {
+      elsif($entityType eq 'Datacenter') {
         $r = ODatacenter->new(\@data);
       }
-      elsif($entityType eq 'OCluster') {
+      elsif($entityType eq 'ClusterComputeResource') {
         $r = OCluster->new(\@data);
       }
-      elsif($entityType eq 'OHost') {
+      elsif($entityType eq 'HostSystem') {
         $r = OHost->new(\@data);
       }
-      elsif($entityType eq 'OVirtualMachine') {
+      elsif($entityType eq 'VirtualMachine') {
         $r = OVirtualMachine->new(\@data);
       }
       elsif($entityType eq 'PerfCounterInfo') {
@@ -846,59 +847,54 @@ sub insert {
     Carp::croak("OvomDao.insert needs an entity");
     return 0;
   }
-  if (! defined ($entity->{oclass_name})) {
-    Carp::croak("OvomDao.insert: the parameter doesn't look like an entity");
-    return 0;
-  }
   my $oClassName = ref($entity);
-
-  if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
-    Carp::croak("Trying to insert a $oClassName without mo_ref");
-    return 0;
-  }
-  if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
-    Carp::croak("Trying to insert a $oClassName without name");
-    return 0;
-  }
-  if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
-    Carp::croak("Trying to insert a $oClassName without parent");
-    return 0;
-  }
 
   # 0 = Datacenter           (entity with parent)
   # 1 = Entity no-Datacenter (entity with parent and has folder like networkF )
   # 2 = PerfCounterInfo      (hasn't parent, a regular update)
+  my $desc;
   my $insertType = -1;
   my $stmt;
-  if(   $oClassName    eq 'Folder'
+  if(   $oClassName    eq 'OFolder'
      || $oClassName eq 'OMockView::OMockFolderView') {
     $stmt = $sqlFolderInsert;
     $insertType = 1;
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'Datacenter'
+  elsif($oClassName eq 'ODatacenter'
      || $oClassName eq 'OMockView::OMockDatacenterView') {
     $stmt = $sqlDatacenterInsert;
     $insertType = 0;
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'Host'
+  elsif($oClassName eq 'OHost'
      || $oClassName eq 'OMockView::OMockHostView') {
     $stmt = $sqlHostInsert;
     $insertType = 1;
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'Cluster'
+  elsif($oClassName eq 'OCluster'
      || $oClassName eq 'OMockView::OMockClusterView') {
     $stmt = $sqlClusterInsert;
     $insertType = 1;
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
-  elsif($oClassName eq 'VirtualMachine'
+  elsif($oClassName eq 'OVirtualMachine'
      || $oClassName eq 'OMockView::OMockVirtualMachineView') {
     $stmt = $sqlVirtualMachineInsert;
     $insertType = 1;
+    $desc  = "$oClassName with mo_ref='" . $entity->{mo_ref}
+           . "',name='" . $entity->{name} . "'";
   }
   elsif($oClassName eq 'PerfCounterInfo'
      || $oClassName eq 'OMockView::OMockPerfCounterInfoView') {
     $stmt = $sqlPerfCounterInfoInsert;
     $insertType = 2;
+    $desc  = "$oClassName with key='" . $entity->key . "'";
   }
   else {
     Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
@@ -906,13 +902,21 @@ sub insert {
   }
 
   if($insertType == 0 || $insertType == 1) {
-    OInventory::log(1, "Inserting into db the $oClassName: "
-                     . $entity->toCsvRow());
+    if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
+      Carp::croak("Trying to insert a $oClassName without mo_ref");
+      return 0;
+    }
+    if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
+      Carp::croak("Trying to insert a $oClassName without name");
+      return 0;
+    }
+    if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
+      Carp::croak("Trying to insert a $oClassName without parent");
+      return 0;
+    }
   }
-  else {
-    OInventory::log(1, "Inserting into db the $oClassName "
-                     . "with key='" . $entity->key . "'");
-  }
+
+  OInventory::log(1, "Inserting into db the $desc");
 
   my @data;
   my ($timeBefore, $eTime);
@@ -922,23 +926,21 @@ sub insert {
   eval {
 
     if($insertType == 0 || $insertType == 1) {
-      my $parentFolder = OvomDao::loadEntityByMoRef($entity->{parent}, 'OFolder');
+      my $parentFolder = OvomDao::loadEntityByMoRef($entity->{parent}, 'Folder');
       if( ! defined($parentFolder) ) {
-        Carp::croak("Can't find the parent for the $oClassName "
-                  . "with mo_ref " . $entity->{mo_ref});
+        Carp::croak("Can't find the parent for the $desc");
         return 0;
       }
       $loadedParentId = $parentFolder->{id};
       if( ! defined($loadedParentId) ) {
-        Carp::croak("Can't get the id of the parent for the $oClassName "
-                  . "with mo_ref " . $entity->{mo_ref});
+        Carp::croak("Can't get the id of the parent for the $desc");
         return 0;
       }
     }
 
     my $sth = $dbh->prepare_cached($stmt);
     if(! $sth) {
-      Carp::croak("Can't prepare statement for inserting a $oClassName: "
+      Carp::croak("Can't prepare statement for inserting the $desc: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       return 0;
     }
@@ -948,6 +950,7 @@ sub insert {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
     elsif($insertType == 2) {
+      # TO_DO : Unimplemented
       $sthRes = $sth->execute($entity->PENDING_TO_DEFINE, $entity->key);
     }
     elsif($insertType == 0) {
@@ -960,44 +963,44 @@ sub insert {
 
       if( ! defined($entity->{datastoreFolder}) || $entity->{datastoreFolder} eq '' ) {
         $sth->finish();
-        Carp::croak("Trying to insert a $oClassName without datastoreFolder");
+        Carp::croak("Trying to insert the $desc but hasn't datastoreFolder");
         return 0;
       }
       if( ! defined($entity->{vmFolder}) || $entity->{vmFolder} eq '' ) {
         $sth->finish();
-        Carp::croak("Trying to insert a $oClassName without vmFolder");
+        Carp::croak("Trying to insert the $desc but hasn't vmFolder");
         return 0;
       }
       if( ! defined($entity->{hostFolder}) || $entity->{hostFolder} eq '' ) {
         $sth->finish();
-        Carp::croak("Trying to insert a $oClassName without hostFolder");
+        Carp::croak("Trying to insert the $desc but hasn't hostFolder");
         return 0;
       }
       if( ! defined($entity->{networkFolder}) || $entity->{networkFolder} eq '' ) {
         $sth->finish();
-        Carp::croak("Trying to insert a $oClassName without networkFolder");
+        Carp::croak("Trying to insert the $desc but hasn't networkFolder");
         return 0;
       }
 
       # Let's go:
-      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'Folder');
       die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
-        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        . " when inserting the $desc"
         if (!defined($e));
       $datastoreFolderPid = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'Folder');
       die "Can't load the vmFolder with id " . $entity->{datastoreFolder}
-        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        . " when inserting the $desc"
         if (!defined($e));
       $vmFolderPid        = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'Folder');
       die "Can't load the hostFolder with id " . $entity->{datastoreFolder}
-        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        . " when inserting the $desc"
         if (!defined($e));
       $hostFolderPid      = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'OFolder');
+      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'Folder');
       die "Can't load the networkFolder with id " . $entity->{datastoreFolder}
-        . " when inserting $oClassName with mo_ref " . $entity->{mo_ref}
+        . " when inserting the $desc"
         if (!defined($e));
       $networkFolderPid   = $e->{id};
 
@@ -1012,24 +1015,24 @@ sub insert {
                               $hostFolderPid, $networkFolderPid);
     }
     else {
-      Carp::croak("Statement unimplemented for $oClassName in OvomDao.insert");
+      Carp::croak("Insert statement unimplemented for $oClassName");
       return 0;
     }
 
     if(! $sthRes) {
-      Carp::croak("Can't execute the statement for inserting a $oClassName: "
+      Carp::croak("Can't execute the statement for inserting the $desc: "
                  . "(" . $dbh->err . ") :" . $dbh->errstr);
       $sth->finish();
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
-      Carp::croak("Couldn't insert a $oClassName");
+      Carp::croak("Couldn't insert the $desc");
       return 0;
     }
   };
 
   if($@) {
-    OInventory::log(3, "Errors inserting a $oClassName into DB: $@");
+    OInventory::log(3, "Errors inserting the $desc into DB: $@");
     return 0;
   }
 

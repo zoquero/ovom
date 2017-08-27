@@ -537,7 +537,7 @@ sub popNextFolderWithParent {
       return undef;
     }
     my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent},
-                                             'OFolder');
+                                             'Folder');
     if (defined $aParent) {
       my $r = $$entities[$i];
       splice @$entities, $i, 1;
