@@ -23,9 +23,29 @@ sub new {
     _key              => $$args[8],
     _level            => $$args[9],
     _rollupType       => OMockView::OMockRollupType->new($$args[10]),
-    _unitInfo         => OMockView::OMockGroupInfo->new([$$args[11], $$args[12], $$args[13]]),
+    _unitInfo         => OMockView::OMockUnitInfo->new([$$args[11], $$args[12], $$args[13]]),
   }, $class;
   return $self;
+}
+
+sub statsType {
+  my ($self) = @_;
+  return $self->{_statsType};
+}
+
+sub perDeviceLevel {
+  my ($self) = @_;
+  return $self->{_perDeviceLevel};
+}
+
+sub nameInfo {
+  my ($self) = @_;
+  return $self->{_nameInfo};
+}
+
+sub groupInfo {
+  my ($self) = @_;
+  return $self->{_groupInfo};
 }
 
 sub key {
@@ -33,10 +53,66 @@ sub key {
   return $self->{_key};
 }
 
-sub groupInfo {
+sub level {
   my ($self) = @_;
-  return $self->{_groupInfo};
+  return $self->{_level};
 }
+
+sub rollupType {
+  my ($self) = @_;
+  return $self->{_rollupType};
+}
+
+sub unitInfo {
+  my ($self) = @_;
+  return $self->{_unitInfo};
+}
+
+#
+# Compare this object with other object of the same type
+#
+# @arg reference to the other object of the same type
+# @return  1 (if equal),
+#          0 (if different),
+#         -1 if error
+#
+sub compare {
+  my $self  = shift;
+  my $other = shift;
+  if(! defined($other)) {
+    Carp::croak("Compare requires other entity of the same type as argument");
+    return -2;
+  }
+  if(ref($other) ne 'PerfCounterInfo' && ref($other) ne 'OPerfCounterInfo' ) {
+    Carp::croak("Compare requires other entity of the same type as argument,"
+              . "self=" . ref($self) . "other=" . ref($other) );
+    return -2;
+  }
+  elsif(
+       $self->statsType->val     ne $other->statsType->val
+    || $self->perDeviceLevel     ne $other->perDeviceLevel
+    || $self->nameInfo->key      ne $other->nameInfo->key
+    || $self->nameInfo->label    ne $other->nameInfo->label
+    || $self->nameInfo->summary  ne $other->nameInfo->summary
+    || $self->groupInfo->key     ne $other->groupInfo->key
+    || $self->groupInfo->label   ne $other->groupInfo->label
+    || $self->groupInfo->summary ne $other->groupInfo->summary
+    || $self->key                ne $other->key
+    || $self->level              ne $other->level
+    || $self->rollupType->val    ne $other->rollupType->val
+    || $self->unitInfo->key      ne $other->unitInfo->key
+    || $self->unitInfo->label    ne $other->unitInfo->label
+    || $self->unitInfo->summary  ne $other->unitInfo->summary
+  ) {
+    # Different folder (mo_ref differs)
+    return 0;
+  }
+  else {
+    # Equal object
+    return 1;
+  }
+}
+
 
 sub stringify {
   my ($self) = @_;

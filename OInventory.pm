@@ -536,7 +536,7 @@ sub popNextFolderWithParent {
                 . " but without parent at popNextFolderWithParent");
       return undef;
     }
-    my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent},
+    my $aParent = OvomDao::loadEntity($$entities[$i]->{parent},
                                              'Folder');
     if (defined $aParent) {
       my $r = $$entities[$i];

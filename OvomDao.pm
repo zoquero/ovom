@@ -120,7 +120,7 @@ our $sqlPerfCounterInfoSelectByKey     = 'SELECT a.stats_type, a.per_device_leve
                              . 'where a.pci_key = ?';
 our $sqlPerfCounterInfoInsert
                              = 'INSERT INTO perf_counter_info (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level) '
-                             . 'VALUES (?, ?, ?)';
+                             . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 our $sqlPerfCounterInfoUpdate
                              = 'UPDATE perf_counter_info set pci_key = ?, name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?';
 our $sqlPerfCounterInfoDelete
@@ -526,7 +526,7 @@ sub update {
   $timeBefore=Time::HiRes::time;
 
   eval {
-    my $parentFolder   = OvomDao::loadEntityByMoRef($entity->{parent}, 'Folder');
+    my $parentFolder   = OvomDao::loadEntity($entity->{parent}, 'Folder');
     if(! defined($parentFolder)) {
       Carp::croak("Can't load the parent of the $desc");
       return 0;
@@ -556,22 +556,22 @@ sub update {
       #
       my $e;
       my ($datastoreFolderPid, $vmFolderPid, $hostFolderPid, $networkFolderPid);
-      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'Folder');
+      $e   = OvomDao::loadEntity($entity->{datastoreFolder}, 'Folder');
       die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
       $datastoreFolderPid = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'Folder');
+      $e   = OvomDao::loadEntity($entity->{vmFolder},        'Folder');
       die "Can't load the vmFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
       $vmFolderPid        = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'Folder');
+      $e   = OvomDao::loadEntity($entity->{hostFolder},      'Folder');
       die "Can't load the hostFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
       $hostFolderPid      = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'Folder');
+      $e   = OvomDao::loadEntity($entity->{networkFolder},   'Folder');
       die "Can't load the networkFolder with id " . $entity->{datastoreFolder}
         . " when updating $oClassName with mo_ref " . $entity->{mo_ref}
         if (!defined($e));
@@ -723,7 +723,7 @@ sub delete {
 #                   | HostSystem | VirtualMachine | PerfCounterInfo)
 # @return undef (if errors), or a reference to an Entity object (if ok)
 #
-sub loadEntityByMoRef {
+sub loadEntity {
   my $moRef      = shift;
   my $entityType = shift;
   my $stmt;
@@ -768,11 +768,12 @@ sub loadEntityByMoRef {
     $stmt = $sqlPerfCounterInfoSelectByKey;
   }
   else {
-    Carp::croak("loadEntityByMoRef not implemented for '$entityType'");
+    Carp::croak("loadEntity not implemented for '$entityType'");
     return undef;
   }
 
-  OInventory::log(0, "selecting from db a ${entityType} with mo_ref = " . $moRef);
+  OInventory::log(0, "selecting from db a ${entityType} with mo_ref/key = "
+                   . $moRef);
 
   eval {
     my $sth = $dbh->prepare_cached($stmt)
@@ -815,8 +816,7 @@ sub loadEntityByMoRef {
         $r = OPerfCounterInfo->new(\@data);
       }
       else {
-        Carp::croak("Not implemented for $entityType "
-                  . "in OvomDao.loadEntityByMoRef");
+        Carp::croak("Not implemented for $entityType in OvomDao.loadEntity");
         return undef;
       }
     }
@@ -926,7 +926,7 @@ sub insert {
   eval {
 
     if($insertType == 0 || $insertType == 1) {
-      my $parentFolder = OvomDao::loadEntityByMoRef($entity->{parent}, 'Folder');
+      my $parentFolder = OvomDao::loadEntity($entity->{parent}, 'Folder');
       if( ! defined($parentFolder) ) {
         Carp::croak("Can't find the parent for the $desc");
         return 0;
@@ -950,8 +950,27 @@ sub insert {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
     elsif($insertType == 2) {
-      # TO_DO : Unimplemented
-      $sthRes = $sth->execute($entity->PENDING_TO_DEFINE, $entity->key);
+#     if($oClassName eq 'PerfCounterInfo') {
+#     }
+#  'INSERT INTO perf_counter_info
+# (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level) '
+
+      $sthRes = $sth->execute(
+                               $entity->key,
+                               $entity->nameInfo->key ,
+                               $entity->nameInfo->label ,
+                               $entity->nameInfo->summary ,
+                               $entity->groupInfo->key,
+                               $entity->groupInfo->label,
+                               $entity->groupInfo->summary,
+                               $entity->unitInfo->key,
+                               $entity->unitInfo->label,
+                               $entity->unitInfo->summary,
+                               $entity->rollupType->val,
+                               $entity->statsType->val,
+                               $entity->level,
+                               $entity->perDeviceLevel
+                             );
     }
     elsif($insertType == 0) {
       #
@@ -983,22 +1002,22 @@ sub insert {
       }
 
       # Let's go:
-      $e   = OvomDao::loadEntityByMoRef($entity->{datastoreFolder}, 'Folder');
+      $e   = OvomDao::loadEntity($entity->{datastoreFolder}, 'Folder');
       die "Can't load the datastoreFolder with id " . $entity->{datastoreFolder}
         . " when inserting the $desc"
         if (!defined($e));
       $datastoreFolderPid = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{vmFolder},        'Folder');
+      $e   = OvomDao::loadEntity($entity->{vmFolder},        'Folder');
       die "Can't load the vmFolder with id " . $entity->{datastoreFolder}
         . " when inserting the $desc"
         if (!defined($e));
       $vmFolderPid        = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{hostFolder},      'Folder');
+      $e   = OvomDao::loadEntity($entity->{hostFolder},      'Folder');
       die "Can't load the hostFolder with id " . $entity->{datastoreFolder}
         . " when inserting the $desc"
         if (!defined($e));
       $hostFolderPid      = $e->{id};
-      $e   = OvomDao::loadEntityByMoRef($entity->{networkFolder},   'Folder');
+      $e   = OvomDao::loadEntity($entity->{networkFolder},   'Folder');
       die "Can't load the networkFolder with id " . $entity->{datastoreFolder}
         . " when inserting the $desc"
         if (!defined($e));

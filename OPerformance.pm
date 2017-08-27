@@ -117,12 +117,12 @@ print "DEBUG: updatePciIfNeeded for pCI key " . $pCI->key . "\n";
     return -1;
   }
 
-  my $loadedPci = OvomDao::loadEntityByMoRef($pCI->key, 'PerfCounterInfo');
+  my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
     OInventory::log(0, "Can't find the perfCounterInfo with key="
                      . $pCI->key . " on DB. Let's insert it");
     if( ! OvomDao::insert($pCI) ) {
-      OInventory::log(3, "updateAsNeeded can't insert the PerfCounterInfo "
+      OInventory::log(3, "Can't insert the PerfCounterInfo "
                   . " with key '" . $pCI->key . "'" );
       return -1;
     }
@@ -137,15 +137,20 @@ print "DEBUG: updatePciIfNeeded for pCI key " . $pCI->key . "\n";
     elsif ($comp == 0) {
       # Changed (same mo_ref but some other attribute differs)
 # print "DEBUG: It has to be UPDATED into DB.
+      OInventory::log(3, "Bug in this software: the PerfCounterInfo with key '"
+                       . $pCI->key . "' has changed and this software has been "
+                       . "developed asserting that it would never change.");
       OvomDao::update($pCI);
     }
     else {
       # Errors
+      OInventory::log(3, "Bug! Can't compare the PerfCounterInfo "
+                  . " with key='" . $pCI->key . "' with the one "
+                  . " with with key='" . $loadedPci->key . "'");
       return -1;
     }
   }
 
-die "Pending to implement Dao::insert , Dao::update for PerfCounterInfo and OPerfCounterInfo::compare";
   return 0;
 }
 
@@ -422,14 +427,49 @@ sub getPerfData {
   return $r;
 }
 
+
+#
+# Register on DataBase that a perfData for an entity has been saved on a file
+#
+# @arg perfData
+# @arg entityView
+# @return 1 ok, 0 errors
+#
+sub registerPerfDataSaved {
+  # perfData:
+  # $VAR1 = bless( {
+  #                  'id' => bless( {
+  #                                   'instance' => '',
+  #                                   'counterId' => '2'
+  #                                 }, 'PerfMetricId' ),
+  #                  'value' => '920,912,653,819,737,661,957,774,675,1147,...'
+  #                }, 'PerfMetricSeriesCSV' );
+  my $perfData = shift;
+
+  # entity:
+  # $VAR1 = bless( {
+  #                  'type' => 'VirtualMachine',
+  #                  'value' => 'vm-10068'
+  #                }, 'ManagedObjectReference' );
+  my $entity   = shift;
+
+  OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " has been saved for the " . $entity->type . " with mo_ref=" . $entity->value);
+
+  die "Next step is use Dao to insert/update this registering into database";
+
+  return 1;
+}
+
 #
 # Save perf data to disk
 #
 # @arg array of PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
+# @arg entity view
 # @return 1 ok, 0 errors
 #
 sub savePerfData {
   my $perfDataArray = shift;
+  my $entityView    = shift;
 
   if( ! defined($perfDataArray) ) {
     OInventory::log(3, "savePerfData: expects a PerfEntityMetricCSV");
@@ -539,11 +579,21 @@ sub savePerfData {
         return 0;
       }
       OInventory::log(0, "Saved in $csvPathLatest");
+
+      #
+      # Let's register on Database that this perfData has been saved
+      #
+      if(! registerPerfDataSaved($p, $entityView)) {
+        OInventory::log(3, "Errors registering that perfData was taken from " . ref($entityView)
+                         . " with mo_ref '" . $entityView->{value} . "'");
+        return 0;
+      }
     }
   }
 
   return 1;
 }
+
 
 #
 # Get array of timestamps from a "sampleInfoCSV" string
@@ -720,7 +770,7 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
-    if(! savePerfData($perfData)) {
+    if(! savePerfData($perfData, $aEntity)) {
       OInventory::log(3, "Errors getting performance from " . ref($aEntity)
                        . " with mo_ref '" . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
