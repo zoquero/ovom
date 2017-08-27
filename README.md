@@ -12,11 +12,11 @@ July the 16th of 2017
 
 It's in an initial development stage but its goals are:
 
-* Maintain its own Inventory
+* (done! v0.1) Maintain its own Inventory
 * Extract performance metrics:
-    * Extract realtime performance metrics of hosts, clusters and VMs
-    * Store them on plain CSV files
-    * Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
+    * (done! v0.2) Extract realtime performance metrics of hosts, clusters and VMs
+    * (done! v0.2) Store them on plain CSV files
+    * (work in progress) Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
 * Show performance graphics:
     * Offer a simple Web UI to allow have graphs for custom intervals on-demand.
 * Report alarms based on thresholds
@@ -25,16 +25,6 @@ It's in an initial development stage but its goals are:
     * Storage vMotion
     * Hardware scale (more or less hosts for clusters)
     * vHardware scale (more or less vCPUs for VMs)
-
-# Development
-
-It's in development stage. It's expected to have a release in september 2017 with at least:
-
-* (done! v0.1) Inventory 
-* (done! v0.2) Extraction of performance metrics
-* RRDB on perf data (work in progress)
-* Show performance graphics
-* Report alarms
 
 # Some API links
 * http://www.ovh.com/images/vmWorld/OVH60.pdf
