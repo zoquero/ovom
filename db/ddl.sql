@@ -90,6 +90,38 @@ CREATE TABLE `virtualmachine` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
 --
+-- Table structure for table `perf_counter_info`
+--
+
+CREATE TABLE `perf_counter_info` (
+  `pci_key` int(10) UNSIGNED NOT NULL,
+  `name_info_key` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `name_info_label` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `name_info_summary` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `group_info_key` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `group_info_label` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `group_info_summary` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `unit_info_key` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `unit_info_label` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `unit_info_summary` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `rollup_type` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `stats_type` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `pci_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `per_device_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci COMMENT='To store PerfCounterInfo objects';
+
+--
+-- Table structure for table `perf_counter_info`
+--
+
+CREATE TABLE `perf_metric_id` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `moref` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `counter_id` int(10) UNSIGNED NOT NULL COMMENT 'fk perf_counter_info.pci_key',
+  `instance` varchar(255) COLLATE utf8_spanish_ci NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
+
+--
 -- Indexes for dumped tables
 --
 
@@ -138,6 +170,20 @@ ALTER TABLE `virtualmachine`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `moref_uniq` (`moref`),
   ADD KEY `parent_idx` (`parent`);
+
+--
+-- Indexes for table `perf_counter_info`
+--
+ALTER TABLE `perf_counter_info`
+  ADD PRIMARY KEY (`pci_key`);
+
+--
+-- Indexes for table `perf_metric_id`
+--
+ALTER TABLE `perf_metric_id`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `counter_id` (`counter_id`);
+
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -198,6 +244,12 @@ ALTER TABLE `host`
 --
 ALTER TABLE `virtualmachine`
   ADD CONSTRAINT `virtualmachine_parent_fk` FOREIGN KEY (`parent`) REFERENCES `folder` (`id`);
+
+--
+-- Constraints for table `perf_metric_id`
+--
+ALTER TABLE `perf_metric_id`
+  ADD CONSTRAINT `pmi_pci_fk` FOREIGN KEY (`counter_id`) REFERENCES `perf_counter_info` (`pci_key`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
