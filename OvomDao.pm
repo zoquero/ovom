@@ -5,6 +5,7 @@ use DBI;
 use Time::HiRes; ## gettimeofday
 use Carp;
 use OInventory;
+use Data::Dumper;
 
 
 our $dbh;
@@ -122,9 +123,26 @@ our $sqlPerfCounterInfoInsert
                              = 'INSERT INTO perf_counter_info (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level) '
                              . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 our $sqlPerfCounterInfoUpdate
-                             = 'UPDATE perf_counter_info set pci_key = ?, name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?';
+                             = 'UPDATE perf_counter_info set name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ? where pci_key = ?';
 our $sqlPerfCounterInfoDelete
                              = 'DELETE FROM perf_counter_info where mo_ref = ?';
+
+####################################
+# SQL Statements for PerfMetric
+####################################
+our $sqlPerfMetricSelectAll 
+                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+                              . 'FROM perf_metric as a';
+our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+                              . 'FROM perf_metric as a '
+                              . 'where counter_id = ? and instance = ? and mo_ref = ? ';
+our $sqlPerfMetricInsert
+                              = 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
+                              . 'VALUES (?, ?, ?)';
+our $sqlPerfMetricUpdate
+                             = 'UPDATE perf_metric set mo_ref = ?, counter_id = ?, instance = ? where counter_id = ?';
+our $sqlPerfMetricDelete
+                             = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
 
 
 #
@@ -443,6 +461,7 @@ sub getAllEntitiesOfType {
 #
 sub update {
   my $entity = shift;
+  my $mor;
 
   # Pre-conditions
   if (! defined ($entity)) {
@@ -494,6 +513,20 @@ sub update {
     $updateType = 2;
     $desc = $oClassName . ": key=" . $entity->key;
   }
+  elsif($oClassName eq 'PerfMetricId'
+     || $oClassName eq 'OMockView::OMockPerfMetricId') {
+    $mor  = shift;
+    if (! defined ($mor)) {
+      Carp::croak("OvomDao.update missing mor (2nd extra) parameter");
+      return 0;
+    }
+
+    $stmt = $sqlPerfMetricUpdate;
+    $updateType = 3;
+    $desc = $oClassName . ": counterId=" . $entity->counterId
+            . ",instance=" . $entity->instance
+            . " for entity with mo_ref='" . $mor->value . "'";
+  }
   else {
     Carp::croak("Statement unimplemented for "
               . "unexpected class $oClassName in OvomDao.update");
@@ -526,22 +559,38 @@ sub update {
   $timeBefore=Time::HiRes::time;
 
   eval {
-    my $parentFolder   = OvomDao::loadEntity($entity->{parent}, 'Folder');
-    if(! defined($parentFolder)) {
-      Carp::croak("Can't load the parent of the $desc");
-      return 0;
-    }
-    my $loadedParentId = $parentFolder->{id};
-    my $sth = $dbh->prepare_cached($stmt);
-    if(! $sth) {
-      Carp::croak("Can't prepare statement for updating the $desc: "
-                 . "(" . $dbh->err . ") :" . $dbh->errstr);
-      return 0;
+    my $sth;
+    my $loadedParentId;
+
+    if($updateType == 0 || $updateType == 1) {
+      my $parentFolder   = OvomDao::loadEntity($entity->{parent}, 'Folder');
+      if(! defined($parentFolder)) {
+        Carp::croak("Can't load the parent of the $desc");
+        return 0;
+      }
+      my $loadedParentId = $parentFolder->{id};
+  
+      $sth = $dbh->prepare_cached($stmt);
+      if(! $sth) {
+        Carp::croak("Can't prepare statement for updating the $desc: "
+                   . "(" . $dbh->err . ") :" . $dbh->errstr);
+        return 0;
+      }
     }
 
     # PerfCounterInfo
     if($updateType == 2) {
       $sthRes = $sth->execute($entity->{name}, $entity->key);
+    }
+    elsif($updateType == 3) {
+      # 'UPDATE perf_metric set mo_ref = ?, counter_id = ?, instance = ? where counter_id = ?';
+
+      # $desc = $oClassName . ": counterId=" . $entity->counterId
+      #         . ",instance=" . $entity->instance
+      #         . " for entity with mo_ref='" . $mor->value . "'";
+
+die "Somehow I get here a 'Can't call method \"execute\" on an undefined value'";
+      $sthRes = $sth->execute($mor->value, $entity->counterId, $entity->instance, $entity->counterId);
     }
     # Host, Cluster, VirtualMachine, ...
     elsif($updateType == 1) {
@@ -720,24 +769,26 @@ sub delete {
 #
 # @arg mo_ref
 # @arg entity type (  Folder | Datacenter | ClusterComputeResource
-#                   | HostSystem | VirtualMachine | PerfCounterInfo)
+#                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
 # @return undef (if errors), or a reference to an Entity object (if ok)
 #
 sub loadEntity {
-  my $moRef      = shift;
+  my $aId      = shift;
   my $entityType = shift;
   my $stmt;
   my $r;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
+  my $pmiInstance;
+  my $pmiMor;
 
-  if (! defined ($moRef)) {
-    Carp::croak("Got an undefined mo_ref trying to load a $entityType");
+  if (! defined ($aId)) {
+    Carp::croak("Got an undefined id trying to load a $entityType");
     return undef;
   }
-  if ($moRef eq '') {
-    Carp::croak("Got an empty mo_ref trying to load a $entityType");
+  if ($aId eq '') {
+    Carp::croak("Got an empty id trying to load a $entityType");
     return undef;
   }
   if (! defined ($entityType)) {
@@ -767,23 +818,52 @@ sub loadEntity {
   elsif($entityType eq 'PerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoSelectByKey;
   }
+  #
+  # 2 extra args if inserting PerfMetric :
+  #
+  # * counterId of PerfMetric object ($pMI->->counterId)
+  # * className (regular 2nd parameter)
+  # * instance of PerfMetric object ($pMI->instance)
+  # * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+  #                           $managedObjectReference->value (it's mo_ref))
+  elsif($entityType eq 'PerfMetric') {
+    $stmt = $sqlPerfMetricSelectByKey;
+    $pmiInstance = shift;
+    $pmiMor      = shift;
+
+    if (! defined ($pmiInstance)) {
+      Carp::croak("Got an undefined instance trying to load a $entityType");
+      return undef;
+    }
+    if (! defined ($pmiMor)) {
+      Carp::croak("Got an undefined mor trying to load a $entityType");
+      return undef;
+    }
+
+  }
   else {
     Carp::croak("loadEntity not implemented for '$entityType'");
     return undef;
   }
 
   OInventory::log(0, "selecting from db a ${entityType} with mo_ref/key = "
-                   . $moRef);
+                   . $aId);
 
   eval {
     my $sth = $dbh->prepare_cached($stmt)
                 or die "Can't prepare statement for all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
-    my $sthRes = $sth->execute($moRef);
+    my $sthRes;
+    if($entityType ne 'PerfMetric') {
+      $sthRes = $sth->execute($aId);
+    }
+    else {
+      $sthRes = $sth->execute($aId, $pmiInstance, $pmiMor->value);
+    }
 
     if(! $sthRes) {
       Carp::croak("Can't execute the statement to get the ${entityType} "
-                . "with mo_ref = " . $moRef);
+                . "with id = " . $aId);
       $sth->finish();
       return undef;
     }
@@ -792,7 +872,7 @@ sub loadEntity {
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
         Carp::croak("Found more than one ${entityType} "
-                   . "when looking for the one with mo_ref = $moRef");
+                   . "when looking for the one with id = $aId");
         $sth->finish();
         return undef;
       }
@@ -814,6 +894,9 @@ sub loadEntity {
       }
       elsif($entityType eq 'PerfCounterInfo') {
         $r = OPerfCounterInfo->new(\@data);
+      }
+      elsif($entityType eq 'PerfMetric') {
+        $r = OMockView::OMockPerfMetricId->new(\@data);
       }
       else {
         Carp::croak("Not implemented for $entityType in OvomDao.loadEntity");
@@ -841,6 +924,7 @@ sub loadEntity {
 #
 sub insert {
   my $entity = shift;
+  my $mor;
 
   # Pre-conditions
   if (! defined($entity)) {
@@ -896,6 +980,14 @@ sub insert {
     $insertType = 2;
     $desc  = "$oClassName with key='" . $entity->key . "'";
   }
+  elsif($oClassName eq 'PerfMetricId'
+     || $oClassName eq 'OMockView::OMockPerfMetricId') {
+    $mor  = shift;
+    $stmt = $sqlPerfMetricInsert;
+    $insertType = 3;
+    $desc  = "$oClassName with counterId='" . $entity->counterId
+           . "',instanceId='" . $entity->instance . "'";
+  }
   else {
     Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
     return 0;
@@ -903,18 +995,29 @@ sub insert {
 
   if($insertType == 0 || $insertType == 1) {
     if( ! defined($entity->{mo_ref}) || $entity->{mo_ref} eq '' ) {
-      Carp::croak("Trying to insert a $oClassName without mo_ref");
+      Carp::croak("Trying to insert a $desc without mo_ref");
       return 0;
     }
     if( ! defined($entity->{name}) || $entity->{name} eq '' ) {
-      Carp::croak("Trying to insert a $oClassName without name");
+      Carp::croak("Trying to insert a $desc without name");
       return 0;
     }
     if( ! defined($entity->{parent}) || $entity->{parent} eq '' ) {
-      Carp::croak("Trying to insert a $oClassName without parent");
+      Carp::croak("Trying to insert a $desc without parent");
       return 0;
     }
   }
+
+  if($insertType == 3) {
+    if( ! defined($mor->value) || $mor->value eq '' ) {
+      Carp::croak("Trying to insert a $desc without related mo_ref");
+      return 0;
+    }
+    $desc  = "$oClassName with counterId='" . $entity->counterId
+           . "',instanceId='" . $entity->instance
+           . "' for entity with mo_ref='" . $mor->value . "'";
+  }
+ 
 
   OInventory::log(1, "Inserting into db the $desc");
 
@@ -965,6 +1068,20 @@ sub insert {
                                $entity->statsType->val,
                                $entity->level,
                                $entity->perDeviceLevel
+                             );
+    }
+    elsif($insertType == 3) {
+
+      # 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
+      # 'VALUES (?, ?, ?)';
+      #   $desc  = "$oClassName with counterId='" . $entity->counterId
+      #          . "',instanceId='" . $entity->instance
+      #          . "' for entity with mo_ref='" . $mor->value . "'";
+
+      $sthRes = $sth->execute(
+                               $mor->value,
+                               $entity->counterId ,
+                               $entity->instance
                              );
     }
     elsif($insertType == 0) {

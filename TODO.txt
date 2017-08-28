@@ -1,5 +1,8 @@
 Some things to be done:
 
+* Database: add index and uniqueness for perf_metric (mo_ref , counter_id , instance)
+* Dao: PerfMetric no fully implemented nor fully tested
+* Dao: pending testing update sqlPerfCounterInfoUpdate
 * apply timeout to the calls in OPerformance::getLatestPerformance() after getting perfManager and before calling QueryPerf, for getting counterInfo, available perfMetricIds, ...
 * aggressively cache retrieved objects at OPerformance::getLatestPerformance()
 * aggressively cache OPerformance::getPerfManager()

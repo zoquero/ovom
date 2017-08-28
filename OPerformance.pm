@@ -104,7 +104,6 @@ sub updatePciIfNeeded {
   my $pCI = shift;
   my $ret = -2;
 
-print "DEBUG: updatePciIfNeeded for pCI key " . $pCI->key . "\n";
   # Pre-conditions
   if (! defined($pCI)) {
     OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo");
@@ -431,31 +430,74 @@ sub getPerfData {
 #
 # Register on DataBase that a perfData for an entity has been saved on a file
 #
+# Sample of parameters got:
+#
+# perfData:
+# $VAR1 = bless( {
+#                  'id' => bless( {
+#                                   'instance' => '',
+#                                   'counterId' => '2'
+#                                 }, 'PerfMetricId' ),
+#                  'value' => '920,912,653,819,737,661,957,774,675,1147,...'
+#                }, 'PerfMetricSeriesCSV' );
+# entity:
+# $VAR1 = bless( {
+#                  'type' => 'VirtualMachine',
+#                  'value' => 'vm-10068'
+#                }, 'ManagedObjectReference' );
+#
 # @arg perfData
 # @arg entityView
 # @return 1 ok, 0 errors
 #
 sub registerPerfDataSaved {
-  # perfData:
-  # $VAR1 = bless( {
-  #                  'id' => bless( {
-  #                                   'instance' => '',
-  #                                   'counterId' => '2'
-  #                                 }, 'PerfMetricId' ),
-  #                  'value' => '920,912,653,819,737,661,957,774,675,1147,...'
-  #                }, 'PerfMetricSeriesCSV' );
+  # Take a look at the subroutine comments to find a sample of received objects
   my $perfData = shift;
-
-  # entity:
-  # $VAR1 = bless( {
-  #                  'type' => 'VirtualMachine',
-  #                  'value' => 'vm-10068'
-  #                }, 'ManagedObjectReference' );
   my $entity   = shift;
 
   OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " has been saved for the " . $entity->type . " with mo_ref=" . $entity->value);
 
-  die "Next step is use Dao to insert/update this registering into database";
+  # 
+  my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric', $perfData->id->instance, $entity);
+# * counterId of PerfMetricId object ($pMI->->counterId)
+# * className (regular 2nd parameter)
+# * instance of PerfMetricId object ($pMI->instance)
+# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+#                           $managedObjectReference->value (it's mo_ref))
+  if( ! defined($lastRegister)) {
+    OInventory::log(0, "No previous PerfMetricId like this, let's insert:");
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new( [ $perfData->id->counterId, $perfData->id->instance ] );
+    if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
+# * the PerfMetricId object (regular 1st parameter)
+# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+#                           $managedObjectReference->value (it's mo_ref))
+      OInventory::log(3, "Can't insert the PerfMetricId "
+                  . " counterId='" . $perfData->id->counterId
+                  . "',instance='" . $perfData->id->instance
+                  . "' for entity with mo_ref='" . $entity->value . "'");
+      return 0;
+    }
+  }
+  else {
+    # update
+
+    OInventory::log(0, "Let's update previous PerfMetricId:");
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new( [ $perfData->id->counterId, $perfData->id->instance ] );
+    # TO_DO : update unimplemented for PerfMetric , 2nd extra argument
+    if( ! OvomDao::update($aPerfMetricId, $entity) ) {
+# * the PerfMetricId object (regular 1st parameter)
+# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+#                           $managedObjectReference->value (it's mo_ref))
+      OInventory::log(3, "Can't update the PerfMetricId "
+                  . " counterId='" . $perfData->id->counterId
+                  . "',instance='" . $perfData->id->instance
+                  . "' for entity with mo_ref='" . $entity->value . "'");
+      return 0;
+    }
+
+
+  }
+
 
   return 1;
 }
@@ -585,7 +627,7 @@ sub savePerfData {
       #
       if(! registerPerfDataSaved($p, $entityView)) {
         OInventory::log(3, "Errors registering that perfData was taken from " . ref($entityView)
-                         . " with mo_ref '" . $entityView->{value} . "'");
+                         . " with mo_ref '" . $entityView->value . "'");
         return 0;
       }
     }

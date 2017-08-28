@@ -118,7 +118,8 @@ CREATE TABLE `perf_metric` (
   `id` int(10) UNSIGNED NOT NULL,
   `mo_ref` varchar(255) COLLATE utf8_spanish_ci NOT NULL  COMMENT 'No FK because we want to allow for hosts and VMs to be temporarily out of inventory and it would break integrity. More over, we do not designed a single base entity table to have a single index controlling the unicity of mo_ref. It does not introduce any problem.',
   `counter_id` int(10) UNSIGNED NOT NULL COMMENT 'fk perf_counter_info.pci_key',
-  `instance` varchar(255) COLLATE utf8_spanish_ci NOT NULL
+  `instance` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `last_collection` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
 
 --
@@ -213,6 +214,11 @@ ALTER TABLE `host`
 -- AUTO_INCREMENT for table `virtualmachine`
 --
 ALTER TABLE `virtualmachine`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+--
+-- AUTO_INCREMENT for table `perf_metric`
+--
+ALTER TABLE `perf_metric`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 --
 -- Constraints for dumped tables
