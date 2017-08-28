@@ -29,7 +29,7 @@ SET time_zone = "+00:00";
 CREATE TABLE `cluster` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `moref` varchar(255) NOT NULL,
+  `mo_ref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
@@ -42,7 +42,7 @@ CREATE TABLE `cluster` (
 CREATE TABLE `datacenter` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `moref` varchar(255) NOT NULL,
+  `mo_ref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL,
   `datastore_folder` int(10) UNSIGNED NOT NULL,
   `vm_folder` int(10) UNSIGNED NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE `datacenter` (
 CREATE TABLE `folder` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `moref` varchar(255) NOT NULL,
+  `mo_ref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
@@ -72,7 +72,7 @@ CREATE TABLE `folder` (
 CREATE TABLE `host` (
   `id` int(11) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `moref` varchar(255) NOT NULL,
+  `mo_ref` varchar(255) NOT NULL,
   `parent` int(11) UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
@@ -85,7 +85,7 @@ CREATE TABLE `host` (
 CREATE TABLE `virtualmachine` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
-  `moref` varchar(255) NOT NULL,
+  `mo_ref` varchar(255) NOT NULL,
   `parent` int(10) UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_spanish_ci;
 
@@ -114,9 +114,9 @@ CREATE TABLE `perf_counter_info` (
 -- Table structure for table `perf_counter_info`
 --
 
-CREATE TABLE `perf_metric_id` (
+CREATE TABLE `perf_metric` (
   `id` int(10) UNSIGNED NOT NULL,
-  `moref` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `mo_ref` varchar(255) COLLATE utf8_spanish_ci NOT NULL  COMMENT 'No FK because we want to allow for hosts and VMs to be temporarily out of inventory and it would break integrity. More over, we do not designed a single base entity table to have a single index controlling the unicity of mo_ref. It does not introduce any problem.',
   `counter_id` int(10) UNSIGNED NOT NULL COMMENT 'fk perf_counter_info.pci_key',
   `instance` varchar(255) COLLATE utf8_spanish_ci NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
@@ -130,7 +130,7 @@ CREATE TABLE `perf_metric_id` (
 --
 ALTER TABLE `cluster`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `moref_uniq` (`moref`),
+  ADD UNIQUE KEY `mo_ref_uniq` (`mo_ref`),
   ADD KEY `parent_idx` (`parent`);
 
 --
@@ -138,9 +138,9 @@ ALTER TABLE `cluster`
 --
 ALTER TABLE `datacenter`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `moref_uniq` (`moref`),
+  ADD UNIQUE KEY `mo_ref_uniq` (`mo_ref`),
   ADD KEY `parent_idx` (`parent`),
-  ADD KEY `moref_idx` (`moref`),
+  ADD KEY `mo_ref_idx` (`mo_ref`),
   ADD KEY `folder_idx` (`datastore_folder`),
   ADD KEY `vm_folder_idx` (`vm_folder`),
   ADD KEY `host_folder_idx` (`host_folder`),
@@ -151,16 +151,16 @@ ALTER TABLE `datacenter`
 --
 ALTER TABLE `folder`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `moref_uniq` (`moref`),
+  ADD UNIQUE KEY `mo_ref_uniq` (`mo_ref`),
   ADD KEY `name_idx` (`name`),
-  ADD KEY `moref_idx` (`moref`);
+  ADD KEY `mo_ref_idx` (`mo_ref`);
 
 --
 -- Indexes for table `host`
 --
 ALTER TABLE `host`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `moref_uniq` (`moref`),
+  ADD UNIQUE KEY `mo_ref_uniq` (`mo_ref`),
   ADD KEY `parent_idx` (`parent`);
 
 --
@@ -168,7 +168,7 @@ ALTER TABLE `host`
 --
 ALTER TABLE `virtualmachine`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `moref_uniq` (`moref`),
+  ADD UNIQUE KEY `mo_ref_uniq` (`mo_ref`),
   ADD KEY `parent_idx` (`parent`);
 
 --
@@ -178,9 +178,9 @@ ALTER TABLE `perf_counter_info`
   ADD PRIMARY KEY (`pci_key`);
 
 --
--- Indexes for table `perf_metric_id`
+-- Indexes for table `perf_metric`
 --
-ALTER TABLE `perf_metric_id`
+ALTER TABLE `perf_metric`
   ADD PRIMARY KEY (`id`),
   ADD KEY `counter_id` (`counter_id`);
 
@@ -246,9 +246,9 @@ ALTER TABLE `virtualmachine`
   ADD CONSTRAINT `virtualmachine_parent_fk` FOREIGN KEY (`parent`) REFERENCES `folder` (`id`);
 
 --
--- Constraints for table `perf_metric_id`
+-- Constraints for table `perf_metric`
 --
-ALTER TABLE `perf_metric_id`
+ALTER TABLE `perf_metric`
   ADD CONSTRAINT `pmi_pci_fk` FOREIGN KEY (`counter_id`) REFERENCES `perf_counter_info` (`pci_key`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

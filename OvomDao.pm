@@ -12,24 +12,24 @@ our $dbh;
 ###########################
 # SQL Statements for Folder
 ###########################
-our $sqlFolderSelectAll       = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlFolderSelectAll       = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
-our $sqlFolderSelectByMoref   = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlFolderSelectByMoref   = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                               . 'FROM folder as a '
                               . 'inner join folder as b '
-                              . 'where a.parent = b.id and a.moref = ?';
-our $sqlFolderInsert          = 'INSERT INTO folder (name, moref, parent) '
+                              . 'where a.parent = b.id and a.mo_ref = ?';
+our $sqlFolderInsert          = 'INSERT INTO folder (name, mo_ref, parent) '
                               . 'VALUES (?, ?, ?)';
-                                                # moref is immutable
-our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ? where moref = ?';
-our $sqlFolderDelete = 'DELETE FROM folder where moref = ?';
+                                                # mo_ref is immutable
+our $sqlFolderUpdate = 'UPDATE folder set name = ?, parent = ? where mo_ref = ?';
+our $sqlFolderDelete = 'DELETE FROM folder where mo_ref = ?';
 
 ###############################
 # SQL Statements for Datacenter
 ###############################
-our $sqlDatacenterSelectAll   = 'SELECT a.id, a.name, a.moref, b.moref, '
-                              . 'c.moref, d.moref, e.moref, f.moref '
+our $sqlDatacenterSelectAll   = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref, '
+                              . 'c.mo_ref, d.mo_ref, e.mo_ref, f.mo_ref '
                               . 'FROM datacenter as a  '
                               . 'inner join folder as b, folder as c, '
                               . 'folder as d, folder as e, folder as f '
@@ -38,76 +38,76 @@ our $sqlDatacenterSelectAll   = 'SELECT a.id, a.name, a.moref, b.moref, '
                               . 'and a.vm_folder = d.id '
                               . 'and a.host_folder = e.id '
                               . 'and a.network_folder = f.id ';
-our $sqlDatacenterSelectByMoref  = 'SELECT a.id, a.name, a.moref, b.moref, '
-                                 . 'c.moref, d.moref, e.moref, f.moref '
+our $sqlDatacenterSelectByMoref  = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref, '
+                                 . 'c.mo_ref, d.mo_ref, e.mo_ref, f.mo_ref '
                                  . 'FROM datacenter as a  '
                                  . 'inner join folder as b, folder as c, '
                                  . 'folder as d, folder as e, folder as f '
-                                 . 'where a.parent = b.id and a.moref = ?'
+                                 . 'where a.parent = b.id and a.mo_ref = ?'
                                  . 'and a.datastore_folder = c.id '
                                  . 'and a.vm_folder = d.id '
                                  . 'and a.host_folder = e.id '
                                  . 'and a.network_folder = f.id ';
-our $sqlDatacenterInsert = 'INSERT INTO datacenter (name, moref, parent, '
+our $sqlDatacenterInsert = 'INSERT INTO datacenter (name, mo_ref, parent, '
                          . 'datastore_folder, vm_folder, '
                          . 'host_folder, network_folder) '
                          . 'VALUES (?, ?, ?, ?, ?, ?, ?)';
-                                                # moref is immutable
+                                                # mo_ref is immutable
 our $sqlDatacenterUpdate = 'UPDATE datacenter '
                          . 'set name = ?, parent = ?, datastore_folder = ?, '
                          . 'vm_folder = ?, host_folder = ?, '
-                         . 'network_folder = ? where moref = ?';
-our $sqlDatacenterDelete = 'DELETE FROM datacenter where moref = ?';
+                         . 'network_folder = ? where mo_ref = ?';
+our $sqlDatacenterDelete = 'DELETE FROM datacenter where mo_ref = ?';
 
 #########################
 # SQL Statements for Host
 #########################
-our $sqlHostSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlHostSelectAll     = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                           . 'FROM host as a '
                           . 'inner join folder as b where a.parent = b.id';
-our $sqlHostSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlHostSelectByMoref = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                           . 'FROM host as a '
                           . 'inner join folder as b '
-                          . 'where a.parent = b.id and a.moref = ?';
-our $sqlHostInsert        = 'INSERT INTO host (name, moref, parent) '
+                          . 'where a.parent = b.id and a.mo_ref = ?';
+our $sqlHostInsert        = 'INSERT INTO host (name, mo_ref, parent) '
                           . 'VALUES (?, ?, ?)';
-                                                # moref is immutable
-our $sqlHostUpdate = 'UPDATE host set name = ?, parent = ? where moref = ?';
-our $sqlHostDelete = 'DELETE FROM host where moref = ?';
+                                                # mo_ref is immutable
+our $sqlHostUpdate = 'UPDATE host set name = ?, parent = ? where mo_ref = ?';
+our $sqlHostDelete = 'DELETE FROM host where mo_ref = ?';
 
 ############################
 # SQL Statements for Cluster
 ############################
-our $sqlClusterSelectAll     = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlClusterSelectAll     = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                              . 'FROM cluster as a '
                              . 'inner join folder as b where a.parent = b.id';
-our $sqlClusterSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlClusterSelectByMoref = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                              . 'FROM cluster as a '
                              . 'inner join folder as b '
-                             . 'where a.parent = b.id and a.moref = ?';
-our $sqlClusterInsert        = 'INSERT INTO cluster (name, moref, parent) '
+                             . 'where a.parent = b.id and a.mo_ref = ?';
+our $sqlClusterInsert        = 'INSERT INTO cluster (name, mo_ref, parent) '
                              . 'VALUES (?, ?, ?)';
-                                                # moref is immutable
+                                                # mo_ref is immutable
 our $sqlClusterUpdate = 'UPDATE cluster '
-                      . 'set name = ?, parent = ? where moref = ?';
-our $sqlClusterDelete = 'DELETE FROM cluster where moref = ?';
+                      . 'set name = ?, parent = ? where mo_ref = ?';
+our $sqlClusterDelete = 'DELETE FROM cluster where mo_ref = ?';
 
 ###################################
 # SQL Statements for VirtualMachine
 ###################################
-our $sqlVirtualMachineSelectAll = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlVirtualMachineSelectAll = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                                 . 'FROM virtualmachine as a '
                                 . 'inner join folder as b where a.parent = b.id';
-our $sqlVirtualMachineSelectByMoref = 'SELECT a.id, a.name, a.moref, b.moref '
+our $sqlVirtualMachineSelectByMoref = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                                     . 'FROM virtualmachine as a '
                                     . 'inner join folder as b '
-                                    . 'where a.parent = b.id and a.moref = ?';
-our $sqlVirtualMachineInsert = 'INSERT INTO virtualmachine (name, moref, parent) '
+                                    . 'where a.parent = b.id and a.mo_ref = ?';
+our $sqlVirtualMachineInsert = 'INSERT INTO virtualmachine (name, mo_ref, parent) '
                              . 'VALUES (?, ?, ?)';
-                                                # moref is immutable
+                                                # mo_ref is immutable
 our $sqlVirtualMachineUpdate = 'UPDATE virtualmachine '
-                             . 'set name = ?, parent = ? where moref = ?';
-our $sqlVirtualMachineDelete = 'DELETE FROM virtualmachine where moref = ?';
+                             . 'set name = ?, parent = ? where mo_ref = ?';
+our $sqlVirtualMachineDelete = 'DELETE FROM virtualmachine where mo_ref = ?';
 
 ####################################
 # SQL Statements for PerfCounterInfo
@@ -124,7 +124,7 @@ our $sqlPerfCounterInfoInsert
 our $sqlPerfCounterInfoUpdate
                              = 'UPDATE perf_counter_info set pci_key = ?, name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?';
 our $sqlPerfCounterInfoDelete
-                             = 'DELETE FROM perf_counter_info where moref = ?';
+                             = 'DELETE FROM perf_counter_info where mo_ref = ?';
 
 
 #
@@ -950,11 +950,6 @@ sub insert {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
     elsif($insertType == 2) {
-#     if($oClassName eq 'PerfCounterInfo') {
-#     }
-#  'INSERT INTO perf_counter_info
-# (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level) '
-
       $sthRes = $sth->execute(
                                $entity->key,
                                $entity->nameInfo->key ,
