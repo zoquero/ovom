@@ -189,9 +189,10 @@ sub connect {
   eval {
     $dbh = DBI->connect($connStr, $username, $passwd,
                         { AutoCommit => 0,
-                          RaiseError=>1,
-                          PrintError=>0,
-                          ShowErrorStatement=>1
+                          RaiseError => 1,
+                          PrintError => 0,
+                          ShowErrorStatement => 1,
+                          mysql_enable_utf8 => 1
                         });
     if(! $dbh) {
       OInventory::log(3, "Errors connecting to Database: "
@@ -587,7 +588,22 @@ sub update {
 
     # PerfCounterInfo
     if($updateType == 2) {
-      $sthRes = $sth->execute($entity->{name}, $entity->key);
+      $sthRes = $sth->execute(
+                  $entity->nameInfo->key ,
+                  $entity->nameInfo->label ,
+                  $entity->nameInfo->summary ,
+                  $entity->groupInfo->key,
+                  $entity->groupInfo->label,
+                  $entity->groupInfo->summary,
+                  $entity->unitInfo->key,
+                  $entity->unitInfo->label,
+                  $entity->unitInfo->summary,
+                  $entity->rollupType->val,
+                  $entity->statsType->val,
+                  $entity->level,
+                  $entity->perDeviceLevel,
+                  $entity->key
+                );
     }
     # PerfMetric
     elsif($updateType == 3) {
@@ -1068,30 +1084,23 @@ sub insert {
     }
     elsif($insertType == 2) {
       $sthRes = $sth->execute(
-                               $entity->key,
-                               $entity->nameInfo->key ,
-                               $entity->nameInfo->label ,
-                               $entity->nameInfo->summary ,
-                               $entity->groupInfo->key,
-                               $entity->groupInfo->label,
-                               $entity->groupInfo->summary,
-                               $entity->unitInfo->key,
-                               $entity->unitInfo->label,
-                               $entity->unitInfo->summary,
-                               $entity->rollupType->val,
-                               $entity->statsType->val,
-                               $entity->level,
-                               $entity->perDeviceLevel
-                             );
+        $entity->key,
+        $entity->nameInfo->key ,
+        $entity->nameInfo->label ,
+        $entity->nameInfo->summary ,
+        $entity->groupInfo->key,
+        $entity->groupInfo->label,
+        $entity->groupInfo->summary,
+        $entity->unitInfo->key,
+        $entity->unitInfo->label,
+        $entity->unitInfo->summary,
+        $entity->rollupType->val,
+        $entity->statsType->val,
+        $entity->level,
+        $entity->perDeviceLevel
+      );
     }
     elsif($insertType == 3) {
-
-      # 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
-      # 'VALUES (?, ?, ?)';
-      #   $desc  = "$oClassName with counterId='" . $entity->counterId
-      #          . "',instanceId='" . $entity->instance
-      #          . "' for entity with mo_ref='" . $mor->value . "'";
-
       $sthRes = $sth->execute(
                                $mor->value,
                                $entity->counterId ,

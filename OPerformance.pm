@@ -116,6 +116,22 @@ sub updatePciIfNeeded {
     return -1;
   }
 
+  OInventory::log(0, "updatePciIfNeeded: got perfCounterInfo: "
+                   . "statsType='"        . $pCI->statsType->{val} . "',"
+                   . "perDeviceLevel='"   . $pCI->perDeviceLevel . "',"
+                   . "nameInfoKey='"      . $pCI->nameInfo->{key} . "',"
+                   . "nameInfoLabel='"    . $pCI->nameInfo->{label} . "',"
+                   . "nameInfo=Summary'"  . $pCI->nameInfo->{summary} . "',"
+                   . "groupInfoKey='"     . $pCI->groupInfo->{key} . "',"
+                   . "groupInfoLabel='"   . $pCI->groupInfo->{label} . "',"
+                   . "groupInfoSummary='" . $pCI->groupInfo->{summary} . "',"
+                   . "key='"              . $pCI->key . "',"
+                   . "level='"            . $pCI->level . "',"
+                   . "rollupType='"       . $pCI->rollupType . "',"
+                   . "unitInfoKey='"      . $pCI->unitInfo->{key} . "',"
+                   . "unitInfoLabel='"    . $pCI->unitInfo->{label} . "',"
+                   . "unitInfoSummary='"  . $pCI->unitInfo->{summary} . "'");
+
   my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
     OInventory::log(0, "Can't find any perfCounterInfo with key="
@@ -136,10 +152,13 @@ sub updatePciIfNeeded {
     elsif ($comp == 0) {
       # Changed (same mo_ref but some other attribute differs)
 # print "DEBUG: It has to be UPDATED into DB.
-      OInventory::log(3, "Bug in this software: the PerfCounterInfo with key '"
+      OInventory::log(3, "Bug: the PerfCounterInfo with key '"
                        . $pCI->key . "' has changed and this software has been "
-                       . "developed asserting that it would never change.");
-      OvomDao::update($pCI);
+                       . "developed asserting that it would never change. "
+                       . "Have you changed the DB charset? "
+                       . "We are not going to update the row on DB, "
+                       . "let's troubleshoot it before.");
+      # OvomDao::update($pCI);
     }
     else {
       # Errors

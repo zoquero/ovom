@@ -795,7 +795,7 @@ sub getViewsFromCsv {
     OInventory::log(0, "Reading $entityType entities from inventory CSV file "
                           . $csv . " for mocking");
 
-    if( ! open($csvHandler, "<", $csv) ) {
+    if( ! open($csvHandler, "<:encoding(UTF-8)", $csv) ) {
       OInventory::log(3, "Could not open mocking CSV file '$csv': $!");
       return undef;
     }
@@ -874,6 +874,7 @@ sub inventory2Csv {
       OInventory::log(3, "Could not open picker CSV file '$csv': $!");
       return 1;
     }
+    binmode($csvHandler, ":utf8");
     foreach my $aEntity (@{$inventory{$aEntityType}}) {
       print $csvHandler $aEntity->toCsvRow() . "\n";
     }
@@ -1059,6 +1060,8 @@ sub pickerInit {
   open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>", $clf)
     or die "Could not open picker main log file '$clf': $!";
 
+  binmode($OInventory::ovomGlobals{'pickerMainLogHandle'}, ":utf8");
+
   $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
 
   # Error log
@@ -1067,6 +1070,8 @@ sub pickerInit {
 
   open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>", $celf)
     or die "Could not open picker error log file '$celf': $!";
+
+  binmode($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ":utf8");
 
   $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;
 

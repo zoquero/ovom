@@ -9,6 +9,10 @@ use Time::HiRes; ## gettimeofday
 use OInventory;
 use OPerformance;
 
+use open 'IN',   ':encoding(UTF-8)';
+use open 'IO',   ':encoding(UTF-8)';
+use open 'OUT',  ':encoding(UTF-8)';
+use open ':std', ':encoding(UTF-8)';
 my $justOneLoop = 0;
 $justOneLoop = 1 if ( defined($ARGV[0]) && $ARGV[0] eq '--once' );
 my $inventoryRefreshCount = 0;
