@@ -118,7 +118,7 @@ sub updatePciIfNeeded {
 
   my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
-    OInventory::log(0, "Can't find the perfCounterInfo with key="
+    OInventory::log(0, "Can't find any perfCounterInfo with key="
                      . $pCI->key . " on DB. Let's insert it");
     if( ! OvomDao::insert($pCI) ) {
       OInventory::log(3, "Can't insert the PerfCounterInfo "

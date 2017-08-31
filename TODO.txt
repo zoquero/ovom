@@ -1,6 +1,7 @@
 Some things to be done:
 
-* Database: add index and uniqueness for perf_metric (mo_ref , counter_id , instance)
+* Bug: looks like the PerfCounterInfo with a key changes between loops and web haved developed asserting that it would never change.
+* Flag files to trigger actions like: 1) pause inventory gathering 2) restart inventory gathering 3) launch new inventory gathering
 * Dao: PerfMetric no fully implemented nor fully tested
 * Dao: pending testing update sqlPerfCounterInfoUpdate
 * apply timeout to the calls in OPerformance::getLatestPerformance() after getting perfManager and before calling QueryPerf, for getting counterInfo, available perfMetricIds, ...

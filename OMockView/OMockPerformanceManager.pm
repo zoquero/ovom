@@ -262,7 +262,7 @@ sub QueryPerf {
                                 sampleInfoCSV => $sampleInfoCSV,
                                 value         => \@perfMetricSeriesCSV,
                                 entity        => $perfQuerySpec->{_entity});
-  OInventory::log(3, "Mocking: $str");
+  OInventory::log(0, "Mocking: $str");
   return [$perfEntityMetricCsv];
 }
 

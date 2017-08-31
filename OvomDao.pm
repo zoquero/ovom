@@ -139,8 +139,9 @@ our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.la
 our $sqlPerfMetricInsert
                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
                               . 'VALUES (?, ?, ?)';
+                             # Nop update just to update timestamp
 our $sqlPerfMetricUpdate
-                             = 'UPDATE perf_metric set mo_ref = ?, counter_id = ?, instance = ? where counter_id = ?';
+                             = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
 our $sqlPerfMetricDelete
                              = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
 
@@ -474,6 +475,7 @@ sub update {
   # 0 = Datacenter           (entity with parent)
   # 1 = Entity no-Datacenter (entity with parent and has folder like networkF )
   # 2 = PerfCounterInfo      (hasn't parent, a regular update)
+  # 3 = PerfMetric
   my $updateType = -1;
   my $stmt;
   my $desc;
@@ -568,29 +570,28 @@ sub update {
         Carp::croak("Can't load the parent of the $desc");
         return 0;
       }
-      my $loadedParentId = $parentFolder->{id};
-  
-      $sth = $dbh->prepare_cached($stmt);
-      if(! $sth) {
-        Carp::croak("Can't prepare statement for updating the $desc: "
-                   . "(" . $dbh->err . ") :" . $dbh->errstr);
-        return 0;
-      }
+      $loadedParentId = $parentFolder->{id};
     }
+  
+    $sth = $dbh->prepare_cached($stmt);
+    if(! $sth) {
+      Carp::croak("Can't prepare statement for updating the $desc: "
+                 . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
+
+  # 0 = Datacenter           (entity with parent)
+  # 1 = Entity no-Datacenter (entity with parent and has folder like networkF )
+  # 2 = PerfCounterInfo      (hasn't parent, a regular update)
+  # 3 = PerfMetric
 
     # PerfCounterInfo
     if($updateType == 2) {
       $sthRes = $sth->execute($entity->{name}, $entity->key);
     }
+    # PerfMetric
     elsif($updateType == 3) {
-      # 'UPDATE perf_metric set mo_ref = ?, counter_id = ?, instance = ? where counter_id = ?';
-
-      # $desc = $oClassName . ": counterId=" . $entity->counterId
-      #         . ",instance=" . $entity->instance
-      #         . " for entity with mo_ref='" . $mor->value . "'";
-
-die "Somehow I get here a 'Can't call method \"execute\" on an undefined value'";
-      $sthRes = $sth->execute($mor->value, $entity->counterId, $entity->instance, $entity->counterId);
+      $sthRes = $sth->execute($entity->counterId, $entity->instance, $mor->value);
     }
     # Host, Cluster, VirtualMachine, ...
     elsif($updateType == 1) {
@@ -846,19 +847,25 @@ sub loadEntity {
     return undef;
   }
 
-  OInventory::log(0, "selecting from db a ${entityType} with mo_ref/key = "
-                   . $aId);
+  if($entityType eq 'PerfMetric') {
+    OInventory::log(0, "selecting from db the ${entityType} metricId='$aId',"
+                     . "instance='$pmiInstance',moRef='". $pmiMor->value . "'");
+  }
+  else {
+    OInventory::log(0, "selecting from db the ${entityType} id/mo_ref='"
+                     . $aId . "'");
+  }
 
   eval {
     my $sth = $dbh->prepare_cached($stmt)
                 or die "Can't prepare statement for all ${entityType}s: "
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     my $sthRes;
-    if($entityType ne 'PerfMetric') {
-      $sthRes = $sth->execute($aId);
+    if($entityType eq 'PerfMetric') {
+      $sthRes = $sth->execute($aId, $pmiInstance, $pmiMor->value);
     }
     else {
-      $sthRes = $sth->execute($aId, $pmiInstance, $pmiMor->value);
+      $sthRes = $sth->execute($aId);
     }
 
     if(! $sthRes) {
@@ -871,8 +878,15 @@ sub loadEntity {
     my $found = 0;
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
-        Carp::croak("Found more than one ${entityType} "
-                   . "when looking for the one with id = $aId");
+        if($entityType eq 'PerfMetric') {
+          Carp::croak("Found more than one ${entityType} when "
+                    . "looking for the one with metricId='$aId',"
+                    . "instance='$pmiInstance',moRef='". $pmiMor->value . "'");
+        }
+        else {
+          Carp::croak("Found more than one ${entityType} when "
+                    . "looking for the one with id='$aId'");
+        }
         $sth->finish();
         return undef;
       }

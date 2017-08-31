@@ -183,8 +183,8 @@ ALTER TABLE `perf_counter_info`
 --
 ALTER TABLE `perf_metric`
   ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `mo_ref` (`mo_ref`,`counter_id`,`instance`),
   ADD KEY `counter_id` (`counter_id`);
-
 
 --
 -- AUTO_INCREMENT for dumped tables
