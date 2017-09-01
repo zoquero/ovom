@@ -170,8 +170,11 @@ sub connect {
     return 0;
   }
   if($c == 1) {
-    OInventory::log(3, "BUG! Handle already active before connecting to DB");
-    return 0;
+    OInventory::log(3, "BUG! Trying to connect to db the DBI Handle was already "
+                     . "active. Probably exited somewere on an error "
+                     . "(like a connection timeout) without finishing "
+                     . "DBI handle first. Don't worry, it's a minor bug.");
+    return 1;
   }
 
   my $connStr  = "dbi:mysql:dbname=" . $OInventory::configuration{'db.name'}

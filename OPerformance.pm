@@ -744,6 +744,9 @@ sub getLatestPerformance {
   OInventory::log(1, "Profiling: Initiating counter info took "
                      . sprintf("%.3f", $eTime) . " s");
 
+  #
+  # Let's generate an entity list to get their perf on a loop
+  #
   my @entities;
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     push @entities, $aVM;
@@ -760,9 +763,35 @@ sub getLatestPerformance {
     my $filteredPerfMetricIds;
     my $desiredGroupInfo;
 
-    # TO_DO : move it to a getAvailablePerfMetric function
-    $availablePerfMetricIds =
-      $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
+    # TO_DO : code cleanup: move it to a getAvailablePerfMetric function
+
+
+    eval {
+      local $SIG{ALRM} = sub { die "Timeout calling QueryAvailablePerfMetric" };
+      my $maxSecs = $OInventory::configuration{'api.timeout'};
+      OInventory::log(0, "Calling QueryAvailablePerfMetric, "
+                       . "with a timeout of $maxSecs seconds");
+      alarm $maxSecs;
+      $availablePerfMetricIds =
+        $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
+      alarm 0;
+    };
+    if ($@) {
+      if ($@ =~ /Timeout calling QueryAvailablePerfMetric/) {
+        OInventory::log(3, "Timeout! perfManager->QueryAvailablePerfMetric "
+                         . "did not respond in a timely fashion: $@");
+        return 0;
+      } else {
+        OInventory::log(3, "perfManager->QueryAvailablePerfMetric failed: $@");
+        return 0;
+      }
+      if(! --$maxErrs) {
+        OInventory::log(3, "Too many errors when getting performance from "
+                         . "vCenter. We'll try again on next picker's loop");
+        return 0;
+      }
+      next;
+    }
 
     OInventory::log(0, "Available PerfMetricIds for $aEntity:");
     foreach my $pMI (@$availablePerfMetricIds) {

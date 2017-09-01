@@ -625,10 +625,13 @@ sub updateOvomInventoryDatabaseFromVcenter {
   }
   
   OInventory::log(1, "Let's read the last inventory saved on DB.");
-  # Connect to Database
-  if(OvomDao::connect() != 1) {
-    OInventory::log(3, "Cannot connect to DataBase");
-    return 0;
+  # Connect to Database if needed:
+  if(OvomDao::connected() != 1) {
+    OInventory::log(1, "Not connected to DB, let's connect.");
+    if(OvomDao::connect() != 1) {
+      OInventory::log(3, "Cannot connect to DataBase");
+      return 0;
+    }
   }
 
   $timeBefore=Time::HiRes::time;
@@ -936,7 +939,7 @@ sub updateInventory {
         };
         if ($@) {
           OInventory::log(3, "Vim::find_entity_views failed: $@");
-          return undef;
+          return 0;
         }
       }
       else {
@@ -952,7 +955,7 @@ sub updateInventory {
         };
         if ($@) {
           OInventory::log(3, "Vim::find_entity_views failed: $@");
-          return undef;
+          return 0;
         }
       }
     }
