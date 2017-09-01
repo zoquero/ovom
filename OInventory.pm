@@ -60,7 +60,8 @@ our %inventDb = ();
 
 our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
-our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource", "HostSystem", "VirtualMachine");
+our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource",
+                    "HostSystem", "VirtualMachine");
 
 # vmname/last_hour/
 # vmname/last_day/
@@ -117,7 +118,8 @@ sub getInventDb {
 sub connectToVcenter {
 
   if($configuration{'debug.mock.enabled'}) {
-    OInventory::log(1, "In mocking mode. Now we should be connecting to a vCenter...");
+    OInventory::log(1, "In mocking mode. "
+                     . "Now we should be connecting to vCenter...");
     return 1;
   }
 
@@ -155,7 +157,8 @@ sub connectToVcenter {
 sub disconnectFromVcenter {
 
   if($configuration{'debug.mock.enabled'}) {
-    OInventory::log(1, "In mocking mode. Now we should be disconnecting from a vCenter...");
+    OInventory::log(1, "In mocking mode. "
+                     . "Now we should be disconnecting from vCenter...");
     return 1;
   }
 
@@ -536,8 +539,8 @@ sub popNextFolderWithParent {
                 . " but without parent at popNextFolderWithParent");
       return undef;
     }
-    my $aParent = OvomDao::loadEntityByMoRef($$entities[$i]->{parent},
-                                             'OFolder');
+    my $aParent = OvomDao::loadEntity($$entities[$i]->{parent},
+                                             'Folder');
     if (defined $aParent) {
       my $r = $$entities[$i];
       splice @$entities, $i, 1;
@@ -584,7 +587,7 @@ sub loadInventoryDatabaseContents {
 
 
 #
-# Updates the inventory DB according to the discovered inventory from vCenter.
+# Update the inventory DB according to the discovered inventory from vCenter.
 #
 # It does it this way:
 # * filling %inventory hash (from vCenter)
@@ -622,10 +625,13 @@ sub updateOvomInventoryDatabaseFromVcenter {
   }
   
   OInventory::log(1, "Let's read the last inventory saved on DB.");
-  # Connect to Database
-  if(OvomDao::connect() != 1) {
-    OInventory::log(3, "Cannot connect to DataBase");
-    return 0;
+  # Connect to Database if needed:
+  if(OvomDao::connected() != 1) {
+    OInventory::log(1, "Not connected to DB, let's connect.");
+    if(OvomDao::connect() != 1) {
+      OInventory::log(3, "Cannot connect to DataBase");
+      return 0;
+    }
   }
 
   $timeBefore=Time::HiRes::time;
@@ -686,7 +692,8 @@ sub updateOvomInventoryDatabaseFromVcenter {
 #
 # @param Array of Views from VIM API
 # @param string specifying the type.
-#               It can be: Datacenter | VirtualMachine | HostSystem | ClusterComputeResource | Folder
+#               It can be: Datacenter | VirtualMachine
+#                        | HostSystem | ClusterComputeResource | Folder
 # @return none
 #
 sub pushToInventory {
@@ -740,8 +747,8 @@ sub pushToInventory {
       push @{$inventory{'Folder'}}, $extraFolderEntity;
       OInventory::log(1, "Pushed a 'virtual' Folder for the Cluster "
                             . $aEntityView->{name} . " with same mo_ref as a "
-                            . "simple solution for hosts of a cluster that have its "
-                            . "cluster as parent");
+                            . "simple solution for hosts of a cluster "
+                            . "that have its cluster as parent");
     }
     elsif($type eq 'Folder') {
       $aEntity = OFolder->newFromView($aEntityView);
@@ -777,13 +784,12 @@ sub pushToInventory {
 # @return undef if error, \@entities else
 #
 sub getViewsFromCsv {
-  # %inventory keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
-
   my $entityType = shift;
   my @entities;
   my ($csv, $csvHandler);
-  my $mockingCsvBaseFolder = $OInventory::configuration{'debug.mock.inventExpRoot'}
-                             . "/" . $OInventory::configuration{'vCenter.fqdn'} ;
+  my $mockingCsvBaseFolder =
+         $OInventory::configuration{'debug.mock.inventExpRoot'}
+         . "/" . $OInventory::configuration{'vCenter.fqdn'} ;
 
   if( $entityType eq "Datacenter"
    || $entityType eq "VirtualMachine"
@@ -795,7 +801,7 @@ sub getViewsFromCsv {
     OInventory::log(0, "Reading $entityType entities from inventory CSV file "
                           . $csv . " for mocking");
 
-    if( ! open($csvHandler, "<", $csv) ) {
+    if( ! open($csvHandler, "<:encoding(UTF-8)", $csv) ) {
       OInventory::log(3, "Could not open mocking CSV file '$csv': $!");
       return undef;
     }
@@ -860,17 +866,16 @@ sub inventory2Csv {
   my ($csv, $csvHandler);
   my $entityType;
   my($inventoryBaseFolder) = $OInventory::configuration{'inventory.export.root'}
-                             . "/" . $OInventory::configuration{'vCenter.fqdn'} ;
+                             . "/" . $OInventory::configuration{'vCenter.fqdn'};
 
   OInventory::log(1, "Let's write inventory into CSV files on "
                         . $inventoryBaseFolder);
 
-  # %inventory keys = Datacenter, VirtualMachine, HostSystem, ClusterComputeResource, Folder
   foreach my $aEntityType (@entityTypes) {
     $csv = "$inventoryBaseFolder/$aEntityType.csv";
     OInventory::log(0, "Writing inventory for $aEntityType entities "
                         . "on CSV file '$csv'");
-    if( ! open($csvHandler, ">", $csv) ) {
+    if( ! open($csvHandler, ">:utf8", $csv) ) {
       OInventory::log(3, "Could not open picker CSV file '$csv': $!");
       return 1;
     }
@@ -900,7 +905,8 @@ sub updateInventory {
   ##############
   # Get entities
   ##############
-  # Folder | HostSystem | ResourcePool | VirtualMachine | ComputeResource | Datacenter | ClusterComputeResource
+  #   Folder | HostSystem | ResourcePool | VirtualMachine
+  # | ComputeResource | Datacenter | ClusterComputeResource
 
   foreach my $aEntityType (@entityTypes) {
     OInventory::log(0, "Getting $aEntityType list");
@@ -924,14 +930,16 @@ sub updateInventory {
           alarm $maxSecs;
           $entityViews = Vim::find_entity_views(
             'view_type'  => $aEntityType,
-#           'properties' => ['name','parent','datastoreFolder','vmFolder','datastore','hostFolder','network','networkFolder']
-            'properties' => ['name','parent','datastoreFolder','vmFolder','hostFolder','networkFolder']
+#           'properties' => ['name','parent','datastoreFolder','vmFolder',
+#                            'datastore','hostFolder','network','networkFolder']
+            'properties' => ['name','parent','datastoreFolder',
+                             'vmFolder','hostFolder','networkFolder']
           );
           alarm 0;
         };
         if ($@) {
           OInventory::log(3, "Vim::find_entity_views failed: $@");
-          return undef;
+          return 0;
         }
       }
       else {
@@ -947,7 +955,7 @@ sub updateInventory {
         };
         if ($@) {
           OInventory::log(3, "Vim::find_entity_views failed: $@");
-          return undef;
+          return 0;
         }
       }
     }
@@ -1056,7 +1064,7 @@ sub pickerInit {
   my($clf) = $OInventory::configuration{'log.folder'} . "/picker.main.log";
   $OInventory::ovomGlobals{'pickerMainLogFile'} = $clf;
 
-  open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>", $clf)
+  open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>:utf8", $clf)
     or die "Could not open picker main log file '$clf': $!";
 
   $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
@@ -1065,7 +1073,7 @@ sub pickerInit {
   my($celf) = $OInventory::configuration{'log.folder'} . "/picker.error.log";
   $OInventory::ovomGlobals{'pickerErrorLogFile'} = $celf;
 
-  open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>", $celf)
+  open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>:utf8", $celf)
     or die "Could not open picker error log file '$celf': $!";
 
   $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;

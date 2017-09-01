@@ -32,4 +32,20 @@ sub new {
   return $self;
 }
 
+#
+# Added for compatibility with ManagedObjectReference->type
+#
+sub type {
+  my ($self) = @_;
+  return ref($self);
+}
+
+#
+# Added for compatibility with ManagedObjectReference->type
+#
+sub value {
+  my ($self) = @_;
+  return $self->{mo_ref}->{value};
+}
+
 1;

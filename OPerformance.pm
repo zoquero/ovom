@@ -10,6 +10,7 @@ use VMware::VIRuntime;
 use Data::Dumper;
 
 use OInventory;
+use OvomDao;
 
 # Our entities:
 use ODatacenter;
@@ -17,7 +18,7 @@ use OFolder;
 use OCluster;
 use OHost;
 use OVirtualMachine;
-use OMockView::OMockPerfCounterInfo;
+use OPerfCounterInfo;
 use OMockView::OMockPerformanceManager;
 use OMockView::OMockPerfQuerySpec;
 
@@ -91,6 +92,85 @@ sub getPerfManager {
   return $perfManagerView;
 }
 
+#
+# Update a perfCounterInfo if needed
+#
+# @return  2 (if updated),
+#          1 (if inserted),
+#          0 (if it doesn't need to be update),
+#         -1 (if errors)
+#
+sub updatePciIfNeeded {
+  my $pCI = shift;
+  my $ret = -2;
+
+  # Pre-conditions
+  if (! defined($pCI)) {
+    OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo");
+    return -1;
+  }
+  if (    ref($pCI) ne 'OPerfCounterInfo'
+       && ref($pCI) ne 'PerfCounterInfo') {
+    OInventory::log(3, "updatePciIfNeeded needs a ref to a perfCounterInfo "
+                     . "and got a " . ref($pCI));
+    return -1;
+  }
+
+  OInventory::log(0, "updatePciIfNeeded: got perfCounterInfo: "
+                   . "statsType='"        . $pCI->statsType->{val}     . "',"
+                   . "perDeviceLevel='"   . $pCI->perDeviceLevel       . "',"
+                   . "nameInfoKey='"      . $pCI->nameInfo->{key}      . "',"
+                   . "nameInfoLabel='"    . $pCI->nameInfo->{label}    . "',"
+                   . "nameInfo=Summary'"  . $pCI->nameInfo->{summary}  . "',"
+                   . "groupInfoKey='"     . $pCI->groupInfo->{key}     . "',"
+                   . "groupInfoLabel='"   . $pCI->groupInfo->{label}   . "',"
+                   . "groupInfoSummary='" . $pCI->groupInfo->{summary} . "',"
+                   . "key='"              . $pCI->key                  . "',"
+                   . "level='"            . $pCI->level                . "',"
+                   . "rollupType='"       . $pCI->rollupType           . "',"
+                   . "unitInfoKey='"      . $pCI->unitInfo->{key}      . "',"
+                   . "unitInfoLabel='"    . $pCI->unitInfo->{label}    . "',"
+                   . "unitInfoSummary='"  . $pCI->unitInfo->{summary}  . "'");
+
+  my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
+  if( ! defined($loadedPci)) {
+    OInventory::log(0, "Can't find any perfCounterInfo with key="
+                     . $pCI->key . " on DB. Let's insert it");
+    if( ! OvomDao::insert($pCI) ) {
+      OInventory::log(3, "Can't insert the PerfCounterInfo "
+                  . " with key '" . $pCI->key . "'" );
+      return -1;
+    }
+    $ret = 1;
+  }
+  else {
+    my $comp = $loadedPci->compare($pCI);
+    if ($comp == 1) {
+      # Equal, Nop.
+      # It hasn't to change in DB
+    }
+    elsif ($comp == 0) {
+      # Changed (same mo_ref but some other attribute differs).
+      # It has to be UPDATED into DB.
+      OInventory::log(3, "Bug: the PerfCounterInfo with key '"
+                       . $pCI->key . "' has changed and this software has been "
+                       . "developed asserting that it would never change. "
+                       . "Have you changed the DB charset? "
+                       . "We are not going to update the row on DB, "
+                       . "let's troubleshoot it before.");
+      # OvomDao::update($pCI);
+    }
+    else {
+      # Errors
+      OInventory::log(3, "Bug! Can't compare the PerfCounterInfo "
+                  . " with key='" . $pCI->key . "' with the one "
+                  . " with with key='" . $loadedPci->key . "'");
+      return -1;
+    }
+  }
+
+  return 0;
+}
 
 #
 # Initiate counter info
@@ -139,12 +219,34 @@ sub initCounterInfo {
     return 0;
   }
 
-	  foreach my $pCI (@$perfCounterInfo) {
-	    my $key = $pCI->key;
-	    $allCounters{$key} = $pCI;
-	    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
-	  }
-	  return 1;
+  foreach my $pCI (@$perfCounterInfo) {
+    #
+    # Reference it from allCounters and allCountersByGIKey vars
+    #
+    my $key = $pCI->key;
+    $allCounters{$key} = $pCI;
+    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+
+    #
+    # Store it on DataBase
+    #
+    my $r = updatePciIfNeeded($pCI);
+    if( $r == 2 ) {
+      OInventory::log(2, "The perfCounter key=" . $pCI->key . " changed on DB");
+    }
+    elsif( $r == 1 ) {
+      OInventory::log(2, "New perfCounter key=" . $pCI->key . " inserted on DB");
+    }
+    elsif( $r == 0 ) {
+      OInventory::log(0, "The perfCounter key=" . $pCI->key
+                       . " was already on DB with same values");
+    }
+    else {
+      OInventory::log(3, "Could not update the perfCounter key="
+                       . $pCI->key . " on DB");
+    }
+  }
+  return 1;
 }
 
 #
@@ -343,14 +445,100 @@ sub getPerfData {
   return $r;
 }
 
+
+#
+# Register on DataBase that a perfData for an entity has been saved on a file
+#
+# Sample of parameters got:
+#
+# perfData:
+# $VAR1 = bless( {
+#                  'id' => bless( {
+#                                   'instance' => '',
+#                                   'counterId' => '2'
+#                                 }, 'PerfMetricId' ),
+#                  'value' => '920,912,653,819,737,661,957,774,675,1147,...'
+#                }, 'PerfMetricSeriesCSV' );
+# entity:
+# $VAR1 = bless( {
+#                  'type' => 'VirtualMachine',
+#                  'value' => 'vm-10068'
+#                }, 'ManagedObjectReference' );
+#
+# @arg perfData
+# @arg entityView
+# @return 1 ok, 0 errors
+#
+sub registerPerfDataSaved {
+  # Take a look at the subroutine comments to find a sample of received objects
+  my $perfData = shift;
+  my $entity   = shift;
+
+  OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId
+                   . ",instance=" . $perfData->id->instance
+                   . " has been saved for the " . $entity->type
+                   . " with mo_ref=" . $entity->value);
+
+  # 
+  my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
+                                         $perfData->id->instance, $entity);
+# * counterId of PerfMetricId object ($pMI->->counterId)
+# * className (regular 2nd parameter)
+# * instance of PerfMetricId object ($pMI->instance)
+# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+#                           $managedObjectReference->value (it's mo_ref))
+  if( ! defined($lastRegister)) {
+    OInventory::log(0, "No previous PerfMetricId like this, let's insert:");
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
+                          [ $perfData->id->counterId, $perfData->id->instance ]
+                        );
+    if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
+# * the PerfMetricId object (regular 1st parameter)
+# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+#                           $managedObjectReference->value (it's mo_ref))
+      OInventory::log(3, "Can't insert the PerfMetricId "
+                  . " counterId='" . $perfData->id->counterId
+                  . "',instance='" . $perfData->id->instance
+                  . "' for entity with mo_ref='" . $entity->value . "'");
+      return 0;
+    }
+  }
+  else {
+    # update
+
+    OInventory::log(0, "Let's update previous PerfMetricId:");
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
+                          [ $perfData->id->counterId, $perfData->id->instance ]
+                        );
+    # TO_DO : update unimplemented for PerfMetric , 2nd extra argument
+    if( ! OvomDao::update($aPerfMetricId, $entity) ) {
+# * the PerfMetricId object (regular 1st parameter)
+# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
+#                           $managedObjectReference->value (it's mo_ref))
+      OInventory::log(3, "Can't update the PerfMetricId "
+                  . " counterId='" . $perfData->id->counterId
+                  . "',instance='" . $perfData->id->instance
+                  . "' for entity with mo_ref='" . $entity->value . "'");
+      return 0;
+    }
+
+
+  }
+
+
+  return 1;
+}
+
 #
 # Save perf data to disk
 #
 # @arg array of PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
+# @arg entity view
 # @return 1 ok, 0 errors
 #
 sub savePerfData {
   my $perfDataArray = shift;
+  my $entityView    = shift;
 
   if( ! defined($perfDataArray) ) {
     OInventory::log(3, "savePerfData: expects a PerfEntityMetricCSV");
@@ -395,11 +583,13 @@ sub savePerfData {
     # instead of a OMockHostView or OMockVirtualMachineView, for simplicity
     #
     my $mo_ref;
-    if(ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'HostSystem') {
+    if(ref($entityView) eq 'ManagedObjectReference'
+       && $entityView->{type} eq 'HostSystem') {
       $mo_ref = $entityView->{value};
       $csvFolder = $vCenterFolder . "/HostSystem";
     }
-    elsif(ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'VirtualMachine') {
+    elsif(ref($entityView) eq 'ManagedObjectReference'
+          && $entityView->{type} eq 'VirtualMachine') {
       $mo_ref = $entityView->{value};
       $csvFolder = $vCenterFolder . "/VirtualMachine";
     }
@@ -424,9 +614,11 @@ sub savePerfData {
       my $instance  = $p->id->instance;
       my $counterId = $p->id->counterId;
       my $value     = $p->value;
-      my $csvPath   = join($basenameSeparator, ($csvFolder . "/" . $mo_ref, $counterId, $instance));
+      my $csvPath   = join($basenameSeparator,
+                        ($csvFolder . "/" . $mo_ref, $counterId, $instance));
       my $csvPathLatest = $csvPath . ".latest.csv";
-# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
+# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='"
+# . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
       OInventory::log(0, "Saving in $csvPathLatest");
   
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
@@ -446,7 +638,7 @@ sub savePerfData {
       }
   
       my $pDHandle;
-      if(!open($pDHandle, ">", $csvPathLatest)) {
+      if(!open($pDHandle, ">:utf8", $csvPathLatest)) {
         OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
         return 0;
       }
@@ -460,11 +652,21 @@ sub savePerfData {
         return 0;
       }
       OInventory::log(0, "Saved in $csvPathLatest");
+
+      #
+      # Let's register on Database that this perfData has been saved
+      #
+      if(! registerPerfDataSaved($p, $entityView)) {
+        OInventory::log(3, "Errors registering that perfData was taken from " . ref($entityView)
+                         . " with mo_ref '" . $entityView->value . "'");
+        return 0;
+      }
     }
   }
 
   return 1;
 }
+
 
 #
 # Get array of timestamps from a "sampleInfoCSV" string
@@ -474,23 +676,19 @@ sub savePerfData {
 # where each epoch is the timestamp converted to epoch
 #
 # @arg a string like '20,2017-08-20T07:52:00Z,20,2017-08-20T07:52:20Z,20,...'
-# @return a ref to an array like 'epoch0,epoch1,...', where each epoch is the timestamp converted to epoch
+# @return a ref to an array like 'epoch0,epoch1,...',
+#         where each epoch is the timestamp converted to epoch
 #
 sub getSampleInfoArrayRefFromString {
   my $rawSampleInfoStrRef = shift;
   my @sampleInfoArray = ();
   my @tmpArray = split /,/, $rawSampleInfoStrRef;
   my $z = 0;
-#print "DEBUG.gsiarfs: init\n";
   for my $i (0 .. $#tmpArray) {
     if ($i % 2) {
-#print "DEBUG:.gsiarfs: push = " . $tmpArray[$i] . "\n";
-
       # 2017-07-20T05:49:40Z
       $tmpArray[$i] =~ s/Z$/\+0000/;
       my $t = Time::Piece->strptime($tmpArray[$i], "%Y-%m-%dT%H:%M:%S%z");
-#     print $tmpArray[$i] . " = " . $t->epoch . "\n";
-
       push @sampleInfoArray, $t->epoch;
     }
   }
@@ -511,6 +709,16 @@ sub getLatestPerformance {
   my $perfManager;
 
   OInventory::log(0, "Updating performance");
+
+
+  #
+  # Connect to Database
+  #
+  OInventory::log(1, "Let's connect to DB to update perfCounters");
+  if(OvomDao::connect() != 1) {
+    OInventory::log(3, "Cannot connect to DataBase");
+    return 0;
+  }
 
   #
   # Get perfManager
@@ -536,6 +744,9 @@ sub getLatestPerformance {
   OInventory::log(1, "Profiling: Initiating counter info took "
                      . sprintf("%.3f", $eTime) . " s");
 
+  #
+  # Let's generate an entity list to get their perf on a loop
+  #
   my @entities;
   foreach my $aVM (@{$OInventory::inventory{'VirtualMachine'}}) {
     push @entities, $aVM;
@@ -552,8 +763,35 @@ sub getLatestPerformance {
     my $filteredPerfMetricIds;
     my $desiredGroupInfo;
 
-    # TO_DO : move it to a getAvailablePerfMetric function
-    $availablePerfMetricIds = $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
+    # TO_DO : code cleanup: move it to a getAvailablePerfMetric function
+
+
+    eval {
+      local $SIG{ALRM} = sub { die "Timeout calling QueryAvailablePerfMetric" };
+      my $maxSecs = $OInventory::configuration{'api.timeout'};
+      OInventory::log(0, "Calling QueryAvailablePerfMetric, "
+                       . "with a timeout of $maxSecs seconds");
+      alarm $maxSecs;
+      $availablePerfMetricIds =
+        $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
+      alarm 0;
+    };
+    if ($@) {
+      if ($@ =~ /Timeout calling QueryAvailablePerfMetric/) {
+        OInventory::log(3, "Timeout! perfManager->QueryAvailablePerfMetric "
+                         . "did not respond in a timely fashion: $@");
+        return 0;
+      } else {
+        OInventory::log(3, "perfManager->QueryAvailablePerfMetric failed: $@");
+        return 0;
+      }
+      if(! --$maxErrs) {
+        OInventory::log(3, "Too many errors when getting performance from "
+                         . "vCenter. We'll try again on next picker's loop");
+        return 0;
+      }
+      next;
+    }
 
     OInventory::log(0, "Available PerfMetricIds for $aEntity:");
     foreach my $pMI (@$availablePerfMetricIds) {
@@ -631,7 +869,7 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
-    if(! savePerfData($perfData)) {
+    if(! savePerfData($perfData, $aEntity)) {
       OInventory::log(3, "Errors getting performance from " . ref($aEntity)
                        . " with mo_ref '" . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
@@ -648,6 +886,21 @@ sub getLatestPerformance {
                      . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
+
+  #
+  # Ok! Commit and disconnect from Database
+  #
+  OInventory::log(1, "Let's commit the transaction and disconnect from DB.");
+  if( ! OvomDao::transactionCommit()) {
+    OInventory::log(3, "Cannot commit transactions on DataBase");
+    return 0;
+  }
+  if( OvomDao::disconnect() != 1 ) {
+    OInventory::log(3, "Cannot disconnect from DataBase");
+    return 0;
+  }
+
+
   $eTimeB=Time::HiRes::time - $timeBeforeB;
   OInventory::log(1, "Profiling: Getting the whole data performance took "
                      . sprintf("%.3f", $eTimeB) . " s");
