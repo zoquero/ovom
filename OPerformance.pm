@@ -117,20 +117,20 @@ sub updatePciIfNeeded {
   }
 
   OInventory::log(0, "updatePciIfNeeded: got perfCounterInfo: "
-                   . "statsType='"        . $pCI->statsType->{val} . "',"
-                   . "perDeviceLevel='"   . $pCI->perDeviceLevel . "',"
-                   . "nameInfoKey='"      . $pCI->nameInfo->{key} . "',"
-                   . "nameInfoLabel='"    . $pCI->nameInfo->{label} . "',"
-                   . "nameInfo=Summary'"  . $pCI->nameInfo->{summary} . "',"
-                   . "groupInfoKey='"     . $pCI->groupInfo->{key} . "',"
-                   . "groupInfoLabel='"   . $pCI->groupInfo->{label} . "',"
+                   . "statsType='"        . $pCI->statsType->{val}     . "',"
+                   . "perDeviceLevel='"   . $pCI->perDeviceLevel       . "',"
+                   . "nameInfoKey='"      . $pCI->nameInfo->{key}      . "',"
+                   . "nameInfoLabel='"    . $pCI->nameInfo->{label}    . "',"
+                   . "nameInfo=Summary'"  . $pCI->nameInfo->{summary}  . "',"
+                   . "groupInfoKey='"     . $pCI->groupInfo->{key}     . "',"
+                   . "groupInfoLabel='"   . $pCI->groupInfo->{label}   . "',"
                    . "groupInfoSummary='" . $pCI->groupInfo->{summary} . "',"
-                   . "key='"              . $pCI->key . "',"
-                   . "level='"            . $pCI->level . "',"
-                   . "rollupType='"       . $pCI->rollupType . "',"
-                   . "unitInfoKey='"      . $pCI->unitInfo->{key} . "',"
-                   . "unitInfoLabel='"    . $pCI->unitInfo->{label} . "',"
-                   . "unitInfoSummary='"  . $pCI->unitInfo->{summary} . "'");
+                   . "key='"              . $pCI->key                  . "',"
+                   . "level='"            . $pCI->level                . "',"
+                   . "rollupType='"       . $pCI->rollupType           . "',"
+                   . "unitInfoKey='"      . $pCI->unitInfo->{key}      . "',"
+                   . "unitInfoLabel='"    . $pCI->unitInfo->{label}    . "',"
+                   . "unitInfoSummary='"  . $pCI->unitInfo->{summary}  . "'");
 
   my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
@@ -146,12 +146,12 @@ sub updatePciIfNeeded {
   else {
     my $comp = $loadedPci->compare($pCI);
     if ($comp == 1) {
-# print "DEBUG: It's equal. It hasn't to change in DB
-      # Equal, Nop
+      # Equal, Nop.
+      # It hasn't to change in DB
     }
     elsif ($comp == 0) {
-      # Changed (same mo_ref but some other attribute differs)
-# print "DEBUG: It has to be UPDATED into DB.
+      # Changed (same mo_ref but some other attribute differs).
+      # It has to be UPDATED into DB.
       OInventory::log(3, "Bug: the PerfCounterInfo with key '"
                        . $pCI->key . "' has changed and this software has been "
                        . "developed asserting that it would never change. "
@@ -474,10 +474,14 @@ sub registerPerfDataSaved {
   my $perfData = shift;
   my $entity   = shift;
 
-  OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " has been saved for the " . $entity->type . " with mo_ref=" . $entity->value);
+  OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId
+                   . ",instance=" . $perfData->id->instance
+                   . " has been saved for the " . $entity->type
+                   . " with mo_ref=" . $entity->value);
 
   # 
-  my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric', $perfData->id->instance, $entity);
+  my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
+                                         $perfData->id->instance, $entity);
 # * counterId of PerfMetricId object ($pMI->->counterId)
 # * className (regular 2nd parameter)
 # * instance of PerfMetricId object ($pMI->instance)
@@ -485,7 +489,9 @@ sub registerPerfDataSaved {
 #                           $managedObjectReference->value (it's mo_ref))
   if( ! defined($lastRegister)) {
     OInventory::log(0, "No previous PerfMetricId like this, let's insert:");
-    my $aPerfMetricId = OMockView::OMockPerfMetricId->new( [ $perfData->id->counterId, $perfData->id->instance ] );
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
+                          [ $perfData->id->counterId, $perfData->id->instance ]
+                        );
     if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
 # * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
@@ -501,7 +507,9 @@ sub registerPerfDataSaved {
     # update
 
     OInventory::log(0, "Let's update previous PerfMetricId:");
-    my $aPerfMetricId = OMockView::OMockPerfMetricId->new( [ $perfData->id->counterId, $perfData->id->instance ] );
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
+                          [ $perfData->id->counterId, $perfData->id->instance ]
+                        );
     # TO_DO : update unimplemented for PerfMetric , 2nd extra argument
     if( ! OvomDao::update($aPerfMetricId, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
@@ -575,11 +583,13 @@ sub savePerfData {
     # instead of a OMockHostView or OMockVirtualMachineView, for simplicity
     #
     my $mo_ref;
-    if(ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'HostSystem') {
+    if(ref($entityView) eq 'ManagedObjectReference'
+       && $entityView->{type} eq 'HostSystem') {
       $mo_ref = $entityView->{value};
       $csvFolder = $vCenterFolder . "/HostSystem";
     }
-    elsif(ref($entityView) eq 'ManagedObjectReference' && $entityView->{type} eq 'VirtualMachine') {
+    elsif(ref($entityView) eq 'ManagedObjectReference'
+          && $entityView->{type} eq 'VirtualMachine') {
       $mo_ref = $entityView->{value};
       $csvFolder = $vCenterFolder . "/VirtualMachine";
     }
@@ -604,9 +614,11 @@ sub savePerfData {
       my $instance  = $p->id->instance;
       my $counterId = $p->id->counterId;
       my $value     = $p->value;
-      my $csvPath   = join($basenameSeparator, ($csvFolder . "/" . $mo_ref, $counterId, $instance));
+      my $csvPath   = join($basenameSeparator,
+                        ($csvFolder . "/" . $mo_ref, $counterId, $instance));
       my $csvPathLatest = $csvPath . ".latest.csv";
-# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='" . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
+# print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='"
+# . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
       OInventory::log(0, "Saving in $csvPathLatest");
   
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
@@ -626,7 +638,7 @@ sub savePerfData {
       }
   
       my $pDHandle;
-      if(!open($pDHandle, ">", $csvPathLatest)) {
+      if(!open($pDHandle, ">:utf8", $csvPathLatest)) {
         OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
         return 0;
       }
@@ -664,23 +676,19 @@ sub savePerfData {
 # where each epoch is the timestamp converted to epoch
 #
 # @arg a string like '20,2017-08-20T07:52:00Z,20,2017-08-20T07:52:20Z,20,...'
-# @return a ref to an array like 'epoch0,epoch1,...', where each epoch is the timestamp converted to epoch
+# @return a ref to an array like 'epoch0,epoch1,...',
+#         where each epoch is the timestamp converted to epoch
 #
 sub getSampleInfoArrayRefFromString {
   my $rawSampleInfoStrRef = shift;
   my @sampleInfoArray = ();
   my @tmpArray = split /,/, $rawSampleInfoStrRef;
   my $z = 0;
-#print "DEBUG.gsiarfs: init\n";
   for my $i (0 .. $#tmpArray) {
     if ($i % 2) {
-#print "DEBUG:.gsiarfs: push = " . $tmpArray[$i] . "\n";
-
       # 2017-07-20T05:49:40Z
       $tmpArray[$i] =~ s/Z$/\+0000/;
       my $t = Time::Piece->strptime($tmpArray[$i], "%Y-%m-%dT%H:%M:%S%z");
-#     print $tmpArray[$i] . " = " . $t->epoch . "\n";
-
       push @sampleInfoArray, $t->epoch;
     }
   }
@@ -753,7 +761,8 @@ sub getLatestPerformance {
     my $desiredGroupInfo;
 
     # TO_DO : move it to a getAvailablePerfMetric function
-    $availablePerfMetricIds = $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
+    $availablePerfMetricIds =
+      $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
 
     OInventory::log(0, "Available PerfMetricIds for $aEntity:");
     foreach my $pMI (@$availablePerfMetricIds) {

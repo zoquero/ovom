@@ -35,12 +35,12 @@ while(1) {
     $r = OInventory::updateOvomInventoryDatabaseFromVcenter();
     $eTime=Time::HiRes::time - $timeBefore;
 
-    if(! $r) {
-      OInventory::log(3, "Can't update inventory");
+    if($r) {
+      OInventory::log(1, "Profiling: Retrieving inventory and updating DB took "
+                         . sprintf("%.3f", $eTime) . " s");
     }
     else {
-      OInventory::log(1, "Profiling: Retrieve inventory and update DB took "
-                         . sprintf("%.3f", $eTime) . " s");
+      OInventory::log(3, "Can't update inventory");
     }
   }
   else {
@@ -57,8 +57,12 @@ while(1) {
   $r = OPerformance::getLatestPerformance();
   $eTime=Time::HiRes::time - $timeBefore;
 
-  if(! $r) {
-    OInventory::log(3, "Errors getting performance data");
+  if($r) {
+    OInventory::log(1, "Profiling: getting the whole performance took "
+                       . sprintf("%.3f", $eTime) . " s");
+  }
+  else {
+    OInventory::log(3, "Can't get performance data");
     # Will not break, just a sleep time is left in this loop
   }
 
