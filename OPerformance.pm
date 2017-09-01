@@ -117,20 +117,20 @@ sub updatePciIfNeeded {
   }
 
   OInventory::log(0, "updatePciIfNeeded: got perfCounterInfo: "
-                   . "statsType='"        . $pCI->statsType->{val}     . "',"
-                   . "perDeviceLevel='"   . $pCI->perDeviceLevel       . "',"
-                   . "nameInfoKey='"      . $pCI->nameInfo->{key}      . "',"
-                   . "nameInfoLabel='"    . $pCI->nameInfo->{label}    . "',"
-                   . "nameInfo=Summary'"  . $pCI->nameInfo->{summary}  . "',"
-                   . "groupInfoKey='"     . $pCI->groupInfo->{key}     . "',"
-                   . "groupInfoLabel='"   . $pCI->groupInfo->{label}   . "',"
-                   . "groupInfoSummary='" . $pCI->groupInfo->{summary} . "',"
-                   . "key='"              . $pCI->key                  . "',"
-                   . "level='"            . $pCI->level                . "',"
-                   . "rollupType='"       . $pCI->rollupType           . "',"
-                   . "unitInfoKey='"      . $pCI->unitInfo->{key}      . "',"
-                   . "unitInfoLabel='"    . $pCI->unitInfo->{label}    . "',"
-                   . "unitInfoSummary='"  . $pCI->unitInfo->{summary}  . "'");
+                   . "statsType='"        . $pCI->statsType->val     . "',"
+                   . "perDeviceLevel='"   . $pCI->perDeviceLevel     . "',"
+                   . "nameInfoKey='"      . $pCI->nameInfo->key      . "',"
+                   . "nameInfoLabel='"    . $pCI->nameInfo->label    . "',"
+                   . "nameInfoSummary'"   . $pCI->nameInfo->summary  . "',"
+                   . "groupInfoKey='"     . $pCI->groupInfo->key     . "',"
+                   . "groupInfoLabel='"   . $pCI->groupInfo->label   . "',"
+                   . "groupInfoSummary='" . $pCI->groupInfo->summary . "',"
+                   . "key='"              . $pCI->key                . "',"
+                   . "level='"            . $pCI->level              . "',"
+                   . "rollupType='"       . $pCI->rollupType         . "',"
+                   . "unitInfoKey='"      . $pCI->unitInfo->key      . "',"
+                   . "unitInfoLabel='"    . $pCI->unitInfo->label    . "',"
+                   . "unitInfoSummary='"  . $pCI->unitInfo->summary  . "'");
 
   my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
@@ -710,13 +710,8 @@ sub getLatestPerformance {
 
   OInventory::log(0, "Updating performance");
 
-
-  #
-  # Connect to Database
-  #
-  OInventory::log(1, "Let's connect to DB to update perfCounters");
-  if(OvomDao::connect() != 1) {
-    OInventory::log(3, "Cannot connect to DataBase");
+  if(OvomDao::connected() != 1) {
+    OInventory::log(3, "Must be previously correctly connected to Database");
     return 0;
   }
 
@@ -874,7 +869,7 @@ sub getLatestPerformance {
                        . " with mo_ref '" . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
         OInventory::log(3, "Too many errors when getting performance from "
-                         . "vCenter. We'll try again on next picker's loop");
+                         . "vCenter. We'll try again on next iteration");
         return 0;
       }
       next;
@@ -886,20 +881,6 @@ sub getLatestPerformance {
                      . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
-
-  #
-  # Ok! Commit and disconnect from Database
-  #
-  OInventory::log(1, "Let's commit the transaction and disconnect from DB.");
-  if( ! OvomDao::transactionCommit()) {
-    OInventory::log(3, "Cannot commit transactions on DataBase");
-    return 0;
-  }
-  if( OvomDao::disconnect() != 1 ) {
-    OInventory::log(3, "Cannot disconnect from DataBase");
-    return 0;
-  }
-
 
   $eTimeB=Time::HiRes::time - $timeBeforeB;
   OInventory::log(1, "Profiling: Getting the whole data performance took "

@@ -1,15 +1,10 @@
 Some things to be done:
 
-* Minor bug detected in OvomDao::connect: durint inventory or getPerf loops, when we detect an error (like a network connection timeout) we don't finish first the db handle. There are 2 things to think about and change: 1) now we are opening and closing db connection twice on each loop (one for inventory, other for perf), maybe we should keep it always open like happens with vCenter connection, opening it on pickerInit. 2) if prefer closing it on each loop then we should close connection on each error condition, if prefer not closing it on each loop the we should verify if open on each loop.
-* Bug: looks like the PerfCounterInfo with a key changes between loops and web haved developed asserting that it would never change.
 * Flag files to trigger actions like: 1) pause inventory gathering 2) restart inventory gathering 3) launch new inventory gathering
-* Dao: PerfMetric no fully implemented nor fully tested
+* Dao: PerfMetric not fully tested (update & delete)
 * Dao: pending testing update sqlPerfCounterInfoUpdate
-* apply timeout to the calls in OPerformance::getLatestPerformance() after getting perfManager and before calling QueryPerf, for getting counterInfo, available perfMetricIds, ...
 * aggressively cache retrieved objects at OPerformance::getLatestPerformance()
 * aggressively cache OPerformance::getPerfManager()
-* mocking PerfManager and perfCounterInfo to work offline
-* Charset problem: When a folder has non-ascii characters the comparation says that it's different. Appears correctly on console, so it looks like a DB configuration error.
 * when should DBI::finish be called?
 * log rotation
 * getting hardware alarms
