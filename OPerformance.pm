@@ -586,27 +586,37 @@ sub savePerfData {
     if(ref($entityView) eq 'ManagedObjectReference'
        && $entityView->{type} eq 'HostSystem') {
       $mo_ref = $entityView->{value};
-      $csvFolder = $vCenterFolder . "/HostSystem";
+      $csvFolder = $vCenterFolder . "/HostSystem/" . $mo_ref;
     }
     elsif(ref($entityView) eq 'ManagedObjectReference'
           && $entityView->{type} eq 'VirtualMachine') {
       $mo_ref = $entityView->{value};
-      $csvFolder = $vCenterFolder . "/VirtualMachine";
+      $csvFolder = $vCenterFolder . "/VirtualMachine/" . $mo_ref;
     }
     elsif(ref($entityView) eq 'OMockView::OMockHostView') {
       $mo_ref = $entityView->{mo_ref}->{value};
-      $csvFolder = $vCenterFolder . "/HostSystem";
+      $csvFolder = $vCenterFolder . "/HostSystem/" . $mo_ref;
     }
     elsif(ref($entityView) eq 'OMockView::OMockVirtualMachineView') {
       $mo_ref = $entityView->{mo_ref}->{value};
-      $csvFolder = $vCenterFolder . "/VirtualMachine";
+      $csvFolder = $vCenterFolder . "/VirtualMachine/" . $mo_ref;
     }
     else {
       OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
                        . "' instead of HostSystem or VirtualMachine");
       return 0;
     }
-  
+
+    # Create folder if needed
+    if(! -d $csvFolder) {
+      OInventory::log(0, "Creating perfdata folder '$csvFolder' for "
+                       . ref($entityView) . " with mo_ref $mo_ref");
+      if(! mkdir $csvFolder) {
+        OInventory::log(3, "Failed to create '$csvFolder': $!");
+        return 0;
+      }
+    }
+
     OInventory::log(0, "Saving perf data for the " . ref($entityView)
                      . " with mo_ref='" . $mo_ref . "'");
   
