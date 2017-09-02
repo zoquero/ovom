@@ -646,15 +646,20 @@ sub savePerfData {
                          . ",counterId=$counterId,instance=$instance");
         return 0;
       }
-  
+
+      #
+      # Print perf data
+      #
       my $pDHandle;
       if(!open($pDHandle, ">:utf8", $csvPathLatest)) {
         OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
         return 0;
       }
   
+      print $pDHandle "#" . $$timestamps[0] . "\n";
       for(my $i = 0; $i <=$#$timestamps; $i++) {
-        print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+#       print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+        print $pDHandle                          $values[$i] . "\n";
       }
   
       if(!close($pDHandle)) {

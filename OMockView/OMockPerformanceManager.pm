@@ -277,10 +277,10 @@ sub QueryPerf {
 #
 sub getTimeStamps {
   my @vars ;
-  for(my $i = 20*60 - 1; $i >= 0; $i--) {
+  for(my $i = 3*60 - 1; $i >= 0; $i--) {
 
     my $t = time - 20*$i;
-    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=localtime($t);
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst)=gmtime($t);
     my $timestamp = sprintf ( "%04d-%02d-%02dT%02d:%02d:%02dZ", $year+1900,$mon+1,$mday,$hour,$min,$sec);
 
     my $item = "20,$timestamp";
@@ -293,8 +293,9 @@ sub getTimeStamps {
 # Get an array of random values.
 #
 # Values belong to [0,100]:
-#   it's a + b, where a€[0,90] (just depends on the current second)
-#   and b€[0,10], random
+#   it's a + b, where:
+#                      a€[0,89] (just depends on the current second)
+#                      b€[0,11], random
 #
 # Ex.: '42,43,41,47,50,49,...,46';
 #
@@ -302,8 +303,8 @@ sub getTimeStamps {
 #
 sub getRandValues {
   my @vars ;
-  for(my $i = 0; $i < 20*60; $i++) {
-    my $randVal = time % 90 + int(rand(11));
+  for(my $i = 0; $i < 3*60; $i++) {
+    my $randVal = time % 89 + int(rand(12));
     push @vars, $randVal;
   }
   return join ',', @vars;
