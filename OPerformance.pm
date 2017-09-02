@@ -666,7 +666,31 @@ sub savePerfData {
         OInventory::log(3, "Could not close perf data file $csvPathLatest: $!");
         return 0;
       }
-      OInventory::log(0, "Saved in $csvPathLatest");
+      OInventory::log(0, "Perf data saved in $csvPathLatest");
+
+      #
+      # RRDB:
+      #
+      # * count new points
+      # * If there are enough new points in 'latest' (3?):
+      #   * Get the oldest points (as many as the new points)
+      #   * Create a new 'hour'
+      #   * Interpolate the resulting new points for the new 'day' file
+      #   * Get the oldest points of the previous 'day' (as many as the new points)
+      #   * Print the newest points of the previous 'day' in the new 'day' file
+      #   * Print the interpolated points at the end of the new 'day file'
+      # * Repeat changing 'hour'   by 'day'
+      # * Repeat changing 'day'    by 'week'
+      # * Repeat changing 'week'   by 'month'
+      # * Repeat changing 'month'  by 'year'
+      # * If all ok:
+      #   * Substitute the old 'hour'  file by the new 'hour'  file
+      #   * Substitute the old 'day'   file by the new 'day'   file
+      #   * Substitute the old 'week'  file by the new 'week'  file
+      #   * Substitute the old 'month' file by the new 'month' file
+      #   * Substitute the old 'year'  file by the new 'year'  file
+      #
+      die "Working on RRDB";
 
       #
       # Let's register on Database that this perfData has been saved
