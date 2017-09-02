@@ -8,6 +8,7 @@ use Time::Piece;
 use Time::HiRes; ## gettimeofday
 use VMware::VIRuntime;
 use Data::Dumper;
+use POSIX;       ## floor
 
 use OInventory;
 use OvomDao;
@@ -627,9 +628,10 @@ sub savePerfData {
       my $csvPath   = join($basenameSeparator,
                         ($csvFolder . "/" . $mo_ref, $counterId, $instance));
       my $csvPathLatest = $csvPath . ".latest.csv";
+      OInventory::log(0, "Saving in $csvPathLatest");
+
 # print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='"
 # . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
-      OInventory::log(0, "Saving in $csvPathLatest");
   
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
       my @values = split /,/, $value;
@@ -690,7 +692,15 @@ sub savePerfData {
       #   * Substitute the old 'month' file by the new 'month' file
       #   * Substitute the old 'year'  file by the new 'year'  file
       #
-      die "Working on RRDB";
+
+      #
+      # RRDB this file
+      #
+      if(! doRrdb($csvPath)) {
+        OInventory::log(3, "Could not run rrdb on perf data file $csvPathLatest");
+        return 0;
+      }
+ 
 
       #
       # Let's register on Database that this perfData has been saved
@@ -706,6 +716,222 @@ sub savePerfData {
   return 1;
 }
 
+#
+# Runs a RRDB algorythm for a perf data file.
+#
+# It allows to have a fixed size for the complete perf data files.
+#
+# @return 1 ok, 0 errors
+#
+sub doRrdb {
+  my $prefix = shift;
+
+  #
+  # Let's get configuration for stages first
+  #
+  my $stageNamesStr     = $OInventory::configuration{'perf_stages.names'};
+  my $stageWidthsStr    = $OInventory::configuration{'perf_stages.widths'};
+  my $sampleLengthsStr  = $OInventory::configuration{'perf_stages.sample_widths'};
+
+  if ( ! defined($stageNamesStr)     || $stageNamesStr     eq ''
+    || ! defined($stageWidthsStr)    || $stageWidthsStr    eq ''
+    || ! defined($sampleLengthsStr)  || $sampleLengthsStr  eq '') {
+    OInventory::log(3, "Bad configuration. Missing perf_stages.names, "
+                     . "perf_stages.widths or perf_stages.sample_widths");
+    return 0;
+  }
+
+  my @stageNames     = split /;/, $stageNamesStr;
+  my @stageWidths    = split /;/, $stageWidthsStr;
+  my @sampleLengths  = split /;/, $sampleLengthsStr;
+
+  if($#stageNames <= -1) {
+    OInventory::log(3, "Bad configuration. "
+                     . "Can't get the number of stage names");
+    return 0;
+  }
+
+  if(   $#stageNames != $#stageWidths
+     || $#stageNames != $#sampleLengths) {
+    OInventory::log(3, "Bad configuration. Different number of stages for "
+                     . "perf_stages.names, perf_stages.widths "
+                     . "or perf_stages.sample_widths");
+    return 0;
+  }
+
+  # Trick needed for running correctly just one loop for all stages
+  $stageNames[-1]    = "latest";
+  $stageWidths[-1]   = "3600";
+  $sampleLengths[-1] = "20";
+
+  #
+  # Now let's run RRDB for each stage:
+  #
+  my $removedPoints;
+  for (my $stageNumber = 0; $stageNumber <= $#stageNames; $stageNumber++) {
+    my $stageName         = $stageNames[$stageNumber];
+    my $stageWidth        = $stageWidths[$stageNumber];
+    my $stageSampleLength = $sampleLengths[$stageNumber];
+    my $stageFilename     = $prefix . "." . $stageNames[$stageNumber] . ".csv";
+
+    my $prevStageName         = $stageNames[$stageNumber    - 1];
+    my $prevStageWidth        = $stageWidths[$stageNumber   - 1];
+    my $prevStageSampleLength = $sampleLengths[$stageNumber - 1];
+    my $prevStageFilename     = $prefix . "."
+                              . $stageNames[$stageNumber - 1] . ".csv";
+
+    OInventory::log(0, "RRDB: stage '" . $stageNames[$stageNumber] 
+                     . "' for prefix $prefix : width=${stageWidth}s,"
+                     . "sampleLength=${stageSampleLength}s,"
+                     . "filename=$stageFilename");
+
+    if(! -e $stageFilename) {
+      OInventory::log(0, "RRDB: stage file '" . $stageFilename . " doesn't exist");
+    }
+
+    my $pdff;
+    my $prevTimestamp;
+    my $prevValues;
+    my $prevLastTimestamp;
+    my $timestamp;
+    my $values;
+    my $lastTimestamp;
+    #
+    # Let's read perf data of the previous stage
+    #
+    $pdff = getPerfDataFromFile($prevStageFilename);
+    if ( ! defined($pdff) ) {
+      OInventory::log(3, "Can't get perf data from previous stage file"
+                       . $prevStageFilename);
+      return 0;
+    }
+    $prevTimestamp     = $$pdff[0];
+    $prevValues        = $$pdff[1];
+    $prevLastTimestamp = $prevTimestamp + $prevStageWidth - $prevStageSampleLength;
+
+    if(! -e $stageFilename) {
+      $removedPoints = pushNewPointsToPerfDataStage($stageFilename, $prevValues, $prevTimestamp, -1, $stageWidth, $stageSampleLength);
+      #
+      # We are done within this stage, let's move to next
+      #
+      next;
+    }
+
+    #
+    # Let's read perf data of the current stage
+    #
+    $pdff = getPerfDataFromFile($stageFilename);
+    if ( ! defined($pdff) ) {
+      OInventory::log(3, "Can't get perf data from stage file"
+                       . $stageFilename);
+      return 0;
+    }
+    $timestamp     = $$pdff[0];
+    $values        = $$pdff[1];
+    $lastTimestamp = $timestamp + $stageWidth - $stageSampleLength;
+
+
+# print "DEBUG: for $prevStageFilename: prevTimestamp=$prevTimestamp, prevLastTimestamp=$prevLastTimestamp, #prevVals = " . $#$prevValues . "\n";
+
+    my $newPoints = floor($lastTimestamp - $prevLastTimestamp)/$stageSampleLength;
+
+print "DEBUG: for $prevStageFilename: prevTimestamp=$prevTimestamp, prevLastTimestamp=$prevLastTimestamp, #prevVals = " . $#$prevValues . ". newPoints=$newPoints\n";
+
+  }
+
+  return 1;
+}
+
+#
+# Runs a RRDB algorythm for a perf data file.
+#
+# It allows to have a fixed size for the complete perf data files.
+#
+# @return 1 ok, 0 errors
+#
+sub pushNewPointsToPerfDataStage {
+  my $filename          = shift;
+  my $prevValues        = shift;
+  my $prevTimestamp     = shift;
+  my $numNewPoints      = shift;
+  my $stageWidth        = shift;
+  my $stageSampleLength = shift;
+
+  my $handler;
+  if($numNewPoints == -1) {
+    if( ! open($handler, ">:utf8", $filename) ) {
+      OInventory::log(3, "Can't open '$filename' for writing: $!");
+      return 0;
+    }
+    print $handler "$prevTimestamp\n";
+    foreach my $value (@$prevValues) {
+      print $handler "$value\n";
+    }
+    if( ! close($handler) ) {
+      OInventory::log(3, "Can't close '$filename': $!");
+      return 0;
+    }
+
+  }
+  return 1;
+}
+
+#
+# 
+#
+# 
+#
+# @return [$timestamp,$values], undef errors
+#           where:
+#             $timestamp is the epoch timestamp of the first value
+#             $values is a ref to an array with the values
+#
+sub getPerfDataFromFile {
+  my $filename = shift;
+  my $timestamp;
+  my @values;
+
+  if(! defined($filename)) {
+    OInventory::log(3, "Missing filename argument to get PerfData from file");
+    return undef;
+  }
+
+  #
+  # Let's open the file
+  #
+  my $handler;
+  if( ! open($handler, "<", $filename) ) {
+    OInventory::log(3, "Can't open perf data file '$filename': $!");
+    return undef;
+  }
+
+  #
+  # Let's read the file
+  #
+  my $first = 1;
+  while (my $line = <$handler>) {
+    chomp $line;
+    next if $line =~ /^\s*$/;
+    if($first) {
+      $first = 0;
+      $line =~ s/^#//g;
+      $timestamp = $line;
+      next;
+    }
+    push @values, $line;
+  }
+
+  #
+  # Let's close the file
+  #
+  if( ! close($handler) ) {
+    OInventory::log(3, "Can't close perf data file '$filename': $!");
+    return undef;
+  }
+
+  return [ $timestamp, \@values ];
+}
+ 
 
 #
 # Get array of timestamps from a "sampleInfoCSV" string
@@ -733,7 +959,6 @@ sub getSampleInfoArrayRefFromString {
   }
   return \@sampleInfoArray;
 }
-
 
 
 #
