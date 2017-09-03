@@ -264,7 +264,14 @@ sub connected {
     return -1;
   }
 
-  OInventory::log(1, "Successfully checked if connected to database ($r)");
+  if($r) {
+    OInventory::log(1, "Successfully checked if connected to database: "
+                     . "connected");
+  }
+  else {
+    OInventory::log(1, "Successfully checked if connected to database: "
+                     . "not connected");
+  }
   return $r;
 }
 
@@ -315,20 +322,29 @@ sub transactionCommit {
 }
 
 
+#
+# Rollback transaction
+#
+# @return 1 if ok, 0 if errors.
+#
 sub transactionRollback {
   OInventory::log(0, "Rolling back DB transaction");
 
   eval {
-    $dbh->commit();
+    if(! $dbh->rollback()) {
+      OInventory::log(3, "Errors rolling back DB transaction: "
+                       . "(" . $dbh->err . ") :" . $dbh->errstr);
+      return 0;
+    }
   };
 
   if($@) {
     OInventory::log(3, "Errors rolling back DB transaction: $@");
-    return 1;
+    return 0;
   }
 
   OInventory::log(1, "Successfully rolled back DB transaction");
-  return 0;
+  return 1;
 }
 
 sub select {
@@ -353,8 +369,7 @@ die "deprecated method, must be deleted";
     }
   };
 
-  if($@) {
-    OInventory::log(3, "Errors getting from DB: $@");
+  if($@) { OInventory::log(3, "Errors getting from DB: $@");
     return 1;
   }
 

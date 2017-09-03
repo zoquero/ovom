@@ -13,8 +13,8 @@ use open 'IN',   ':encoding(UTF-8)';
 use open 'IO',   ':encoding(UTF-8)';
 use open 'OUT',  ':encoding(UTF-8)';
 use open ':std', ':encoding(UTF-8)';
-my $justOneLoop = 0;
-$justOneLoop = 1 if ( defined($ARGV[0]) && $ARGV[0] eq '--once' );
+my $justOneIteration = 0;
+$justOneIteration = 1 if ( defined($ARGV[0]) && $ARGV[0] eq '--once' );
 my $inventoryRefreshCount = 0;
 
 OInventory::pickerInit();
@@ -22,9 +22,20 @@ OInventory::pickerInit();
 my ($timeBefore, $r, $eTime);
 while(1) {
   #
+  # Connect to Database if needed:
+  #
+  if(OvomDao::connected() != 1) {
+    OInventory::log(3, "Somehow wasn't connected to DB, let's connect again.");
+    if(OvomDao::connect() != 1) {
+      OInventory::log(3, "Cannot connect to DataBase. This iteration ends.");
+      goto ITERATION_END;
+    }
+  }
+
+  #
   # Inventory update
   #
-  OInventory::log(1, "Extraction loop #" . $inventoryRefreshCount);
+  OInventory::log(1, "Extraction iteration #" . $inventoryRefreshCount);
   if($inventoryRefreshCount++
      % $OInventory::configuration{'inventory.refreshPeriod'} == 0) {
 
@@ -36,16 +47,43 @@ while(1) {
     $eTime=Time::HiRes::time - $timeBefore;
 
     if($r) {
+      #
+      # Ok! Commit on Database
+      #
+      OInventory::log(1, "Let's commit the transaction on DB.");
+      if( ! OvomDao::transactionCommit()) {
+        OInventory::log(3, "Cannot commit transactions on DataBase. "
+                         . "Trying to disconnect from DB. Iteration end.");
+        #
+        # Let's disconnect from DB
+        #
+        if( OvomDao::disconnect() != 1 ) {
+          OInventory::log(3, "Cannot disconnect from DataBase");
+        }
+        goto ITERATION_END;
+      }
+
       OInventory::log(1, "Profiling: Retrieving inventory and updating DB took "
                          . sprintf("%.3f", $eTime) . " s");
     }
     else {
-      OInventory::log(3, "Can't update inventory");
+      OInventory::log(3, "Can't update inventory. Rolling back. Iteration ends");
+      if( ! OvomDao::transactionRollback()) {
+        OInventory::log(3, "Cannot rollback transactions on DataBase"
+                         . "Trying to disconnect from DB. Iteration end.");
+        #
+        # Let's disconnect from DB
+        #
+        if( OvomDao::disconnect() != 1 ) {
+          OInventory::log(3, "Cannot disconnect from DataBase");
+        }
+      }
+      goto ITERATION_END;
     }
   }
   else {
     OInventory::log(0,
-      "We will not update the inventory this loop. You can adjust it with "
+      "We will not update the inventory this iteration. You can adjust it with "
       . "the 'inventory.refreshPeriod' configuration parameter");
   }
 
@@ -58,24 +96,56 @@ while(1) {
   $eTime=Time::HiRes::time - $timeBefore;
 
   if($r) {
+    #
+    # Ok! Commit on Database
+    #
+    OInventory::log(1, "Let's commit the transaction on DB.");
+    if( ! OvomDao::transactionCommit()) {
+      OInventory::log(3, "Cannot commit transactions on DataBase. "
+                       . "Trying to disconnect from DB. Iteration end.");
+      #
+      # Let's disconnect from DB
+      #
+      if( OvomDao::disconnect() != 1 ) {
+        OInventory::log(3, "Cannot disconnect from DataBase");
+      }
+      goto ITERATION_END;
+    }
+
     OInventory::log(1, "Profiling: getting the whole performance took "
                        . sprintf("%.3f", $eTime) . " s");
   }
   else {
-    OInventory::log(3, "Can't get performance data");
-    # Will not break, just a sleep time is left in this loop
+    OInventory::log(3, "Can't get performance data. Rolling back. Iteration ends");
+    # Will not break, just a sleep time is left in this iteration
+
+    if( ! OvomDao::transactionRollback()) {
+      OInventory::log(3, "Cannot rollback transactions on DataBase"
+                       . "Trying to disconnect from DB. Iteration end.");
+      #
+      # Let's disconnect from DB
+      #
+      if( OvomDao::disconnect() != 1 ) {
+        OInventory::log(3, "Cannot disconnect from DataBase");
+      }
+    }
+    goto ITERATION_END;
   }
 
-  if($justOneLoop) {
-    OInventory::log(1, "Running just one loop, let's finish.");
+  #
+  # Iteration has finished
+  #
+  ITERATION_END:
+  if($justOneIteration) {
+    OInventory::log(1, "Running just one iteration, let's finish.");
     last;
   }
 
   #
-  # Sleep until next loop
+  # Sleep until next iteration
   #
   my $sleepSecs = $OInventory::configuration{'polling.wait_seconds'};
-  OInventory::log(1, "Let's sleep ${sleepSecs}s after a loop");
+  OInventory::log(1, "Let's sleep ${sleepSecs}s after an iteration");
   sleep($sleepSecs);
 }
 OInventory::pickerStop();

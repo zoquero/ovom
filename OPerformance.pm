@@ -8,6 +8,8 @@ use Time::Piece;
 use Time::HiRes; ## gettimeofday
 use VMware::VIRuntime;
 use Data::Dumper;
+use POSIX;       ## floor
+use Scalar::Util qw(looks_like_number);
 
 use OInventory;
 use OvomDao;
@@ -21,6 +23,8 @@ use OVirtualMachine;
 use OPerfCounterInfo;
 use OMockView::OMockPerformanceManager;
 use OMockView::OMockPerfQuerySpec;
+use OStage;
+use OStageDescriptor;
 
 our @ISA= qw( Exporter );
 
@@ -32,9 +36,14 @@ our @EXPORT = qw( getLatestPerformance );
 
 our $csvSep = ";";
 
+#
+# Cubic splines need at least 4 points
+#
+our $minPoints = 4;
 our $perfManagerView = undef;
 our %allCounters        = ();
 our %allCountersByGIKey = ();
+our $stageDescriptors   = undef;
 
 #
 # Gets and caches perfManager
@@ -117,20 +126,20 @@ sub updatePciIfNeeded {
   }
 
   OInventory::log(0, "updatePciIfNeeded: got perfCounterInfo: "
-                   . "statsType='"        . $pCI->statsType->{val}     . "',"
-                   . "perDeviceLevel='"   . $pCI->perDeviceLevel       . "',"
-                   . "nameInfoKey='"      . $pCI->nameInfo->{key}      . "',"
-                   . "nameInfoLabel='"    . $pCI->nameInfo->{label}    . "',"
-                   . "nameInfo=Summary'"  . $pCI->nameInfo->{summary}  . "',"
-                   . "groupInfoKey='"     . $pCI->groupInfo->{key}     . "',"
-                   . "groupInfoLabel='"   . $pCI->groupInfo->{label}   . "',"
-                   . "groupInfoSummary='" . $pCI->groupInfo->{summary} . "',"
-                   . "key='"              . $pCI->key                  . "',"
-                   . "level='"            . $pCI->level                . "',"
-                   . "rollupType='"       . $pCI->rollupType           . "',"
-                   . "unitInfoKey='"      . $pCI->unitInfo->{key}      . "',"
-                   . "unitInfoLabel='"    . $pCI->unitInfo->{label}    . "',"
-                   . "unitInfoSummary='"  . $pCI->unitInfo->{summary}  . "'");
+                   . "statsType='"        . $pCI->statsType->val     . "',"
+                   . "perDeviceLevel='"   . $pCI->perDeviceLevel     . "',"
+                   . "nameInfoKey='"      . $pCI->nameInfo->key      . "',"
+                   . "nameInfoLabel='"    . $pCI->nameInfo->label    . "',"
+                   . "nameInfoSummary'"   . $pCI->nameInfo->summary  . "',"
+                   . "groupInfoKey='"     . $pCI->groupInfo->key     . "',"
+                   . "groupInfoLabel='"   . $pCI->groupInfo->label   . "',"
+                   . "groupInfoSummary='" . $pCI->groupInfo->summary . "',"
+                   . "key='"              . $pCI->key                . "',"
+                   . "level='"            . $pCI->level              . "',"
+                   . "rollupType='"       . $pCI->rollupType         . "',"
+                   . "unitInfoKey='"      . $pCI->unitInfo->key      . "',"
+                   . "unitInfoLabel='"    . $pCI->unitInfo->label    . "',"
+                   . "unitInfoSummary='"  . $pCI->unitInfo->summary  . "'");
 
   my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
@@ -586,27 +595,37 @@ sub savePerfData {
     if(ref($entityView) eq 'ManagedObjectReference'
        && $entityView->{type} eq 'HostSystem') {
       $mo_ref = $entityView->{value};
-      $csvFolder = $vCenterFolder . "/HostSystem";
+      $csvFolder = $vCenterFolder . "/HostSystem/" . $mo_ref;
     }
     elsif(ref($entityView) eq 'ManagedObjectReference'
           && $entityView->{type} eq 'VirtualMachine') {
       $mo_ref = $entityView->{value};
-      $csvFolder = $vCenterFolder . "/VirtualMachine";
+      $csvFolder = $vCenterFolder . "/VirtualMachine/" . $mo_ref;
     }
     elsif(ref($entityView) eq 'OMockView::OMockHostView') {
       $mo_ref = $entityView->{mo_ref}->{value};
-      $csvFolder = $vCenterFolder . "/HostSystem";
+      $csvFolder = $vCenterFolder . "/HostSystem/" . $mo_ref;
     }
     elsif(ref($entityView) eq 'OMockView::OMockVirtualMachineView') {
       $mo_ref = $entityView->{mo_ref}->{value};
-      $csvFolder = $vCenterFolder . "/VirtualMachine";
+      $csvFolder = $vCenterFolder . "/VirtualMachine/" . $mo_ref;
     }
     else {
       OInventory::log(3, "savePerfData: Got unexpected '" . ref($entityView)
                        . "' instead of HostSystem or VirtualMachine");
       return 0;
     }
-  
+
+    # Create folder if needed
+    if(! -d $csvFolder) {
+      OInventory::log(0, "Creating perfdata folder '$csvFolder' for "
+                       . ref($entityView) . " with mo_ref $mo_ref");
+      if(! mkdir $csvFolder) {
+        OInventory::log(3, "Failed to create '$csvFolder': $!");
+        return 0;
+      }
+    }
+
     OInventory::log(0, "Saving perf data for the " . ref($entityView)
                      . " with mo_ref='" . $mo_ref . "'");
   
@@ -617,9 +636,10 @@ sub savePerfData {
       my $csvPath   = join($basenameSeparator,
                         ($csvFolder . "/" . $mo_ref, $counterId, $instance));
       my $csvPathLatest = $csvPath . ".latest.csv";
+      OInventory::log(0, "Saving in $csvPathLatest");
+
 # print "DEBUG: ** path=$csvPath : instance='" . $instance . "',counterId='"
 # . $counterId . "',value='" . substr($value, 0, 15) . "...'\n";
-      OInventory::log(0, "Saving in $csvPathLatest");
   
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
       my @values = split /,/, $value;
@@ -636,22 +656,59 @@ sub savePerfData {
                          . ",counterId=$counterId,instance=$instance");
         return 0;
       }
-  
+
+      #
+      # Print perf data
+      #
       my $pDHandle;
       if(!open($pDHandle, ">:utf8", $csvPathLatest)) {
         OInventory::log(3, "Could not open perf data file $csvPathLatest: $!");
         return 0;
       }
   
+      print $pDHandle "#" . $$timestamps[0] . "\n";
       for(my $i = 0; $i <=$#$timestamps; $i++) {
-        print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+#       print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
+        print $pDHandle                          $values[$i] . "\n";
       }
   
       if(!close($pDHandle)) {
         OInventory::log(3, "Could not close perf data file $csvPathLatest: $!");
         return 0;
       }
-      OInventory::log(0, "Saved in $csvPathLatest");
+      OInventory::log(0, "Perf data saved in $csvPathLatest");
+
+      #
+      # RRDB:
+      #
+      # * count new points
+      # * If there are enough new points in 'latest' (3?):
+      #   * Get the oldest points (as many as the new points)
+      #   * Create a new 'hour'
+      #   * Interpolate the resulting new points for the new 'day' file
+      #   * Get the oldest points of the previous 'day' (as many as the new points)
+      #   * Print the newest points of the previous 'day' in the new 'day' file
+      #   * Print the interpolated points at the end of the new 'day file'
+      # * Repeat changing 'hour'   by 'day'
+      # * Repeat changing 'day'    by 'week'
+      # * Repeat changing 'week'   by 'month'
+      # * Repeat changing 'month'  by 'year'
+      # * If all ok:
+      #   * Substitute the old 'hour'  file by the new 'hour'  file
+      #   * Substitute the old 'day'   file by the new 'day'   file
+      #   * Substitute the old 'week'  file by the new 'week'  file
+      #   * Substitute the old 'month' file by the new 'month' file
+      #   * Substitute the old 'year'  file by the new 'year'  file
+      #
+
+      #
+      # RRDB this file
+      #
+      if(! doRrdb($csvPath)) {
+        OInventory::log(3, "Could not run rrdb on perf data file $csvPathLatest");
+        return 0;
+      }
+ 
 
       #
       # Let's register on Database that this perfData has been saved
@@ -667,6 +724,462 @@ sub savePerfData {
   return 1;
 }
 
+#
+# Gets and caches global stage descriptors from configuration
+#
+# @return ref to array of OStageDescriptor (if ok), undef (if errors)
+#
+sub getStageDescriptors {
+  if( ! defined ($OPerformance::stageDescriptors) ) {
+    #   
+    # Let's get configuration for stages first
+    #
+    my $namesStr        = $OInventory::configuration{'perf_stages.names'};
+    my $durationsStr    = $OInventory::configuration{'perf_stages.durations'};
+    my $samplePeriodstr = $OInventory::configuration{'perf_stages.sample_periods'};
+  
+    if ( ! defined($namesStr)        || $namesStr        eq ''
+      || ! defined($durationsStr)    || $durationsStr    eq ''
+      || ! defined($samplePeriodstr) || $samplePeriodstr eq '') {
+      OInventory::log(3, "Bad configuration. Missing perf_stages.names, "
+                       . "perf_stages.durations or perf_stages.sample_periods");
+      return undef;
+    }
+  
+    my @names         = split /;/, $namesStr;
+    my @durations     = split /;/, $durationsStr;
+    my @samplePeriods = split /;/, $samplePeriodstr;
+  
+    if($#names <= -1) {
+      OInventory::log(3, "Bad configuration. "
+                       . "Can't get the number of stage names");
+      return undef;
+    }
+  
+    if(   $#names != $#durations
+       || $#names != $#samplePeriods) {
+      OInventory::log(3, "Bad configuration. Different number of stages for "
+                       . "perf_stages.names, perf_stages.durations "
+                       . "or perf_stages.sample_periods");
+      return undef;
+    }
+  
+    #
+    # Trick needed for running correctly just one loop for all stages
+    # It's better to hardcode it instead of putting it in configuraiton
+    #
+    my %args = (
+         name         => "latest",
+         duration     => "3600",
+         samplePeriod => "20",
+      );
+    my $stage = OStageDescriptor->new(\%args);
+    push @$OPerformance::stageDescriptors, $stage;
+    OInventory::log(0, "Loaded global stage descriptor          : $stage");
+  
+    for (my $stageI = 0; $stageI <= $#names; $stageI++) {
+      %args = (
+         name         => $names[$stageI],
+         duration     => $durations[$stageI],
+         samplePeriod => $samplePeriods[$stageI],
+      );
+      $stage = OStageDescriptor->new(\%args);
+      push @$OPerformance::stageDescriptors, $stage;
+      OInventory::log(0, "Loaded global stage descriptor from conf: $stage");
+    }
+  }
+  return $OPerformance::stageDescriptors;
+}
+
+
+#
+# Gets stage values and descriptors for a metric, by prefix
+#
+# @arg prefix
+#        (ex.: /var/lib/.../host-45256/host-45256___240___DISKFILE )
+# @return ref to array of OStage (if ok), undef (if errors)
+#
+sub getConcreteStages {
+  my $prefix = shift;
+  my @r;
+
+  if( ! defined ($prefix) ) {
+    OInventory::log(3, "Bug: Missing prefix argument at getConcreteStages");
+    return undef;
+  }
+  if( $prefix eq '' ) {
+    OInventory::log(3, "Bug: Empty prefix argument at getConcreteStages");
+    return undef;
+  }
+
+  my $stageDescriptors = OPerformance::getStageDescriptors();
+  if( ! defined($stageDescriptors) ) {
+    OInventory::log(3, "Can't get global stage descriptors from configuration");
+    return undef;
+  }
+
+  for (my $stageI = 0; $stageI <= $#$stageDescriptors; $stageI++) {
+    my $filename       = $prefix . "."
+                       . $$stageDescriptors[$stageI]->{name} . ".csv";
+    my $values         = []; # means 'stage without data perf file'
+    my $timestamp      = -1; # means 'stage without data perf file'
+    my $lastTimestamp  = -1; # means 'stage without data perf file'
+
+    if(! -e $filename) {
+      OInventory::log(1, "RRDB: stage file '" . $filename . " doesn't exist");
+    }
+    else {
+      my $pdff;
+      #
+      # Let's read perf data on a file of a stage of a metric
+      #
+      $pdff = getPerfDataFromFile($filename);
+      if ( ! defined($pdff) ) {
+        OInventory::log(3, "Can't get perf data $$stageDescriptors[$stageI] from stage file $filename");
+        return undef;
+      }
+      $timestamp     = $$pdff[0];
+      $values        = $$pdff[1];
+      $lastTimestamp = $timestamp
+                       + $$stageDescriptors[$stageI]->{duration}
+                       - $$stageDescriptors[$stageI]->{samplePeriod};
+    }
+
+    my %args = (
+         descriptor    => $$stageDescriptors[$stageI],
+         values        => $values,
+         timestamp     => $timestamp,
+         lastTimestamp => $lastTimestamp,
+         filename      => $filename,
+      );
+    my $stage = OStage->new(\%args);
+    if( ! defined($stage) ) {
+      OInventory::log(3, "Can't create a new OStage for file '$filename' "
+                       . "and descriptor $$stageDescriptors[$stageI]");
+      return undef;
+    }
+    push @r, $stage;
+    OInventory::log(0, "Loaded stage: $stage");
+  }
+  return \@r;
+}
+ 
+
+#
+# Runs a RRDB algorythm for a perf data file.
+#
+# It allows to have a fixed size for the complete perf data files.
+#
+# @return 1 ok, 0 errors
+#
+sub doRrdb {
+  my $prefix = shift;
+
+  #
+  # Now let's get the concrete stage descriptors for this metric
+  #
+  my $stages = getConcreteStages($prefix);
+  if( ! defined ($stages) ) {
+    OInventory::log(3, "Can't get the concrete stage descriptors");
+    return 0;
+  }
+
+  #
+  # Now let's run RRDB for each stage:
+  #
+  # Will not run for first component ('latest'),
+  # this stage is just a feeder for 'hour'
+  #
+  for (my $stageI = 1; $stageI <= $#$OPerformance::stageDescriptors; $stageI++) {
+
+    OInventory::log(0, "Running RRDB for stage '"
+                     . $$stages[$stageI] . "'");
+
+    my $r = pushAndPopPointsToPerfDataStage(
+              $$stages[$stageI - 1],
+              $$stages[$stageI]
+            );
+    if( $r ) {
+      OInventory::log(0, "Pushed and popped $r points to stage "
+                       . $$stages[$stageI]->{descriptor}->{name});
+    }
+    else {
+      OInventory::log(2, "Can't push and pop points to stage "
+                       . $$stages[$stageI]->{descriptor}->{name});
+      next;
+    }
+  }
+
+  return 1;
+}
+
+#
+# Runs a RRDB algorythm for the perf data file of a stage
+#
+# It allows to have a fixed size for the complete perf data files.
+#
+# Does the changes in a new file and once ended substitutes
+# the old file with the new one.
+#
+# @arg ref to OStage object representing the previous stage
+# @arg ref to OStage object representing the current  stage
+# @return number of points inserted (if ok), undef (if errors)
+#
+sub pushAndPopPointsToPerfDataStage {
+  my $prevStage = shift;
+  my $currStage = shift;
+  my $newerPointsInPreviousStage;
+  my $isFullSubstitution = 0;
+
+print "DEBUG: from $prevStage to $currStage\n";
+
+  # How many points of the previous stage
+  # are later the last point of this stage?
+  #
+  if(   $currStage->{lastTimestamp}
+      < $prevStage->{timestamp}
+        + ($minPoints - 1) * $prevStage->{descriptor}->{samplePeriod}) {
+
+    # Let's mark it, we'll use it again later
+    $isFullSubstitution = 1;
+
+    # The whole points!
+    $newerPointsInPreviousStage =
+      floor($prevStage->{descriptor}->{duration}
+          / $prevStage->{descriptor}->{samplePeriod}
+      );
+  }
+  else {
+    $newerPointsInPreviousStage
+      = floor(($prevStage->{lastTimestamp} - $currStage->{lastTimestamp})
+        / $prevStage->{descriptor}->{samplePeriod});
+      # Don't worry, OStageDescriptor doesn't allow
+      # the samplePeriod to be non-positive
+  }
+
+  # Sanity check:
+  my $numPointsInPrevStage
+     = int($prevStage->{descriptor}->{duration}
+           /
+           $prevStage->{descriptor}->{samplePeriod});
+  if($newerPointsInPreviousStage > $numPointsInPrevStage) {
+    OInventory::log(1, "The stage '" . $prevStage->{descriptor}->{name}
+                     . "' would give more points ($newerPointsInPreviousStage) "
+                     . "to the stage '" . $currStage->{descriptor}->{name}
+                     . "' than the points it has "
+                     . "($numPointsInPrevStage). We'll truncate it to "
+                     . "$numPointsInPrevStage. It can happen when a new stage "
+                     . "is created with no previous points.");
+    $newerPointsInPreviousStage = $numPointsInPrevStage;
+  }
+
+  if($newerPointsInPreviousStage < $minPoints) {
+    OInventory::log(0, "Stage $prevStage->{descriptor}->{name} hasn't enough "
+                     . "points ($newerPointsInPreviousStage < $minPoints) to "
+                     . "give to the stage '" . $currStage->{descriptor}->{name}
+                     . "'. At least $minPoints are needed "
+                     . "for cubic interpollation. Maybe on next iteration...");
+    return 0;
+  }
+
+  OInventory::log(0, "Stage '" . $prevStage->{descriptor}->{name}
+                   . "' will give $newerPointsInPreviousStage points "
+                   . "to the stage '" . $currStage->{descriptor}->{name} . "'");
+
+  #
+  # How many points will be interpolated in the current stage?
+  # We'll use cubic splines, so we'll need two points before, and two after
+  #
+
+  my $numNewPointsInCurrentStage;
+
+  if( $isFullSubstitution ) {
+    $numNewPointsInCurrentStage = floor(
+                                    $prevStage->{descriptor}->{duration}
+                                    /
+                                    $currStage->{descriptor}->{samplePeriod}
+                                  );
+  }
+  else {
+    my $firstNewPointFromPrevStage;
+    my $durationOfNewPointsInPrevStage;
+    $firstNewPointFromPrevStage =
+         getFirstPointAfter($currStage->{lastTimestamp}, $prevStage->{values});
+    if( ! defined($firstNewPointFromPrevStage))  {
+      OInventory::log(3, "Bug: Can't find the first new point from "
+                       . "previous stage '" . $prevStage->{descriptor}->{name}
+                       . "' after the last timestamp of current stage '"
+                       . $currStage->{descriptor}->{name} . "'");
+      return undef;
+    }
+    $durationOfNewPointsInPrevStage =
+         $prevStage->{lastTimestamp} - $firstNewPointFromPrevStage;
+    $numNewPointsInCurrentStage =
+      floor(
+        ($durationOfNewPointsInPrevStage - 2 * $prevStage->{descriptor}->{samplePeriod})
+        / $currStage->{descriptor}->{samplePeriod}
+      );
+  }
+
+  OInventory::log(0, "Stage '" . $currStage->{descriptor}->{name}
+                   . "' will shift $numNewPointsInCurrentStage "
+                   . "interpolated points calculed upon "
+                   . "the $newerPointsInPreviousStage points "
+                   . "of previous stage");
+
+  #
+  # Generate the array of new points for the current stage,
+  # interpolating on the 2+2 points of the previous stage
+  #
+
+  #
+  # Create the new file concatenating the "N-M" old points of the current stage
+  # with the M interpolated points, where:
+  # * N == number of points for this stage,
+  # * M == number of new points interpolated
+  #     based upon the points on the previous stage
+  #
+
+  my $tmpFile = $currStage->{filename} . ".rrdb_running";
+  my $handler;
+
+  if($numNewPointsInCurrentStage > 0) {
+
+    my @x = ();
+    my @y = ();
+    die "Let's continue here, must feed x and y arrays with the new points in prevStage (time and value), then we'll interpolate to calculate the new numbers to push to the currStage array";
+
+    if( ! open($handler, ">:utf8", $tmpFile) ) {
+      OInventory::log(3, "Can't open '$tmpFile' for writing: $!");
+      return 0;
+    }
+
+    my $newTimestamp;
+    if( $isFullSubstitution ) {
+      # Must substitute the whole currStage
+
+#     if($currStage->{timestamp} + $numNewPointsInCurrentStage;
+#     my $newTimestamp = $currStage->{timestamp} + $numNewPointsInCurrentStage;
+
+      $newTimestamp = floor(   $prevStage->{timestamp}
+                             + $prevStage->{descriptor}->{duration} / 2
+                             - $currStage->{descriptor}->{duration} / 2
+                           );
+
+    }
+    else {
+      $newTimestamp = floor(   $currStage->{timestamp}
+                             + $numNewPointsInCurrentStage
+                             * $currStage->{descriptor}->{samplePeriod}
+                           );
+    }
+
+    print $handler "#$newTimestamp\n";
+#   foreach my $value (@$prevValues) {
+#     print $handler "$value\n";
+#   }
+
+    if( ! close($handler) ) {
+      OInventory::log(3, "Can't close '$tmpFile': $!");
+      return 0;
+    }
+
+#   mv $tmpFile $filename ...
+ 
+  }
+  if($numNewPointsInCurrentStage == 0) {
+    OInventory::log(0, "No new point needs to be created");
+    return 0;
+  }
+  else {
+    OInventory::log(0, "Bug: must create a negative number of points");
+    return undef;
+  }
+
+  return $numNewPointsInCurrentStage;
+}
+
+#
+# Get first point of an array after a value
+#
+# @arg filename
+# @return [$timestamp,$values], undef errors
+#
+sub getFirstPointAfter() {
+  my $limit  = shift;
+  my $points = shift;
+# my ($points, $limit) = @_;
+
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getFirstPointAfter 1st param must be a ref to points");
+    return undef;
+  }
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "getFirstPointAfter 2nd param must be a number ($limit)");
+    return undef;
+  }
+
+  foreach my $point (@$points) {
+    return $point if($point > $limit);
+  }
+  return undef;
+}
+
+#
+# Get performance data from a perf data file
+#
+# @arg filename
+# @return [$timestamp,$values], undef errors
+#           where:
+#             $timestamp is the epoch timestamp of the first value
+#             $values is a ref to an array with the values
+#
+sub getPerfDataFromFile {
+  my $filename = shift;
+  my $timestamp;
+  my @values;
+
+  if(! defined($filename)) {
+    OInventory::log(3, "Missing filename argument to get PerfData from file");
+    return undef;
+  }
+
+  #
+  # Let's open the file
+  #
+  my $handler;
+  if( ! open($handler, "<", $filename) ) {
+    OInventory::log(3, "Can't open perf data file '$filename': $!");
+    return undef;
+  }
+
+  #
+  # Let's read the file
+  #
+  my $first = 1;
+  while (my $line = <$handler>) {
+    chomp $line;
+    next if $line =~ /^\s*$/;
+    if($first) {
+      $first = 0;
+      $line =~ s/^#//g;
+      $timestamp = $line;
+      next;
+    }
+    push @values, $line;
+  }
+
+  #
+  # Let's close the file
+  #
+  if( ! close($handler) ) {
+    OInventory::log(3, "Can't close perf data file '$filename': $!");
+    return undef;
+  }
+
+  return [ $timestamp, \@values ];
+}
+ 
 
 #
 # Get array of timestamps from a "sampleInfoCSV" string
@@ -683,7 +1196,6 @@ sub getSampleInfoArrayRefFromString {
   my $rawSampleInfoStrRef = shift;
   my @sampleInfoArray = ();
   my @tmpArray = split /,/, $rawSampleInfoStrRef;
-  my $z = 0;
   for my $i (0 .. $#tmpArray) {
     if ($i % 2) {
       # 2017-07-20T05:49:40Z
@@ -694,7 +1206,6 @@ sub getSampleInfoArrayRefFromString {
   }
   return \@sampleInfoArray;
 }
-
 
 
 #
@@ -710,13 +1221,8 @@ sub getLatestPerformance {
 
   OInventory::log(0, "Updating performance");
 
-
-  #
-  # Connect to Database
-  #
-  OInventory::log(1, "Let's connect to DB to update perfCounters");
-  if(OvomDao::connect() != 1) {
-    OInventory::log(3, "Cannot connect to DataBase");
+  if(OvomDao::connected() != 1) {
+    OInventory::log(3, "Must be previously correctly connected to Database");
     return 0;
   }
 
@@ -874,7 +1380,7 @@ sub getLatestPerformance {
                        . " with mo_ref '" . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
         OInventory::log(3, "Too many errors when getting performance from "
-                         . "vCenter. We'll try again on next picker's loop");
+                         . "vCenter. We'll try again on next iteration");
         return 0;
       }
       next;
@@ -886,20 +1392,6 @@ sub getLatestPerformance {
                      . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
   }
-
-  #
-  # Ok! Commit and disconnect from Database
-  #
-  OInventory::log(1, "Let's commit the transaction and disconnect from DB.");
-  if( ! OvomDao::transactionCommit()) {
-    OInventory::log(3, "Cannot commit transactions on DataBase");
-    return 0;
-  }
-  if( OvomDao::disconnect() != 1 ) {
-    OInventory::log(3, "Cannot disconnect from DataBase");
-    return 0;
-  }
-
 
   $eTimeB=Time::HiRes::time - $timeBeforeB;
   OInventory::log(1, "Profiling: Getting the whole data performance took "

@@ -563,22 +563,18 @@ sub popNextFolderWithParent {
 sub loadInventoryDatabaseContents {
 
   if(OvomDao::connected() != 1) {
-    OInventory::log(3, "Must be previously connected to Database");
+    OInventory::log(3, "Must be previously correctly connected to Database");
     return 0;
   }
  
   foreach my $entityType (@entityTypes) {
-#   $OInventory::inventDb{$entityType} = \();
     $OInventory::inventDb{$entityType} = [];
     OInventory::log(0, "Getting all ${entityType}s");
     my $entities = OvomDao::getAllEntitiesOfType($entityType);
     if (! defined($entities) ) {
-      OvomDao::transactionRollback();
-      OvomDao::disconnect();
       OInventory::log(3, "Errors getting ${entityType}s from DataBase");
       return 0;
     }
-
     push @{$OInventory::inventDb{$entityType}}, @$entities;
   }
   
@@ -625,15 +621,6 @@ sub updateOvomInventoryDatabaseFromVcenter {
   }
   
   OInventory::log(1, "Let's read the last inventory saved on DB.");
-  # Connect to Database if needed:
-  if(OvomDao::connected() != 1) {
-    OInventory::log(1, "Not connected to DB, let's connect.");
-    if(OvomDao::connect() != 1) {
-      OInventory::log(3, "Cannot connect to DataBase");
-      return 0;
-    }
-  }
-
   $timeBefore=Time::HiRes::time;
   $r = loadInventoryDatabaseContents();
   $eTime=Time::HiRes::time - $timeBefore;
@@ -665,21 +652,10 @@ sub updateOvomInventoryDatabaseFromVcenter {
                      . sprintf("%.3f", $eTime) . " s");
 
   if($r == -1) {
-    OInventory::log(3, "Errors updating inventory DB contents. "
-                        . "Let's rollback transactions on DataBase");
+    OInventory::log(3, "Errors updating inventory DB contents.");
     return 0;
   }
   
-  # Ok! Commit and disconnect from Database
-  OInventory::log(1, "Let's commit the transaction and disconnect from DB.");
-  if( ! OvomDao::transactionCommit()) { 
-    OInventory::log(3, "Cannot commit transactions on DataBase");
-    return 0;
-  }
-  if( OvomDao::disconnect() != 1 ) {
-    OInventory::log(3, "Cannot disconnect from DataBase");
-    return 0;
-  }
   return 1;
 }
 
@@ -1090,12 +1066,28 @@ sub pickerInit {
   $eTime=Time::HiRes::time - $timeBefore;
   OInventory::log(1, "Profiling: Connecting to vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    OInventory::log(3, "Cannot connect to DataBase. Will not startup.");
+    die "Can't connect to DataBase";
+  }
 }
 
 
 sub pickerStop {
   my ($timeBefore, $eTime);
   OInventory::log(1, "Stopping picker");
+
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    OInventory::log(3, "Cannot disconnect from DataBase");
+    return 0;
+  }
 
   #
   # Let's disconnect from vC
@@ -1131,7 +1123,7 @@ sub readConfiguration {
       $configuration{$var} = $value;
   } 
   close(CONFIG) or die "Can't close the configuration file $confFile: $!";
-} 
+}
 
 
 sub log ($$) {
