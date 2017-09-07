@@ -821,9 +821,9 @@ sub getConcreteStages {
   for (my $stageI = 0; $stageI <= $#$stageDescriptors; $stageI++) {
     my $filename       = $prefix . "."
                        . $$stageDescriptors[$stageI]->{name} . ".csv";
-    my $values         = []; # means 'stage without data perf file'
-    my $timestamp      = -1; # means 'stage without data perf file'
-    my $lastTimestamp  = -1; # means 'stage without data perf file'
+    my $values         = []; # means 'stage without data perf file' (beginning)
+    my $timestamp      = -1; # means 'stage without data perf file' (beginning)
+    my $lastTimestamp  = -1; # means 'stage without data perf file' (beginning)
 
     if(! -e $filename) {
       OInventory::log(1, "RRDB: stage file '" . $filename . " doesn't exist");
@@ -840,9 +840,7 @@ sub getConcreteStages {
       }
       $timestamp     = $$pdff[0];
       $values        = $$pdff[1];
-      $lastTimestamp = $timestamp
-                       + $$stageDescriptors[$stageI]->{duration}
-                       - $$stageDescriptors[$stageI]->{samplePeriod};
+      $lastTimestamp = $$pdff[$#$pdff];
     }
 
     my %args = (
@@ -928,7 +926,7 @@ sub doRrdb {
 sub pushAndPopPointsToPerfDataStage {
   my $prevStage = shift;
   my $currStage = shift;
-  my $numNewPointsInPreviousStage;
+  my $numNewPointsPrevStage;
   my $isFullSubstitution = 0;
 
 print "DEBUG: from $prevStage to $currStage\n";
@@ -945,10 +943,10 @@ print "DEBUG: from $prevStage to $currStage\n";
     $isFullSubstitution = 1;
 
     # The whole points!
-    $numNewPointsInPreviousStage = $#{$prevStage->{values}} + 1;
+    $numNewPointsPrevStage = $#{$prevStage->{values}} + 1;
   }
   else {
-    $numNewPointsInPreviousStage
+    $numNewPointsPrevStage
       = floor(($prevStage->{lastTimestamp} - $currStage->{lastTimestamp})
         / $prevStage->{descriptor}->{samplePeriod});
       # Don't worry, OStageDescriptor doesn't allow
@@ -956,20 +954,20 @@ print "DEBUG: from $prevStage to $currStage\n";
   }
 
   # Sanity check:
-  if($numNewPointsInPreviousStage > $prevStage->{maxPoints}) {
+  if($numNewPointsPrevStage > $prevStage->{maxPoints}) {
     OInventory::log(1, "BUG: The stage '" . $prevStage->{descriptor}->{name}
-                     . "' would give more points ($numNewPointsInPreviousStage)"
+                     . "' would give more points ($numNewPointsPrevStage)"
                      . " to the stage '" . $currStage->{descriptor}->{name}
                      . "' than the max number of points it can have ("
                      . $prevStage->{maxPoints} . "). We'll truncate it to "
                      . $prevStage->{maxPoints} . ".");
-    $numNewPointsInPreviousStage = $prevStage->{maxPoints};
+    $numNewPointsPrevStage = $prevStage->{maxPoints};
   }
 
-  if($numNewPointsInPreviousStage < $minPoints) {
+  if($numNewPointsPrevStage < $minPoints) {
     OInventory::log(
       0, "Stage '" . $prevStage->{descriptor}->{name} . "' hasn't "
-       . "enough points ($numNewPointsInPreviousStage < $minPoints) "
+       . "enough points ($numNewPointsPrevStage < $minPoints) "
        . "to give to the stage '" . $currStage->{descriptor}->{name}
        . "'. At least $minPoints are needed for cubic interpollation. "
        . "Maybe on next iteration...");
@@ -977,7 +975,7 @@ print "DEBUG: from $prevStage to $currStage\n";
   }
 
   OInventory::log(0, "Stage '" . $prevStage->{descriptor}->{name}
-                   . "' will give $numNewPointsInPreviousStage points "
+                   . "' will give $numNewPointsPrevStage points "
                    . "to the stage '" . $currStage->{descriptor}->{name} . "'");
 
   #
@@ -985,31 +983,40 @@ print "DEBUG: from $prevStage to $currStage\n";
   # We'll use cubic splines, so we'll need two points before, and two after
   #
 
-  my $numNewPointsInCurrentStage;
-  my $firstInstantFromPrevStage;
-  my $durationOfNewPointsInPrevStage;
-  $firstInstantFromPrevStage =
-       getFirstPointAfter($currStage->{lastTimestamp}, $prevStage->{values});
-  if( ! defined($firstInstantFromPrevStage))  {
+  my $numNewPointsCurrStage;
+  my $firstTimeNewPointsPrevStage;
+  my $durationNewPointsPrevStage;
+
+# deprecated
+# $firstTimeNewPointsPrevStage =
+#      getFirstValueGreater($currStage->{lastTimestamp}, $prevStage->{values});
+
+  my $firstPosNewPointsCurrStage = getPositionOfFirstValueGreater(
+                            $currStage->{lastTimestamp}, $prevStage->{values});
+
+cal depurar això, imagino que a continuació no vindria firstPosNewPointsCurrStage sinó firstPosNewPointsPrevStage
+  $firstTimeNewPointsPrevStage = ${$prevStage->{values}}[$firstPosNewPointsCurrStage];
+
+  if( ! defined($firstTimeNewPointsPrevStage))  {
     OInventory::log(3, "Bug: Can't find the first new point from "
                      . "previous stage '" . $prevStage->{descriptor}->{name}
                      . "' after the last timestamp of current stage '"
                      . $currStage->{descriptor}->{name} . "'");
     return undef;
   }
-  $durationOfNewPointsInPrevStage =
-       $prevStage->{lastTimestamp} - $firstInstantFromPrevStage;
-  $numNewPointsInCurrentStage =
+  $durationNewPointsPrevStage =
+       $prevStage->{lastTimestamp} - $firstTimeNewPointsPrevStage;
+  $numNewPointsCurrStage =
     floor(
-      ($durationOfNewPointsInPrevStage
+      ($durationNewPointsPrevStage
         - $minPoints * $prevStage->{descriptor}->{samplePeriod})
       / $currStage->{descriptor}->{samplePeriod}
     );
 
   OInventory::log(0, "Stage '" . $currStage->{descriptor}->{name}
-                   . "' will shift $numNewPointsInCurrentStage "
+                   . "' will shift $numNewPointsCurrStage "
                    . "interpolated points calculed upon "
-                   . "the $numNewPointsInPreviousStage points "
+                   . "the $numNewPointsPrevStage points "
                    . "of previous stage");
 
   #
@@ -1025,13 +1032,70 @@ print "DEBUG: from $prevStage to $currStage\n";
   #     based upon the points on the previous stage
   #
 
+  #
+  # Will use:
+  # * $firstTimeNewPointsPrevStage
+  # * $firstPosNewPointsPrevStage  ?????????????
+  # * $durationNewPointsPrevStage
+  # * $firstPosNewPointsCurrStage
+  # * $numNewPointsCurrStage
+  # * $numNewPointsPrevStage
+  #
+
+#
+# $firstTimeNewPointsPrevStage                            x
+# $prev->{descriptor}->{lastTimestamp}                                         x
+# $curr->{descriptor}->{lastTimestamp}                   x
+#
+# $durationNewPointsPrevStage                             |<------------------>|
+#                                                        |<------------------->|
+# $prev->{descriptor}->{samplePeriod}               |<>|
+# $curr->{descriptor}->{samplePeriod}             |<---->|
+# $minPoints (cubic interpolation => 4)                   |<------->|
+#
+# $prev:                                   (--|--|--|--|--|--|--|--|--|-...-|--)
+#            
+# $curr:              (------|------|------|------|------)      |
+#                                                               |
+# $prev->{timestamp}                       x                    |
+# $curr->{timestamp}  x                                         |
+#                                                               |
+# $firstPosNewPointsCurrStage                                   x
+#
+
+
+
+
+#
+# time:        |------------------------------------------------------------------------->
+#
+# $stage[$i-2]->{lastTimestant}                                                          x
+# $stage[$i-2]                                       (--|--|--|--|--|--|--|--|--|-...-|--)
+#
+# firstNewPoint[$i]                                                    x
+# $stage[$i-1]->{lastTimestant}                                            x
+# $stage[$i-1]                   (-----|-----|-----|-----|----...----|-----)
+#            
+# $stage[$i]->{lastTimestant}                             x
+# $stage[$i]:     (-------|-------|-------|-------|-------)                              x
+#
+#
+#  firstNewPoint[$i]:
+# $firstPos[$i-1] = getFirstPositionWithTimestampAfter($stage[$i-1]->{values}, $stage[$i-1]->{lastTimestant} - $minPoints/2 * $stage[$i-2]->{samplePeriod})
+# $firstTimestamp[$i-1] = ${$stage[$i-1]->{values}}[$firstPos[$i-1]]
+#
+
+
   my $tmpFile = $currStage->{filename} . ".rrdb_running";
   my $handler;
 
-  if($numNewPointsInCurrentStage > 0) {
+  if($numNewPointsCurrStage > 0) {
 
-    my @x = ();
-    my @y = ();
+error, tinc firstTimeNewPointsPrevStage però necessito firstPosNewPointsPrevStage
+millor fer que la funció d'abans retorni firstPosNewPointsPrevStage i calcular allà firstTimeNewPointsPrevStage a a partir de tal posició, així tamb´e ho tindré diponible aquí
+ 
+    my $x = @{$prevStage->{values}}[$firstPosNewPointsPrevStage..$lastPosFromPrevStage]
+    my $y = interpolate($x, ;
 
     if( ! open($handler, ">:utf8", $tmpFile) ) {
       OInventory::log(3, "Can't open '$tmpFile' for writing: $!");
@@ -1048,7 +1112,7 @@ print "DEBUG: from $prevStage to $currStage\n";
     }
     else {
       $newTimestamp = floor(   $currStage->{timestamp}
-                             + $numNewPointsInCurrentStage
+                             + $numNewPointsCurrStage
                              * $currStage->{descriptor}->{samplePeriod}
                            );
     }
@@ -1066,42 +1130,110 @@ print "DEBUG: from $prevStage to $currStage\n";
 #   mv $tmpFile $filename ...
  
   }
-  if($numNewPointsInCurrentStage == 0) {
+  if($numNewPointsCurrStage == 0) {
     OInventory::log(0, "No new point needs to be created");
     return 0;
   }
   else {
-    OInventory::log(0, "Bug: must create a negative number of points");
+    OInventory::log(0, "Bug: Negative number of new points on RRDB");
     return undef;
   }
 
-  return $numNewPointsInCurrentStage;
+  return $numNewPointsCurrStage;
 }
 
 #
-# Get first point of an array after a value
+# Get the position of the first value of an array greater than a value
 #
-# @arg filename
-# @return [$timestamp,$values], undef errors
+# @arg limit, the value to look for
+# @arg reference to the array of points
+# @return the position (if ok), undef (if error)
 #
-sub getFirstPointAfter() {
+sub getPositionOfFirstValueGreater {
   my $limit  = shift;
   my $points = shift;
 
-  if(ref($points) ne 'ARRAY') {
-    OInventory::log(3, "getFirstPointAfter 1st param must be a ref to points");
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "getPositionOfFirstValueGreater "
+                     . "1st param must be a number ($limit)");
     return undef;
   }
 
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getPositionOfFirstValueGreater "
+                     . "2nd param must be a ref to points. "
+                     . "Is a '" . ref($points) . "'");
+  }
+
+# foreach my $point (@$points) {
+  for (my $i; $i <= $#points; $i++ ) {
+    return $i if($$points[$i] > $limit);
+  }
+  return undef;
+}
+
+
+#
+# Get first value of an array greater than a value
+#
+# @arg limit, the value to look for
+# @arg reference to the array of points
+# @return the value (if ok), undef (if error)
+#
+sub getFirstValueGreater {
+die "Deprecated vs getPositionOfFirstValueGreater";
+  my $limit  = shift;
+  my $points = shift;
+
   if( ! looks_like_number($limit)) {
-    OInventory::log(3, "getFirstPointAfter 2nd param must be a number ($limit)");
+    OInventory::log(3, "getFirstValueGreater 1st param must be a number ($limit)");
     return undef;
+  }
+
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getFirstValueGreater 2nd param must be a ref to points. "
+                     . "Is a '" . ref($points) . "'");
   }
 
   foreach my $point (@$points) {
     return $point if($point > $limit);
   }
   return undef;
+}
+
+#
+# Get the second half of an array, from the component that equals to certain value.
+#
+# @arg limit, the value to look for
+# @arg reference to the array of points
+# @return a ref to the array (if ok), undef (if error)
+#
+sub getValueAndGreater {
+  my $limit  = shift;
+  my $points = shift;
+  my @r;
+
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "getValueAndGreater 1st param must be a number ($limit)");
+    return undef;
+  }
+
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getValueAndGreater 2nd param must be a ref to points. "
+                     . "Is a '" . ref($points) . "'");
+    return undef;
+  }
+
+  my $found = 0;
+  foreach my $point (@$points) {
+    if($found != 1 && $point == $limit) {
+      $found = 1;
+    }
+    if($found) {
+      push @r, $point;
+    }
+  }
+  return \@r;
 }
 
 #
