@@ -20,7 +20,7 @@ It's in an initial development stage but its goals are:
 * Show performance graphics:
     * Offer a simple Web UI to allow have graphs for custom intervals on-demand.
 * Report alarms based on thresholds
-* Suggest changes:
+* Suggest changes (initially just sugggest, later would be nice to allow to apply):
     * vMotion
     * Storage vMotion
     * Hardware scale (more or less hosts for clusters)
@@ -96,7 +96,7 @@ $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\""
 ```
 
-To just ron a loop:
+To just run a loop:
 ```
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_DB_PASSWORD=ovomdbpass  \
