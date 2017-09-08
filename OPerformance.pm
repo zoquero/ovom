@@ -542,12 +542,10 @@ sub registerPerfDataSaved {
 # Save perf data to disk
 #
 # @arg array of PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
-# @arg entity view
 # @return 1 ok, 0 errors
 #
 sub savePerfData {
   my $perfDataArray = shift;
-  my $entityView    = shift;
 
   if( ! defined($perfDataArray) ) {
     OInventory::log(3, "savePerfData: expects a PerfEntityMetricCSV");
@@ -644,8 +642,7 @@ sub savePerfData {
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
       my @values = split /,/, $value;
       if($#$timestamps < 3) {
-        OInventory::log(3, "Too few perf data values for mo_ref=" 
-                         . $mo_ref 
+        OInventory::log(3, "Too few perf data values for mo_ref=$mo_ref"
                          . ",counterId=$counterId,instance=$instance");
         return 0;
       }
@@ -666,10 +663,14 @@ sub savePerfData {
         return 0;
       }
   
-      print $pDHandle "#" . $$timestamps[0] . "\n";
       for(my $i = 0; $i <=$#$timestamps; $i++) {
-#       print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
-        print $pDHandle                          $values[$i] . "\n";
+        #
+        # Oh! We realized that beause of downtimes there can be gaps and shifts,
+        # we can not suppose that all there will exist all the samples
+        # nor that all the samples will be exactly separated by sampleTime
+        #
+#       print $pDHandle                              $values[$i] . "\n";
+        print $pDHandle $$timestamps[$i] . $csvSep . $values[$i] . "\n";
       }
   
       if(!close($pDHandle)) {
@@ -924,222 +925,258 @@ sub doRrdb {
 # @return number of points inserted (if ok), undef (if errors)
 #
 sub pushAndPopPointsToPerfDataStage {
-  my $prevStage = shift;
-  my $currStage = shift;
-  my $numNewPointsPrevStage;
-  my $isFullSubstitution = 0;
-
-print "DEBUG: from $prevStage to $currStage\n";
-
-  #
-  # How many points of the previous stage
-  # are later the last point of this stage?
-  #
-  if(   $currStage->{lastTimestamp}
-      < $prevStage->{timestamp}
-        + ($minPoints - 1) * $prevStage->{descriptor}->{samplePeriod}) {
-
-    # Let's mark it, we'll use it again later
-    $isFullSubstitution = 1;
-
-    # The whole points!
-    $numNewPointsPrevStage = $#{$prevStage->{values}} + 1;
-  }
-  else {
-    $numNewPointsPrevStage
-      = floor(($prevStage->{lastTimestamp} - $currStage->{lastTimestamp})
-        / $prevStage->{descriptor}->{samplePeriod});
-      # Don't worry, OStageDescriptor doesn't allow
-      # the samplePeriod to be non-positive
-  }
-
-  # Sanity check:
-  if($numNewPointsPrevStage > $prevStage->{maxPoints}) {
-    OInventory::log(1, "BUG: The stage '" . $prevStage->{descriptor}->{name}
-                     . "' would give more points ($numNewPointsPrevStage)"
-                     . " to the stage '" . $currStage->{descriptor}->{name}
-                     . "' than the max number of points it can have ("
-                     . $prevStage->{maxPoints} . "). We'll truncate it to "
-                     . $prevStage->{maxPoints} . ".");
-    $numNewPointsPrevStage = $prevStage->{maxPoints};
-  }
-
-  if($numNewPointsPrevStage < $minPoints) {
-    OInventory::log(
-      0, "Stage '" . $prevStage->{descriptor}->{name} . "' hasn't "
-       . "enough points ($numNewPointsPrevStage < $minPoints) "
-       . "to give to the stage '" . $currStage->{descriptor}->{name}
-       . "'. At least $minPoints are needed for cubic interpollation. "
-       . "Maybe on next iteration...");
-    return 0;
-  }
-
-  OInventory::log(0, "Stage '" . $prevStage->{descriptor}->{name}
-                   . "' will give $numNewPointsPrevStage points "
-                   . "to the stage '" . $currStage->{descriptor}->{name} . "'");
-
-  #
-  # How many points will be interpolated in the current stage?
-  # We'll use cubic splines, so we'll need two points before, and two after
-  #
-
-  my $numNewPointsCurrStage;
-  my $firstTimeNewPointsPrevStage;
-  my $durationNewPointsPrevStage;
-
-# deprecated
-# $firstTimeNewPointsPrevStage =
-#      getFirstValueGreater($currStage->{lastTimestamp}, $prevStage->{values});
-
-  my $firstPosNewPointsCurrStage = getPositionOfFirstValueGreater(
-                            $currStage->{lastTimestamp}, $prevStage->{values});
-
-cal depurar això, imagino que a continuació no vindria firstPosNewPointsCurrStage sinó firstPosNewPointsPrevStage
-  $firstTimeNewPointsPrevStage = ${$prevStage->{values}}[$firstPosNewPointsCurrStage];
-
-  if( ! defined($firstTimeNewPointsPrevStage))  {
-    OInventory::log(3, "Bug: Can't find the first new point from "
-                     . "previous stage '" . $prevStage->{descriptor}->{name}
-                     . "' after the last timestamp of current stage '"
-                     . $currStage->{descriptor}->{name} . "'");
-    return undef;
-  }
-  $durationNewPointsPrevStage =
-       $prevStage->{lastTimestamp} - $firstTimeNewPointsPrevStage;
-  $numNewPointsCurrStage =
-    floor(
-      ($durationNewPointsPrevStage
-        - $minPoints * $prevStage->{descriptor}->{samplePeriod})
-      / $currStage->{descriptor}->{samplePeriod}
-    );
-
-  OInventory::log(0, "Stage '" . $currStage->{descriptor}->{name}
-                   . "' will shift $numNewPointsCurrStage "
-                   . "interpolated points calculed upon "
-                   . "the $numNewPointsPrevStage points "
-                   . "of previous stage");
-
-  #
-  # Generate the array of new points for the current stage,
-  # interpolating on the 2+2 points of the previous stage
-  #
-
-  #
-  # Create the new file concatenating the "N-M" old points of the current stage
-  # with the M interpolated points, where:
-  # * N == number of points for this stage,
-  # * M == number of new points interpolated
-  #     based upon the points on the previous stage
-  #
-
-  #
-  # Will use:
-  # * $firstTimeNewPointsPrevStage
-  # * $firstPosNewPointsPrevStage  ?????????????
-  # * $durationNewPointsPrevStage
-  # * $firstPosNewPointsCurrStage
-  # * $numNewPointsCurrStage
-  # * $numNewPointsPrevStage
-  #
-
-#
-# $firstTimeNewPointsPrevStage                            x
-# $prev->{descriptor}->{lastTimestamp}                                         x
-# $curr->{descriptor}->{lastTimestamp}                   x
-#
-# $durationNewPointsPrevStage                             |<------------------>|
-#                                                        |<------------------->|
-# $prev->{descriptor}->{samplePeriod}               |<>|
-# $curr->{descriptor}->{samplePeriod}             |<---->|
-# $minPoints (cubic interpolation => 4)                   |<------->|
-#
-# $prev:                                   (--|--|--|--|--|--|--|--|--|-...-|--)
-#            
-# $curr:              (------|------|------|------|------)      |
-#                                                               |
-# $prev->{timestamp}                       x                    |
-# $curr->{timestamp}  x                                         |
-#                                                               |
-# $firstPosNewPointsCurrStage                                   x
-#
-
-
-
-
-#
-# time:        |------------------------------------------------------------------------->
-#
-# $stage[$i-2]->{lastTimestant}                                                          x
-# $stage[$i-2]                                       (--|--|--|--|--|--|--|--|--|-...-|--)
-#
-# firstNewPoint[$i]                                                    x
-# $stage[$i-1]->{lastTimestant}                                            x
-# $stage[$i-1]                   (-----|-----|-----|-----|----...----|-----)
-#            
-# $stage[$i]->{lastTimestant}                             x
-# $stage[$i]:     (-------|-------|-------|-------|-------)                              x
-#
-#
-#  firstNewPoint[$i]:
-# $firstPos[$i-1] = getFirstPositionWithTimestampAfter($stage[$i-1]->{values}, $stage[$i-1]->{lastTimestant} - $minPoints/2 * $stage[$i-2]->{samplePeriod})
-# $firstTimestamp[$i-1] = ${$stage[$i-1]->{values}}[$firstPos[$i-1]]
-#
-
-
-  my $tmpFile = $currStage->{filename} . ".rrdb_running";
-  my $handler;
-
-  if($numNewPointsCurrStage > 0) {
-
-error, tinc firstTimeNewPointsPrevStage però necessito firstPosNewPointsPrevStage
-millor fer que la funció d'abans retorni firstPosNewPointsPrevStage i calcular allà firstTimeNewPointsPrevStage a a partir de tal posició, així tamb´e ho tindré diponible aquí
- 
-    my $x = @{$prevStage->{values}}[$firstPosNewPointsPrevStage..$lastPosFromPrevStage]
-    my $y = interpolate($x, ;
-
-    if( ! open($handler, ">:utf8", $tmpFile) ) {
-      OInventory::log(3, "Can't open '$tmpFile' for writing: $!");
-      return 0;
-    }
-
-    my $newTimestamp;
-    if( $isFullSubstitution ) {
-      # Must substitute the whole currStage
-      $newTimestamp = floor(   $prevStage->{timestamp}
-                             + $prevStage->{descriptor}->{duration} / 2
-                             - $currStage->{descriptor}->{duration} / 2
-                           );
-    }
-    else {
-      $newTimestamp = floor(   $currStage->{timestamp}
-                             + $numNewPointsCurrStage
-                             * $currStage->{descriptor}->{samplePeriod}
-                           );
-    }
-
-    print $handler "#$newTimestamp\n";
-#   foreach my $value (@$prevValues) {
-#     print $handler "$value\n";
+#   my $prevStage = shift;
+#   my $currStage = shift;
+#   my $numNewPointsPrevStage;
+#   my $isFullSubstitution = 0;
+# 
+# print "DEBUG: from $prevStage to $currStage\n";
+# 
+#   #
+#   # How many points of the previous stage
+#   # are later the last point of this stage?
+#   #
+#   if(   $currStage->{lastTimestamp}
+#       < $prevStage->{timestamp}
+#         + ($minPoints - 1) * $prevStage->{descriptor}->{samplePeriod}) {
+# 
+#     # Let's mark it, we'll use it again later
+#     $isFullSubstitution = 1;
+# 
+#     # The whole points!
+#     $numNewPointsPrevStage = $#{$prevStage->{values}} + 1;
 #   }
-
-    if( ! close($handler) ) {
-      OInventory::log(3, "Can't close '$tmpFile': $!");
-      return 0;
-    }
-
-#   mv $tmpFile $filename ...
- 
-  }
-  if($numNewPointsCurrStage == 0) {
-    OInventory::log(0, "No new point needs to be created");
-    return 0;
-  }
-  else {
-    OInventory::log(0, "Bug: Negative number of new points on RRDB");
-    return undef;
-  }
-
-  return $numNewPointsCurrStage;
+#   else {
+#     $numNewPointsPrevStage
+#       = floor(($prevStage->{lastTimestamp} - $currStage->{lastTimestamp})
+#         / $prevStage->{descriptor}->{samplePeriod});
+#       # Don't worry, OStageDescriptor doesn't allow
+#       # the samplePeriod to be non-positive
+#   }
+# 
+#   # Sanity check:
+#   if($numNewPointsPrevStage > $prevStage->{maxPoints}) {
+#     OInventory::log(1, "BUG: The stage '" . $prevStage->{descriptor}->{name}
+#                      . "' would give more points ($numNewPointsPrevStage)"
+#                      . " to the stage '" . $currStage->{descriptor}->{name}
+#                      . "' than the max number of points it can have ("
+#                      . $prevStage->{maxPoints} . "). We'll truncate it to "
+#                      . $prevStage->{maxPoints} . ".");
+#     $numNewPointsPrevStage = $prevStage->{maxPoints};
+#   }
+# 
+#   if($numNewPointsPrevStage < $minPoints) {
+#     OInventory::log(
+#       0, "Stage '" . $prevStage->{descriptor}->{name} . "' hasn't "
+#        . "enough points ($numNewPointsPrevStage < $minPoints) "
+#        . "to give to the stage '" . $currStage->{descriptor}->{name}
+#        . "'. At least $minPoints are needed for cubic interpollation. "
+#        . "Maybe on next iteration...");
+#     return 0;
+#   }
+# 
+#   OInventory::log(0, "Stage '" . $prevStage->{descriptor}->{name}
+#                    . "' will give $numNewPointsPrevStage points "
+#                    . "to the stage '" . $currStage->{descriptor}->{name} . "'");
+# 
+#   #
+#   # How many points will be interpolated in the current stage?
+#   # We'll use cubic splines, so we'll need two points before, and two after
+#   #
+# 
+#   my $numNewPointsCurrStage;
+#   my $firstTimeNewPointsPrevStage;
+#   my $durationNewPointsPrevStage;
+# 
+# # deprecated
+# # $firstTimeNewPointsPrevStage =
+# #      getFirstValueGreater($currStage->{lastTimestamp}, $prevStage->{values});
+# 
+#   my $firstPosNewPointsCurrStage = getPositionOfFirstValueGreater(
+#                             $currStage->{lastTimestamp}, $prevStage->{values});
+# 
+# die "There must be an error here, probably it shouldn't be firstPosNewPointsCurrStage , probably should be firstPosNewPointsPrevStage";
+#   $firstTimeNewPointsPrevStage = ${$prevStage->{values}}[$firstPosNewPointsCurrStage];
+# 
+#   if( ! defined($firstTimeNewPointsPrevStage))  {
+#     OInventory::log(3, "Bug: Can't find the first new point from "
+#                      . "previous stage '" . $prevStage->{descriptor}->{name}
+#                      . "' after the last timestamp of current stage '"
+#                      . $currStage->{descriptor}->{name} . "'");
+#     return undef;
+#   }
+#   $durationNewPointsPrevStage =
+#        $prevStage->{lastTimestamp} - $firstTimeNewPointsPrevStage;
+#   $numNewPointsCurrStage =
+#     floor(
+#       ($durationNewPointsPrevStage
+#         - $minPoints * $prevStage->{descriptor}->{samplePeriod})
+#       / $currStage->{descriptor}->{samplePeriod}
+#     );
+# 
+#   OInventory::log(0, "Stage '" . $currStage->{descriptor}->{name}
+#                    . "' will shift $numNewPointsCurrStage "
+#                    . "interpolated points calculed upon "
+#                    . "the $numNewPointsPrevStage points "
+#                    . "of previous stage");
+# 
+#   #
+#   # Generate the array of new points for the current stage,
+#   # interpolating on the 2+2 points of the previous stage
+#   #
+# 
+#   #
+#   # Create the new file concatenating the "N-M" old points of the current stage
+#   # with the M interpolated points, where:
+#   # * N == number of points for this stage,
+#   # * M == number of new points interpolated
+#   #     based upon the points on the previous stage
+#   #
+# 
+#   #
+#   # Will use:
+#   # * $firstTimeNewPointsPrevStage
+#   # * $firstPosNewPointsPrevStage  ?????????????
+#   # * $durationNewPointsPrevStage
+#   # * $firstPosNewPointsCurrStage
+#   # * $numNewPointsCurrStage
+#   # * $numNewPointsPrevStage
+#   #
+# 
+# #
+# # v1:
+# #
+# # $firstTimeNewPointsPrevStage                            x
+# # $prev->{descriptor}->{lastTimestamp}                                         x
+# # $curr->{descriptor}->{lastTimestamp}                   x
+# #
+# # $durationNewPointsPrevStage                             |<------------------>|
+# #                                                        |<------------------->|
+# # $prev->{descriptor}->{samplePeriod}               |<>|
+# # $curr->{descriptor}->{samplePeriod}             |<---->|
+# # $minPoints (cubic interpolation => 4)                   |<------->|
+# #
+# # $prev:                                   (--|--|--|--|--|--|--|--|--|-...-|--)
+# #            
+# # $curr:              (------|------|------|------|------)      |
+# #                                                               |
+# # $prev->{timestamp}                       x                    |
+# # $curr->{timestamp}  x                                         |
+# #                                                               |
+# # $firstPosNewPointsCurrStage                                   x
+# #
+# 
+# 
+# #
+# # v2:
+# #
+# # time:        |------------------------------------------------------------------------->
+# #
+# # $stage[$i-2]->{lastTimestant}                                                          x
+# # $stage[$i-2]                                       (--|--|--|--|--|--|--|--|--|-...-|--)
+# #
+# # firstNewPoint[$i]                                                    x
+# # $stage[$i-1]->{lastTimestant}                                            x
+# # $stage[$i-1]                   (-----|-----|-----|-----|----...----|-----)
+# #            
+# # $stage[$i]->{lastTimestant}                             x
+# # $stage[$i]:     (-------|-------|-------|-------|-------)                              x
+# #
+# #
+# #  firstNewPoint[$i]:
+# # $firstPos[$i-1] = getFirstPositionWithTimestampAfter($stage[$i-1]->{values}, $stage[$i-1]->{lastTimestant} - $minPoints/2 * $stage[$i-2]->{samplePeriod})
+# # $firstTimestamp[$i-1] = ${$stage[$i-1]->{values}}[$firstPos[$i-1]]
+# #
+# 
+# 
+# #
+# # v3:
+# #
+# # time:        |------------------------------------------------------------------------->
+# #
+# # $stage[$i-2]->{timestant}                          x
+# # $stage[$i-2]->{lastTimestant}                                                          x
+# # $stage[$i-2]                                                (--|--|--|--|--|--|-...-|--)
+# #                                                                                        |
+# # $stage[$i-1]->{timestant}      x                                                       |
+# # $stage[$i-1]->{lastTimestant}                                      x                   |
+# # $stage[$i-1]                               (-----|----...----|-----)                   |
+# # $newPoints[$i-1]                                                         |-----|-----|xxxxxX
+# #            
+# # $stage[$i]->{lastTimestant}                             x
+# # $stage[$i]:                     (-------|-------|-------)
+# #
+# # $stage[$i-2] Points between previous and next samples                      |--|--|--|
+# # ${$stage[$i-1]->{newPoints}}[$#{$stage[$i-1]->{newPoints}}-1]                  |
+# #
+# # $stage[$i-2] Points between previous and next samples                |--|--|--|
+# # ${$stage[$i-1]->{newPoints}}[$#{$stage[$i-1]->{newPoints}}-2]            |
+# #
+# #
+# # PENDING TO REVIEW:  firstNewPoint[$i]:
+# # PENDING TO REVIEW: $firstPos[$i-1] = getFirstPositionWithTimestampAfter($stage[$i-1]->{values}, $stage[$i-1]->{lastTimestant} - $minPoints/2 * $stage[$i-2]->{samplePeriod})
+# # PENDING TO REVIEW: $firstTimestamp[$i-1] = ${$stage[$i-1]->{values}}[$firstPos[$i-1]]
+# #
+# 
+# die "Also pending to modelize missing points, probably best option is to set a '#' on each missing sample";
+# 
+# 
+# 
+# 
+#   my $tmpFile = $currStage->{filename} . ".rrdb_running";
+#   my $handler;
+# 
+#   if($numNewPointsCurrStage > 0) {
+# 
+# die "bug: we got firstTimeNewPointsPrevStage but we need firstPosNewPointsPrevStage";
+# die "Probably it's better if the function returns firstPosNewPointsPrevStage and then calculate firstTimeNewPointsPrevStage having that position, this way that data will be available here";
+#  
+#     my $x = @{$prevStage->{values}}[$firstPosNewPointsPrevStage..$lastPosFromPrevStage]
+#     my $y = interpolate($x, ;
+# 
+#     if( ! open($handler, ">:utf8", $tmpFile) ) {
+#       OInventory::log(3, "Can't open '$tmpFile' for writing: $!");
+#       return 0;
+#     }
+# 
+#     my $newTimestamp;
+#     if( $isFullSubstitution ) {
+#       # Must substitute the whole currStage
+#       $newTimestamp = floor(   $prevStage->{timestamp}
+#                              + $prevStage->{descriptor}->{duration} / 2
+#                              - $currStage->{descriptor}->{duration} / 2
+#                            );
+#     }
+#     else {
+#       $newTimestamp = floor(   $currStage->{timestamp}
+#                              + $numNewPointsCurrStage
+#                              * $currStage->{descriptor}->{samplePeriod}
+#                            );
+#     }
+# 
+#     print $handler "#$newTimestamp\n";
+# #   foreach my $value (@$prevValues) {
+# #     print $handler "$value\n";
+# #   }
+# 
+#     if( ! close($handler) ) {
+#       OInventory::log(3, "Can't close '$tmpFile': $!");
+#       return 0;
+#     }
+# 
+# #   mv $tmpFile $filename ...
+#  
+#   }
+#   if($numNewPointsCurrStage == 0) {
+#     OInventory::log(0, "No new point needs to be created");
+#     return 0;
+#   }
+#   else {
+#     OInventory::log(0, "Bug: Negative number of new points on RRDB");
+#     return undef;
+#   }
+# 
+#   return $numNewPointsCurrStage;
 }
 
 #
@@ -1166,7 +1203,7 @@ sub getPositionOfFirstValueGreater {
   }
 
 # foreach my $point (@$points) {
-  for (my $i; $i <= $#points; $i++ ) {
+  for (my $i; $i <= $#$points; $i++ ) {
     return $i if($$points[$i] > $limit);
   }
   return undef;
@@ -1479,18 +1516,20 @@ sub getLatestPerformance {
       next;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(1, "Profiling: Getting performance for "
+    OInventory::log(1, "Profiling: Getting latest performance for "
                      . ref($aEntity) . ": "
                      . "{name='" . $aEntity->{name} . "',mo_ref='"
                      . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
-    if(! savePerfData($perfData, $aEntity)) {
-      OInventory::log(3, "Errors getting performance from " . ref($aEntity)
-                       . " with mo_ref '" . $aEntity->{mo_ref} . "'");
+    if(! savePerfData($perfData)) {
+      OInventory::log(3, "Errors getting latest performance from "
+                       . ref($aEntity) . " with mo_ref '"
+                       . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
-        OInventory::log(3, "Too many errors when getting performance from "
+        OInventory::log(3, "Too many errors trying to get performance. "
+                         . " Hopefully it's a transitory downtime in "
                          . "vCenter. We'll try again on next iteration");
         return 0;
       }
