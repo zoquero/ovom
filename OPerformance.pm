@@ -822,32 +822,64 @@ sub getConcreteStages {
   for (my $stageI = 0; $stageI <= $#$stageDescriptors; $stageI++) {
     my $filename       = $prefix . "."
                        . $$stageDescriptors[$stageI]->{name} . ".csv";
-    my $values         = []; # means 'stage without data perf file' (beginning)
-    my $timestamp      = -1; # means 'stage without data perf file' (beginning)
-    my $lastTimestamp  = -1; # means 'stage without data perf file' (beginning)
+    #
+    # Default values meaning 'stage without data perf file' (beginning)
+    #
+    my $values         = [];
+    my $timestamps     = [];
+    my $timestamp      = -1;
+    my $lastTimestamp  = -1;
 
     if(! -e $filename) {
       OInventory::log(1, "RRDB: stage file '" . $filename . " doesn't exist");
     }
     else {
-      my $pdff;
       #
       # Let's read perf data on a file of a stage of a metric
       #
-      $pdff = getPerfDataFromFile($filename);
-      if ( ! defined($pdff) ) {
-        OInventory::log(3, "Can't get perf data $$stageDescriptors[$stageI] from stage file $filename");
+      ($timestamps, $values) = getPerfDataFromFile($filename);
+
+      #
+      # Post-conditions, sanity checks
+      #
+      if ( ! defined($timestamps) || ! defined($values) ) {
+        OInventory::log(3, "Can't get perf data $$stageDescriptors[$stageI] "
+                         . "from perf data stage file '$filename'");
         return undef;
       }
-      $timestamp     = $$pdff[0];
-      $values        = $$pdff[1];
-      $lastTimestamp = $$pdff[$#$pdff];
+      if ( ref($timestamps) ne 'ARRAY' ) {
+        OInventory::log(3, "BUG: Getting perf data $$stageDescriptors[$stageI] "
+                         . "from perf data stage file '$filename': "
+                         . "timestamps is not an array");
+        return undef;
+      }
+      if ( ref($values) ne 'ARRAY' ) {
+        OInventory::log(3, "BUG: Getting perf data $$stageDescriptors[$stageI] "
+                         . "from perf data stage file '$filename': "
+                         . "values is not an array");
+        return undef;
+      }
+      if ( $#$timestamps == -1 ) {
+        #
+        # We'll not trigger error, just move next
+        #
+        OInventory::log(2, "Empty $$stageDescriptors[$stageI] "
+                         . "from perf data stage file '$filename'");
+        next;
+      }
+
+      #
+      # Let's save the handy short cuts
+      #
+      $timestamp     = $$timestamps[0];
+      $lastTimestamp = $$timestamps[$#$timestamps];
     }
 
     my %args = (
          descriptor    => $$stageDescriptors[$stageI],
+         numPoints     => $#$timestamps,
          values        => $values,
-         timestamp     => $timestamp,
+         timestamps    => $timestamps,
          lastTimestamp => $lastTimestamp,
          filename      => $filename,
       );
@@ -879,7 +911,11 @@ sub doRrdb {
   #
   my $stages = getConcreteStages($prefix);
   if( ! defined ($stages) ) {
-    OInventory::log(3, "Can't get the concrete stage descriptors");
+    OInventory::log(3, "Can't get the concrete stage descriptors from $prefix");
+    return 0;
+  }
+  if( $#$stages == -1 ) {
+    OInventory::log(3, "Can't get any concrete stage descriptor from $prefix");
     return 0;
   }
 
@@ -1277,14 +1313,14 @@ sub getValueAndGreater {
 # Get performance data from a perf data file
 #
 # @arg filename
-# @return [$timestamp,$values], undef errors
+# @return [\@timestamps,\@values] (if ok), undef errors (if errors)
 #           where:
-#             $timestamp is the epoch timestamp of the first value
-#             $values is a ref to an array with the values
+#             @timestamps : timestamps in epoch
+#             @values     : values
 #
 sub getPerfDataFromFile {
   my $filename = shift;
-  my $timestamp;
+  my @timestamps;
   my @values;
 
   if(! defined($filename)) {
@@ -1304,17 +1340,37 @@ sub getPerfDataFromFile {
   #
   # Let's read the file
   #
-  my $first = 1;
   while (my $line = <$handler>) {
     chomp $line;
-    next if $line =~ /^\s*$/;
-    if($first) {
-      $first = 0;
-      $line =~ s/^#//g;
-      $timestamp = $line;
+    next if $line =~ /^\s*$/; # empty
+    next if $line =~ /^\s*#/; # comment, somehow
+
+    my ($t, $v) = split(/$csvSep/, $line, 2);
+    if (! defined($t) || ! defined($v)) {
+      OInventory::log(3, "Can't parse the line '$line' from '$filename'");
+      return undef;
+    }
+    if ( $t eq '') {
+      OInventory::log(3, "Empty timestamp in line '$line' from '$filename'");
+      return undef;
+    }
+    if ( $v eq '') {
+      # We'll not stop parsing
+      OInventory::log(2, "Empty value in line '$line' from '$filename'");
+    }
+    if( ! looks_like_number($t)) {
+      OInventory::log(3, "Unknown timestamp in line '$line' from '$filename'");
+      return undef;
+    }
+    if( ! looks_like_number($v)) {
+      # We'll not stop parsing
+      # Must we log Error or Warning ... ?
+      OInventory::log(2, "Unknown value in line '$line' from '$filename'");
       next;
     }
-    push @values, $line;
+
+    push @timestamps, $t;
+    push @values,     $v;
   }
 
   #
@@ -1325,7 +1381,16 @@ sub getPerfDataFromFile {
     return undef;
   }
 
-  return [ $timestamp, \@values ];
+  #
+  # Sanity check.
+  # It should never happen, but...
+  #
+  if ($#timestamps != $#values) {
+    OInventory::log(3, "Got different number of timestamps ($#timestamps) than "
+                     . "values ($#values) from perf data file '$filename': $!");
+    return undef;
+  }
+  return [ \@timestamps, \@values ];
 }
  
 

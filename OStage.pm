@@ -9,15 +9,38 @@ use overload
 use OStageDescriptor;
 
 
+#
+# Class representing the perfData from each stage of each metric
+#
+# @field descriptor    : OStageDescriptor object describing the stage
+# @field numPoints     : How many points does it contain
+# @field timestamps    : ref to array of timestamps it contain
+# @field values        : ref to array of the corresponding values to timestamps
+# @field timestamp     : Handy short cut to the initial timestamp
+# @field lastTimestamp : Handy short cut to the last timestamp
+# @field filename      : Filename from which those values were parsed
+#
+
 our $csvSep = ";";
 
 #
 # Constructor with args hash
 #
-# Notes:
-# * values        == []; # means 'stage without data perf file'
-# * timestamp     == -1; # means 'stage without data perf file'
-# * lastTimestamp == -1; # means 'stage without data perf file'
+# Default values that mean 'stage without data perf file'
+# * values        == [];
+# * timestamp     == -1;
+# * timestamps    == [];
+# * lastTimestamp == -1;
+#
+# $arg ref to hash containing all the arguments:
+#
+# $arg->{descriptor}    : OStageDescriptor object describing the stage
+# $arg->{numPoints}     : How many points does it contain
+# $arg->{timestamps}    : ref to array of timestamps it contain
+# $arg->{values}        : ref to array of the corresponding values to timestamps
+# $arg->{timestamp}     : Handy short cut to the initial timestamp
+# $arg->{lastTimestamp} : Handy short cut to the last timestamp
+# $arg->{filename}      : Filename from which those values were parsed
 #
 sub new {
   my ($class, $args) = @_;
@@ -30,6 +53,18 @@ sub new {
 
   if (! defined($args->{'descriptor'})) {
     Carp::croak("args{'descriptor'} isn't defined "
+              . "at OStage constructor");
+    return undef;
+  }
+
+  if (! defined($args->{'numPoints'})) {
+    Carp::croak("args{'numPoints'} isn't defined "
+              . "at OStage constructor");
+    return undef;
+  }
+
+  if (! defined($args->{'timestamps'})) {
+    Carp::croak("args{'timestamps'} isn't defined "
               . "at OStage constructor");
     return undef;
   }
@@ -64,6 +99,18 @@ sub new {
     return undef;
   }
 
+  if (! looks_like_number($args->{'numPoints'})) {
+    Carp::croak("args{'numPoints'} must be a number "
+              . "at OStage constructor");
+    return undef;
+  }
+
+  if (ref($args->{'timestamps'}) ne 'ARRAY') {
+    Carp::croak("args{'timestamps'} must be an array of primitive values "
+              . "at OStage constructor, it's a " . ref($args->{'timestamps'}));
+    return undef;
+  }
+
   if (ref($args->{'values'}) ne 'ARRAY') {
     Carp::croak("args{'values'} must be an array of primitive values "
               . "at OStage constructor, it's a " . ref($args->{'values'}));
@@ -72,7 +119,7 @@ sub new {
 
   if (! looks_like_number($args->{'timestamp'})) {
     Carp::croak("args{'timestamp'} must be a number "
-              . "at OStageDescriptor constructor");
+              . "at OStageconstructor");
     return undef;
   }
 
@@ -91,6 +138,8 @@ sub new {
   # Let's create:
   my $self = bless {
     descriptor       => $args->{'descriptor'},
+    numPoints        => $args->{'numPoints'},
+    timestamps       => $args->{'timestamps'},
     values           => $args->{'values'},
     timestamp        => $args->{'timestamp'},
     lastTimestamp    => $args->{'lastTimestamp'},
