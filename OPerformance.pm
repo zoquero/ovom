@@ -5,11 +5,12 @@ use warnings;
 use Exporter;
 use POSIX qw/strftime/;
 use Time::Piece;
-use Time::HiRes; ## gettimeofday
+use Time::HiRes;  ## gettimeofday
 use VMware::VIRuntime;
 use Data::Dumper;
-use POSIX;       ## floor
+use POSIX;        ## floor
 use Scalar::Util qw(looks_like_number);
+use Math::Spline; ## for RRDB interpolation
 
 use OInventory;
 use OvomDao;
@@ -1071,6 +1072,87 @@ sub getValueForTimestamp {
 
 
 #
+# Tells if are the points with defined values in the half-open interval ( [) )
+#
+# It's a half-open interval ( [a, b) ) == left-closed and right-open
+#
+# If an abscise is contained in the interval, but it's corresponding ordinate
+# is not defined (empty perfData is going to happen on downtimes),
+# then it's not considered to be a contained point.
+#
+# @arg ref to array of x
+# @arg ref to array of y
+# @arg left  boundary
+# @arg right boundary
+# @return number of points contained in interval (if it contains)
+#               (so, it will be 0 if doesn't contain points),
+#               || undef (if errors)
+#
+sub containsPointsInInterval {
+  my $x = shift;
+  my $y = shift;
+  my $a = shift;
+  my $b = shift;
+
+  if(! defined($x) || ! defined($y) || ! defined($a) || ! defined($b)) {
+    OInventory::log(3, "containsPointsInInterval: missing params");
+    return -1;
+  }
+  if(ref($x) ne 'ARRAY') {
+    OInventory::log(3, "containsPointsInInterval 1st param must be a ref to x. "
+                     . "Is a '" . ref($x) . "'");
+    return undef;
+  }
+
+  if(ref($y) ne 'ARRAY') {
+    OInventory::log(3, "containsPointsInInterval 2nd param must be a ref to x. "
+                     . "Is a '" . ref($y) . "'");
+    return undef;
+  }
+  if( ! looks_like_number($a)) {
+    OInventory::log(3, "interpolateFromPrevStages "
+                     . "3rd param must be a number ($a)");
+    return undef;
+  }
+  if( ! looks_like_number($b)) {
+    OInventory::log(3, "interpolateFromPrevStages "
+                     . "4th param must be a number ($b)");
+    return undef;
+  }
+
+  my $firstPosAfterA =
+    getPositionOfFirstAbscissaGreaterWithDefinedOrdinate(
+      $a,
+      $x,
+      $y,
+      1
+    );
+  if(! defined($firstPosAfterA)) {
+    return undef;
+  }
+  if($firstPosAfterA == -1) {
+    return 0;
+  }
+
+  my $firstPosAfterB =
+    getPositionOfFirstAbscissaGreaterWithDefinedOrdinate(
+      $b,
+      $x,
+      $y,
+      0
+    );
+  if(! defined($firstPosAfterB)) {
+    return undef;
+  }
+  if($firstPosAfterB == -1) {
+    return 0;
+  }
+  return $firstPosAfterB-$firstPosAfterA+1;
+}
+
+
+
+#
 # Interpolate a value for a timestamp based on the values on previous stages.
 # It uses the values in the first (fresher, from 'latest' upwards) stage
 # with data all along its two surrounding (currStage)Samples:
@@ -1083,9 +1165,14 @@ sub getValueForTimestamp {
 # @return the value (if ok), undef (if errors or there are not previous points)
 #
 sub interpolateFromPrevStages {
-  my $timestamp    = shift;
-  my $stages       = shift;
-  my $currStagePos = shift;
+  my $timestamp      = shift;
+  my $stages         = shift;
+  my $currStagePos   = shift;
+  my @cachedSplines  = shift;
+  #
+  # In a future we may accept partial stages...
+  #
+  # my @partialStages = ();
 
   if( ! looks_like_number($timestamp)) {
     OInventory::log(3, "interpolateFromPrevStages "
@@ -1104,26 +1191,135 @@ sub interpolateFromPrevStages {
     return undef;
   }
 
-  my $currStageSamplePeriod = $$stages[$currStagePos]->{descriptor}->{samplePeriod};
+  my $currStageSampPeriod = $$stages[$currStagePos]->{descriptor}->{samplePeriod};
 
   for (my $iStage = 0; $iStage < $currStagePos; $iStage++) {
+    #
+    # In a future we may accept partial stages...
+    #
+    # $partialStages[$iStage] = 0; # Just an initiallization
+    #
+
+print "timestamp = $timestamp, stage=$iStage\n";
 #   my ($newTimestamps, $newValues) = getNewPoints($currStagePos, $stages);
-    my $firstPos = getPositionOfFirstValueGreater(
-                     $timestamp - 2*$currStageSamplePeriod;
-                     $$stages[$iStage]->{timestamps},
-                     1
-                   );
-    my $lastPos = getPositionOfFirstValueGreater(
-                    $timestamp + 2*$currStageSamplePeriod;
-                    $$stages[$iStage]->{timestamps},
-                    1
-                  );
-    die "verify return...";
 
+    #
+    # By now we'll accept to interpolate from the first stage that has points in
+    #  the three currSamplePeriods between -2*currSamplePeriod and 
+    # +2*currSamplePeriod around the timestamp. This will allow us to ensure 
+    # that that stage has points all along 
+    # -1*currSamplePeriod and +1*currSamplePeriod
+    #
+    my $numPoints2SampsBefore
+         = containsPointsInInterval(
+             $$stages[$iStage]->{timestamps},
+             $$stages[$iStage]->{values},
+             $timestamp - 2*$currStageSampPeriod,
+             $timestamp -   $currStageSampPeriod);
+    my $numPoints1SampBefore
+         = containsPointsInInterval(
+             $$stages[$iStage]->{timestamps},
+             $$stages[$iStage]->{values},
+             $timestamp - $currStageSampPeriod,
+             $timestamp                         );
+    my $numPoints1SampAfter
+         = containsPointsInInterval(
+             $$stages[$iStage]->{timestamps},
+             $$stages[$iStage]->{values},
+             $timestamp                         ,
+             $timestamp +   $currStageSampPeriod);
+    my $numPoints2SampsAfter
+         = containsPointsInInterval(
+             $$stages[$iStage]->{timestamps},
+             $$stages[$iStage]->{values},
+             $timestamp +   $currStageSampPeriod,
+             $timestamp + 2*$currStageSampPeriod);
 
+    if (    defined($numPoints2SampsBefore) && $numPoints2SampsBefore > 0
+         && defined($numPoints2SampsAfter)  && $numPoints2SampsAfter  > 0 ) {
+      #
+      # We can assure that this is the correct stage to get points from
+      # Still there may be gaps because of operational problems on vCenter,
+      # but if you can find points just before the previous sample
+      # and just after the posterior sample, then it's your stage.
+      #
+      if( ! defined ($cachedSplines[$iStage]) ) {
+        #
+        # If seems a good idea to cache splines
+        #
+        my ($cx, $cy) = getClearedFunction($$stages[$iStage]->{timestamps},
+                                           $$stages[$iStage]->{values});
+print "DEBUG: there were " . ($#{$$stages[$iStage]->{timestamps}} + 1). " components and getClearedFunction returned " . ($#$cx + 1) . " components\n";
+        my $spline = Math::Spline->new($cx,$cy);
+        $cachedSplines[$iStage] = $spline;
+print "DEBUG: x: ";
+foreach my $z (@$cx) {
+print "$z,";
+}
+print "\n";
+print "DEBUG: y: ";
+foreach my $z (@$cy) {
+print "$z,";
+}
+print "\n";
+      }
+      my $y_interp=$cachedSplines[$iStage]->evaluate($timestamp);
+print "DEBUG: interpolation for $timestamp = $y_interp\n";
+    }
+    #
+    # In a future we may accept partial stages...
+    #
+    # elsif ( defined($numPoints1SampBefore) && $numPoints1SampBefore >= 0
+    #         defined($numPoints1SampAfter)  && $numPoints1SampAfter  >= 0) {
+    #   #
+    #   # It's a partial stage
+    #   #
+    #   $partialStages[$iStage] = 1;
+    # }
 
+die "stopppp. BUG: looks like we are trying to interpolate a point that's very before the first point of the stage";
+  }
 }
 
+
+#
+# Gets abscissas and ordinates array and return them after dropping points
+# with undefined corresponding ordinates
+#
+# @arg ref to abscissas array
+# @arg ref to ordinates array
+# @return array containing ref to new abscissas and ref to new ordinates (if ok), or undef (if error)
+#
+sub getClearedFunction {
+  my $x = shift;
+  my $y = shift;
+  my @cx;
+  my @cy;
+
+  if(ref($x) ne 'ARRAY') {
+    OInventory::log(3, "getClearedFunction "
+                     . "1st param must be a ref to abscissas. "
+                     . "Is a '" . ref($x) . "'");
+    return undef;
+  }
+  if(ref($y) ne 'ARRAY') {
+    OInventory::log(3, "getClearedFunction "
+                     . "2nd param must be a ref to ordinates. "
+                     . "Is a '" . ref($y) . "'");
+    return undef;
+  }
+  if($#$x != $#$y) {
+    OInventory::log(3, "getClearedFunction: "
+                     . "x and y arrays must have equal length");
+  }
+  for(my $i = 0 ; $i <= $#$x; $i++) {
+    if(defined($$y[$i])) {
+      push @cx, $$x[$i];
+      push @cy, $$y[$i];
+    }
+  }
+  return (\@cx, \@cy);
+}
 
 #
 # Runs a RRDB algorythm for the perf data file of a stage
@@ -1194,7 +1390,7 @@ sub shiftPointsToPerfDataStage {
   my @finalTimestamps;
   my @finalValues;
 
-print "DEBUG, be carefull !!!\n";
+print "DEBUG, be carefull !!! Line " . __LINE__ . "\n";
 $$stages[$currStagePos]->{timestamp}     = 1505164374;
 $$stages[$currStagePos]->{lastTimestamp} = 1505164854;
 $$stages[$currStagePos]->{timestamps}    = [1505164374, 1505164534, 1505164694, 1505164854];
@@ -1668,12 +1864,67 @@ print @$newValues;
 }
 
 #
+# Get the position of the first value of an array of values (abscissa) greater
+# than a value and that has defined values in it's functions array (ordinate)
+#
+# @arg limit, the value to look for
+# @arg reference to the array of abscissas
+# @arg reference to the array of ordinates
+# @arg (optional) 0 == just if greater (default), 1 == if greater or equal
+# @return the position (if ok), -1 (if not found), undef (if error)
+#
+sub getPositionOfFirstAbscissaGreaterWithDefinedOrdinate {
+  my $limit  = shift;
+  my $x      = shift;
+  my $y      = shift;
+  my $ge     = shift;
+  $ge        ||= 0;
+
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "gpofagwdo: "
+                     . "1st param must be a number ($limit)");
+    return undef;
+  }
+
+  if(ref($x) ne 'ARRAY') {
+    OInventory::log(3, "gpofagwdo: "
+                     . "2nd param must be a ref to vals (x). "
+                     . "Is a '" . ref($x) . "'");
+    return undef;
+  }
+
+  if(ref($y) ne 'ARRAY') {
+    OInventory::log(3, "gpofagwdo: "
+                     . "3rd param must be a ref to vals (y). "
+                     . "Is a '" . ref($y) . "'");
+    return undef;
+  }
+  if($#$x != $#$y) {
+    OInventory::log(3, "gpofagwdo: "
+                     . "x and y arrays must have equal length");
+  }
+
+  for (my $i = 0; $i <= $#$x; $i++ ) {
+    if($ge == 1) {
+# print "gpofagwdo: [$i]=" . $$x[$i] . " (limit=$limit)\n";
+      return $i if($$x[$i] >= $limit && defined($$y[$i]));
+    }
+    else {
+# print "gpofagwdo: [$i]=" . $$x[$i] . " (limit=$limit)\n";
+      return $i if($$x[$i] >  $limit && defined($$y[$i]));
+    }
+  }
+  return -1;
+}
+
+
+#
 # Get the position of the first value of an array greater than a value
 #
 # @arg limit, the value to look for
 # @arg reference to the array of points
 # @arg (optional) 0 == just if greater (default), 1 == if greater or equal
-# @return the position (if ok), undef (if error)
+# @return the position (if ok), -1 (if not found), undef (if error)
 #
 sub getPositionOfFirstValueGreater {
   my $limit  = shift;
@@ -1696,13 +1947,15 @@ sub getPositionOfFirstValueGreater {
 
   for (my $i = 0; $i <= $#$points; $i++ ) {
     if($ge == 1) {
+print "gpofvg: [$i]=" . $$points[$i] . " (limit=$limit)\n";
       return $i if($$points[$i] >= $limit);
     }
     else {
+print "gpofvg: [$i]=" . $$points[$i] . " (limit=$limit)\n";
       return $i if($$points[$i] > $limit);
     }
   }
-  return undef;
+  return -1;
 }
 
 
