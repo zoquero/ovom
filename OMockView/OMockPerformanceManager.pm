@@ -304,7 +304,7 @@ sub getTimeStamps {
 sub getRandValues {
   my @vars ;
   for(my $i = 0; $i < 3*60; $i++) {
-    my $randVal = time % 89 + int(rand(12));
+    my $randVal = int((1+cos((time-179*20+$i*20)/300))*44) + int(rand(12));
     push @vars, $randVal;
   }
   return join ',', @vars;

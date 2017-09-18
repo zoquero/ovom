@@ -16,11 +16,11 @@ It's in an initial development stage but its goals are:
 * Extract performance metrics:
     * (done! v0.2) Extract realtime performance metrics of hosts, clusters and VMs
     * (done! v0.2) Store them on plain CSV files
-    * (work in progress) Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
+    * (done! v0.3) Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
 * Show performance graphics:
     * Offer a simple Web UI to allow have graphs for custom intervals on-demand.
 * Report alarms based on thresholds
-* Suggest changes:
+* Suggest changes (initially just sugggest, later would be nice to allow to apply):
     * vMotion
     * Storage vMotion
     * Hardware scale (more or less hosts for clusters)
@@ -96,7 +96,7 @@ $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\""
 ```
 
-To just ron a loop:
+To just run a loop:
 ```
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
               OVOM_DB_PASSWORD=ovomdbpass  \

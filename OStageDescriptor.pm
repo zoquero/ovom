@@ -67,6 +67,7 @@ sub new {
     name         => $args->{'name'},
     samplePeriod => $args->{'samplePeriod'},
     duration     => $args->{'duration'},
+    maxPoints    => int( $args->{'duration'} / $args->{'samplePeriod'} + 0.5 ),
   }, $class;
   return $self;
 }
@@ -80,8 +81,10 @@ sub stringify {
 #                   $#{$self->{values}}, $self->{timestamp}, $dateStr,
 #                   $self->{samplePeriod}, $self->{duration}, $self->{filename};
 
-    return sprintf "Stage with name '%s', samplePeriod=%ss and duration=%ss",
-                    $self->{name}, $self->{samplePeriod}, $self->{duration};
+    return sprintf "Stage with name '%s', samplePeriod=%ss, "
+                 . "duration=%ss, #maxPoints=%s",
+                    $self->{name}, $self->{samplePeriod},
+                    $self->{duration}, $self->{maxPoints};
 }
 
 1;

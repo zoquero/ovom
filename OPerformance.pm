@@ -5,11 +5,13 @@ use warnings;
 use Exporter;
 use POSIX qw/strftime/;
 use Time::Piece;
-use Time::HiRes; ## gettimeofday
+use Time::HiRes;         ## gettimeofday
 use VMware::VIRuntime;
 use Data::Dumper;
-use POSIX;       ## floor
+use POSIX;               ## floor
 use Scalar::Util qw(looks_like_number);
+use Math::Spline;        ## for RRDB interpolation
+use File::Copy qw(move); ## move perfData file
 
 use OInventory;
 use OvomDao;
@@ -542,12 +544,10 @@ sub registerPerfDataSaved {
 # Save perf data to disk
 #
 # @arg array of PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
-# @arg entity view
 # @return 1 ok, 0 errors
 #
 sub savePerfData {
   my $perfDataArray = shift;
-  my $entityView    = shift;
 
   if( ! defined($perfDataArray) ) {
     OInventory::log(3, "savePerfData: expects a PerfEntityMetricCSV");
@@ -644,8 +644,7 @@ sub savePerfData {
       my $timestamps = getSampleInfoArrayRefFromString($sampleInfoCSV);
       my @values = split /,/, $value;
       if($#$timestamps < 3) {
-        OInventory::log(3, "Too few perf data values for mo_ref=" 
-                         . $mo_ref 
+        OInventory::log(3, "Too few perf data values for mo_ref=$mo_ref"
                          . ",counterId=$counterId,instance=$instance");
         return 0;
       }
@@ -666,10 +665,14 @@ sub savePerfData {
         return 0;
       }
   
-      print $pDHandle "#" . $$timestamps[0] . "\n";
       for(my $i = 0; $i <=$#$timestamps; $i++) {
-#       print $pDHandle $$timestamps[$i] . ";" . $values[$i] . "\n";
-        print $pDHandle                          $values[$i] . "\n";
+        #
+        # Oh! We realized that beause of downtimes there can be gaps and shifts,
+        # we can not suppose that all there will exist all the samples
+        # nor that all the samples will be exactly separated by sampleTime
+        #
+#       print $pDHandle                              $values[$i] . "\n";
+        print $pDHandle $$timestamps[$i] . $csvSep . $values[$i] . "\n";
       }
   
       if(!close($pDHandle)) {
@@ -777,11 +780,11 @@ sub getStageDescriptors {
     push @$OPerformance::stageDescriptors, $stage;
     OInventory::log(0, "Loaded global stage descriptor          : $stage");
   
-    for (my $stageI = 0; $stageI <= $#names; $stageI++) {
+    for (my $iStage = 0; $iStage <= $#names; $iStage++) {
       %args = (
-         name         => $names[$stageI],
-         duration     => $durations[$stageI],
-         samplePeriod => $samplePeriods[$stageI],
+         name         => $names[$iStage],
+         duration     => $durations[$iStage],
+         samplePeriod => $samplePeriods[$iStage],
       );
       $stage = OStageDescriptor->new(\%args);
       push @$OPerformance::stageDescriptors, $stage;
@@ -818,36 +821,69 @@ sub getConcreteStages {
     return undef;
   }
 
-  for (my $stageI = 0; $stageI <= $#$stageDescriptors; $stageI++) {
+  for (my $iStage = 0; $iStage <= $#$stageDescriptors; $iStage++) {
     my $filename       = $prefix . "."
-                       . $$stageDescriptors[$stageI]->{name} . ".csv";
-    my $values         = []; # means 'stage without data perf file'
-    my $timestamp      = -1; # means 'stage without data perf file'
-    my $lastTimestamp  = -1; # means 'stage without data perf file'
+                       . $$stageDescriptors[$iStage]->{name} . ".csv";
+    #
+    # Default values meaning 'stage without data perf file' (beginning)
+    #
+    my $values         = [];
+    my $timestamps     = [];
+    my $timestamp      = -1;
+    my $lastTimestamp  = -1;
 
     if(! -e $filename) {
-      OInventory::log(1, "RRDB: stage file '" . $filename . " doesn't exist");
+      OInventory::log(1, "RRDB: stage file '" . $filename . " doesn't exist. "
+                       . "Probably it's a recent installation "
+                       . "with just a few points. Isn't?");
     }
     else {
-      my $pdff;
       #
       # Let's read perf data on a file of a stage of a metric
       #
-      $pdff = getPerfDataFromFile($filename);
-      if ( ! defined($pdff) ) {
-        OInventory::log(3, "Can't get perf data $$stageDescriptors[$stageI] from stage file $filename");
+      ($timestamps, $values) = getPerfDataFromFile($filename);
+
+      #
+      # Post-conditions, sanity checks
+      #
+      if ( ! defined($timestamps) || ! defined($values) ) {
+        OInventory::log(3, "Undefined perf data $$stageDescriptors[$iStage] "
+                         . "from perf data stage file '$filename'");
         return undef;
       }
-      $timestamp     = $$pdff[0];
-      $values        = $$pdff[1];
-      $lastTimestamp = $timestamp
-                       + $$stageDescriptors[$stageI]->{duration}
-                       - $$stageDescriptors[$stageI]->{samplePeriod};
+      if ( ref($timestamps) ne 'ARRAY' ) {
+        OInventory::log(3, "BUG: Getting perf data $$stageDescriptors[$iStage] "
+                         . "from perf data stage file '$filename': "
+                         . "timestamps is not an array");
+        return undef;
+      }
+      if ( ref($values) ne 'ARRAY' ) {
+        OInventory::log(3, "BUG: Getting perf data $$stageDescriptors[$iStage] "
+                         . "from perf data stage file '$filename': "
+                         . "values is not an array");
+        return undef;
+      }
+      if ( $#$timestamps == -1 ) {
+        #
+        # We'll not trigger error, just move next
+        #
+        OInventory::log(2, "Empty $$stageDescriptors[$iStage] "
+                         . "from perf data stage file '$filename'");
+        next;
+      }
+
+      #
+      # Let's save the handy short cuts
+      #
+      $timestamp     = $$timestamps[0];
+      $lastTimestamp = $$timestamps[$#$timestamps];
     }
 
     my %args = (
-         descriptor    => $$stageDescriptors[$stageI],
+         descriptor    => $$stageDescriptors[$iStage],
+         numPoints     => $#$timestamps + 1,
          values        => $values,
+         timestamps    => $timestamps,
          timestamp     => $timestamp,
          lastTimestamp => $lastTimestamp,
          filename      => $filename,
@@ -855,7 +891,7 @@ sub getConcreteStages {
     my $stage = OStage->new(\%args);
     if( ! defined($stage) ) {
       OInventory::log(3, "Can't create a new OStage for file '$filename' "
-                       . "and descriptor $$stageDescriptors[$stageI]");
+                       . "and descriptor $$stageDescriptors[$iStage]");
       return undef;
     }
     push @r, $stage;
@@ -880,7 +916,11 @@ sub doRrdb {
   #
   my $stages = getConcreteStages($prefix);
   if( ! defined ($stages) ) {
-    OInventory::log(3, "Can't get the concrete stage descriptors");
+    OInventory::log(3, "Can't get the concrete stage descriptors from $prefix");
+    return 0;
+  }
+  if( $#$stages == -1 ) {
+    OInventory::log(3, "Can't get any concrete stage descriptor from $prefix");
     return 0;
   }
 
@@ -890,22 +930,35 @@ sub doRrdb {
   # Will not run for first component ('latest'),
   # this stage is just a feeder for 'hour'
   #
-  for (my $stageI = 1; $stageI <= $#$OPerformance::stageDescriptors; $stageI++) {
+
+  #
+  # We don't begin feeding at iStage=0 component
+  # because it's for 'latest', got from vCenter, a 'virtual stage'
+  #
+  for (my $iStage = 1; $iStage <= $#$OPerformance::stageDescriptors; $iStage++) {
 
     OInventory::log(0, "Running RRDB for stage '"
-                     . $$stages[$stageI] . "'");
+                     . $$stages[$iStage] . "'");
 
-    my $r = pushAndPopPointsToPerfDataStage(
-              $$stages[$stageI - 1],
-              $$stages[$stageI]
-            );
+    my ($timeBefore,  $eTime);
+    $timeBefore=Time::HiRes::time;
+    my $r = shiftPointsToPerfDataStage($iStage, $stages);
+    $eTime=Time::HiRes::time - $timeBefore;
+    OInventory::log(0, "Profiling: Running RRDB on stage "
+                       . $$stages[$iStage]->{descriptor}->{name}
+                       . " took " . sprintf("%.3f", $eTime) . " s");
+
     if( $r ) {
       OInventory::log(0, "Pushed and popped $r points to stage "
-                       . $$stages[$stageI]->{descriptor}->{name});
+                       . $$stages[$iStage]->{descriptor}->{name});
     }
     else {
-      OInventory::log(2, "Can't push and pop points to stage "
-                       . $$stages[$stageI]->{descriptor}->{name});
+      #
+      # It will not be usual for the early stages (hour=>day)
+      # but it will be usual for the later stages (month=>year)
+      #
+      OInventory::log(0, "There are no points to push and pop to stage "
+                       . $$stages[$iStage]->{descriptor}->{name});
       next;
     }
   }
@@ -913,210 +966,748 @@ sub doRrdb {
   return 1;
 }
 
-#
-# Runs a RRDB algorythm for the perf data file of a stage
-#
-# It allows to have a fixed size for the complete perf data files.
-#
-# Does the changes in a new file and once ended substitutes
-# the old file with the new one.
-#
-# @arg ref to OStage object representing the previous stage
-# @arg ref to OStage object representing the current  stage
-# @return number of points inserted (if ok), undef (if errors)
-#
-sub pushAndPopPointsToPerfDataStage {
-  my $prevStage = shift;
-  my $currStage = shift;
-  my $newerPointsInPreviousStage;
-  my $isFullSubstitution = 0;
 
-print "DEBUG: from $prevStage to $currStage\n";
-
-  # How many points of the previous stage
-  # are later the last point of this stage?
-  #
-  if(   $currStage->{lastTimestamp}
-      < $prevStage->{timestamp}
-        + ($minPoints - 1) * $prevStage->{descriptor}->{samplePeriod}) {
-
-    # Let's mark it, we'll use it again later
-    $isFullSubstitution = 1;
-
-    # The whole points!
-    $newerPointsInPreviousStage =
-      floor($prevStage->{descriptor}->{duration}
-          / $prevStage->{descriptor}->{samplePeriod}
-      );
-  }
-  else {
-    $newerPointsInPreviousStage
-      = floor(($prevStage->{lastTimestamp} - $currStage->{lastTimestamp})
-        / $prevStage->{descriptor}->{samplePeriod});
-      # Don't worry, OStageDescriptor doesn't allow
-      # the samplePeriod to be non-positive
-  }
-
-  # Sanity check:
-  my $numPointsInPrevStage
-     = int($prevStage->{descriptor}->{duration}
-           /
-           $prevStage->{descriptor}->{samplePeriod});
-  if($newerPointsInPreviousStage > $numPointsInPrevStage) {
-    OInventory::log(1, "The stage '" . $prevStage->{descriptor}->{name}
-                     . "' would give more points ($newerPointsInPreviousStage) "
-                     . "to the stage '" . $currStage->{descriptor}->{name}
-                     . "' than the points it has "
-                     . "($numPointsInPrevStage). We'll truncate it to "
-                     . "$numPointsInPrevStage. It can happen when a new stage "
-                     . "is created with no previous points.");
-    $newerPointsInPreviousStage = $numPointsInPrevStage;
-  }
-
-  if($newerPointsInPreviousStage < $minPoints) {
-    OInventory::log(0, "Stage $prevStage->{descriptor}->{name} hasn't enough "
-                     . "points ($newerPointsInPreviousStage < $minPoints) to "
-                     . "give to the stage '" . $currStage->{descriptor}->{name}
-                     . "'. At least $minPoints are needed "
-                     . "for cubic interpollation. Maybe on next iteration...");
-    return 0;
-  }
-
-  OInventory::log(0, "Stage '" . $prevStage->{descriptor}->{name}
-                   . "' will give $newerPointsInPreviousStage points "
-                   . "to the stage '" . $currStage->{descriptor}->{name} . "'");
-
-  #
-  # How many points will be interpolated in the current stage?
-  # We'll use cubic splines, so we'll need two points before, and two after
-  #
-
-  my $numNewPointsInCurrentStage;
-
-  if( $isFullSubstitution ) {
-    $numNewPointsInCurrentStage = floor(
-                                    $prevStage->{descriptor}->{duration}
-                                    /
-                                    $currStage->{descriptor}->{samplePeriod}
-                                  );
-  }
-  else {
-    my $firstNewPointFromPrevStage;
-    my $durationOfNewPointsInPrevStage;
-    $firstNewPointFromPrevStage =
-         getFirstPointAfter($currStage->{lastTimestamp}, $prevStage->{values});
-    if( ! defined($firstNewPointFromPrevStage))  {
-      OInventory::log(3, "Bug: Can't find the first new point from "
-                       . "previous stage '" . $prevStage->{descriptor}->{name}
-                       . "' after the last timestamp of current stage '"
-                       . $currStage->{descriptor}->{name} . "'");
-      return undef;
-    }
-    $durationOfNewPointsInPrevStage =
-         $prevStage->{lastTimestamp} - $firstNewPointFromPrevStage;
-    $numNewPointsInCurrentStage =
-      floor(
-        ($durationOfNewPointsInPrevStage - 2 * $prevStage->{descriptor}->{samplePeriod})
-        / $currStage->{descriptor}->{samplePeriod}
-      );
-  }
-
-  OInventory::log(0, "Stage '" . $currStage->{descriptor}->{name}
-                   . "' will shift $numNewPointsInCurrentStage "
-                   . "interpolated points calculed upon "
-                   . "the $newerPointsInPreviousStage points "
-                   . "of previous stage");
-
-  #
-  # Generate the array of new points for the current stage,
-  # interpolating on the 2+2 points of the previous stage
-  #
-
-  #
-  # Create the new file concatenating the "N-M" old points of the current stage
-  # with the M interpolated points, where:
-  # * N == number of points for this stage,
-  # * M == number of new points interpolated
-  #     based upon the points on the previous stage
-  #
-
-  my $tmpFile = $currStage->{filename} . ".rrdb_running";
-  my $handler;
-
-  if($numNewPointsInCurrentStage > 0) {
-
-    my @x = ();
-    my @y = ();
-    die "Let's continue here, must feed x and y arrays with the new points in prevStage (time and value), then we'll interpolate to calculate the new numbers to push to the currStage array";
-
-    if( ! open($handler, ">:utf8", $tmpFile) ) {
-      OInventory::log(3, "Can't open '$tmpFile' for writing: $!");
-      return 0;
-    }
-
-    my $newTimestamp;
-    if( $isFullSubstitution ) {
-      # Must substitute the whole currStage
-
-#     if($currStage->{timestamp} + $numNewPointsInCurrentStage;
-#     my $newTimestamp = $currStage->{timestamp} + $numNewPointsInCurrentStage;
-
-      $newTimestamp = floor(   $prevStage->{timestamp}
-                             + $prevStage->{descriptor}->{duration} / 2
-                             - $currStage->{descriptor}->{duration} / 2
-                           );
-
-    }
-    else {
-      $newTimestamp = floor(   $currStage->{timestamp}
-                             + $numNewPointsInCurrentStage
-                             * $currStage->{descriptor}->{samplePeriod}
-                           );
-    }
-
-    print $handler "#$newTimestamp\n";
-#   foreach my $value (@$prevValues) {
-#     print $handler "$value\n";
+# #
+# # Gets the new timestamps and values
+# # but padding with one (curr)samplePeriod before the (curr)first
+# # and after the (curr)last points from previous stages
+# #
+# # To calculate each point we need the points from upper stages between
+# # the previous sample and the posterior sample in this stage.
+# #
+# # @arg the current stage number
+# # @arg ref to the array of stages. The prev arg sets which is the current one
+# # @return ref to the array of timestamps
+# #
+# sub getNewPoints {
+#   my $currStagePos = shift;
+#   my $stages       = shift;
+#   my @newTimestamps;
+#   my @newValues;
+# 
+#   my $currTimestamp     = $$stages[$currStagePos]->{timestamp};
+#   my $currLastTimestamp = $$stages[$currStagePos]->{lastTimestamp};
+#   my $currSamplePeriod  = $$stages[$currStagePos]->{descriptor}->{samplePeriod};
+#   for (my $iStage = 0; $iStage < $currStagePos; $iStage++) {
+# 
+# #   DEBUG !! #
+# print "DEBUG, be carefull !!!\n";
+# $$stages[$iStage]->{timestamp}     = 1114099;
+# $$stages[$iStage]->{lastTimestamp} = 1505114099;
+# $$stages[$iStage]->{timestamps}    = [1114099, 1505114079, 1505114089, 1505114099];
+# $$stages[$iStage]->{values}        = [3, 5, 7, 9];
+# $$stages[$iStage]->{numPoints}     = 4;
+# $currTimestamp     = 105100079;
+# print "DEBUG !!!\n";
+# # / DEBUG !! #
+# 
+# 
+#     my $iTimestamp     = $$stages[$iStage]->{timestamp};
+#     my $iLastTimestamp = $$stages[$iStage]->{lastTimestamp};
+#     OInventory::log(0, "Looking for points for the stage $currStagePos "
+#                      . "from the stage $iStage: currTimestamp=$currTimestamp,currSamplePeriod=$currSamplePeriod,iTimestamp=$iTimestamp,iLastTimestamp=$iLastTimestamp");
+# print("DEBUG: Looking for points for the stage $currStagePos "
+#                      . "from the stage $iStage: currTimestamp=$currTimestamp,currLastTimestamp=$currLastTimestamp,currSamplePeriod=$currSamplePeriod iTimestamp=$iTimestamp,iLastTimestamp=$iLastTimestamp\n");
+#     #
+#     # To interpolate accordingly, iStage should have points:
+#     # * at least one currSamplePeriod before the currTimestamp
+#     # * at least one currSamplePeriod after the currTimestamp
+#     #
+#     # Points from: iStage 
+#     # * >= $currLastTimestamp
+#     # * width at least 2 * currSamplePeriod
+#     #
+# 
+#     # 'Are there at least iPoints for 3 new currPoints?' condition
+#     if($iLastTimestamp >= $currTimestamp - $currSamplePeriod) {
+#       my $iStageFstPos = getPositionOfFirstValueGreater(
+#                            $currTimestamp - $currSamplePeriod,
+#                            $$stages[$iStage]->{timestamps},
+#                            1
+#                          );
+#       my $iStageLastPos = $$stages[$iStage]->{numPoints};
+# 
+#       #
+#       # iPoints width:
+#       # * >= 2 * currSamplePeriod
+#       # * <= currMaxDuration
+#       #
+#       for(my $i = $iStageFstPos; $i < $iStageLastPos; $i++) {
+#         push @newTimestamps, @{$$stages[$iStage]->{timestamps}}[$i];
+#         push @newValues,     @{$$stages[$iStage]->{values}}[$i];
+#       }
+#       last; # enough!
+#     }
 #   }
+#   return (undef, undef);
+# }
 
-    if( ! close($handler) ) {
-      OInventory::log(3, "Can't close '$tmpFile': $!");
-      return 0;
+
+#
+# Returns the value for a timestamp if exists
+#
+# @arg ref to array of timestamps
+# @arg ref to array of values
+# @arg timestamp to look for
+# @return the value (if ok), undef (if err or doesn't exist)
+#
+sub getValueForTimestamp {
+  my $timestamps = shift;
+  my $values     = shift;
+  my $timestamp  = shift;
+  if(ref($timestamps) ne 'ARRAY') {
+    OInventory::log(3, "getValueForTimestamp: 1st arg must be an array "
+                     . "and is a " . ref($timestamps));
+    return undef;
+  }
+  if(ref($values) ne 'ARRAY') {
+    OInventory::log(3, "getValueForTimestamp: 2nd arg must be an array "
+                     . "and is a " . ref($values));
+    return undef;
+  }
+  if(! defined ($timestamp) || ! looks_like_number($timestamp)) {
+    OInventory::log(3, "getValueForTimestamp: 3rd arg must be an number");
+    return undef;
+  }
+  for (my $i = 0; $i <= $#$timestamps; $i++) {
+    if ($$timestamps[$i] == $timestamp) {
+      # Bingo!
+      return $$values[$i];
     }
+  }
+  return undef;
+}
 
-#   mv $tmpFile $filename ...
- 
+
+#
+# Tells how many points are there (with defined values) in the interval
+#
+# It's a half-open interval ( [a, b) ) == left-closed and right-open
+#
+# If an abscise is contained in the interval, but it's corresponding ordinate
+# is not defined (empty perfData is going to happen on downtimes),
+# then it's not considered to be a contained point.
+#
+# @arg ref to array of x
+# @arg ref to array of y
+# @arg left  boundary
+# @arg right boundary
+# @return number of points contained in interval (if it contains)
+#               (so, it will be 0 if doesn't contain points),
+#               || undef (if errors)
+#
+sub numPointsInInterval {
+  my $x = shift;
+  my $y = shift;
+  my $a = shift;
+  my $b = shift;
+  my $r = 0;
+
+  if(! defined($x) || ! defined($y) || ! defined($a) || ! defined($b)) {
+    OInventory::log(3, "numPointsInInterval: missing params");
+    return -1;
   }
-  if($numNewPointsInCurrentStage == 0) {
-    OInventory::log(0, "No new point needs to be created");
-    return 0;
+  if(ref($x) ne 'ARRAY') {
+    OInventory::log(3, "numPointsInInterval 1st param must be a ref to x. "
+                     . "Is a '" . ref($x) . "'");
+    return undef;
   }
-  else {
-    OInventory::log(0, "Bug: must create a negative number of points");
+  if(ref($y) ne 'ARRAY') {
+    OInventory::log(3, "numPointsInInterval 2nd param must be a ref to x. "
+                     . "Is a '" . ref($y) . "'");
+    return undef;
+  }
+  if( ! looks_like_number($a)) {
+    OInventory::log(3, "numPointsInInterval 3rd param must be a number ($a)");
+    return undef;
+  }
+  if( ! looks_like_number($b)) {
+    OInventory::log(3, "numPointsInInterval 4th param must be a number ($b)");
     return undef;
   }
 
-  return $numNewPointsInCurrentStage;
+  my $firstPosAfterA =
+    getPositionOfFirstAbscissaGreaterWithDefinedOrdinate(
+      $a,
+      $x,
+      $y,
+      1
+    );
+  if(! defined($firstPosAfterA)) {
+    return undef;
+  }
+  if($firstPosAfterA == -1) {
+    return 0;
+  }
+  if ( $$x[$firstPosAfterA] >= $b ) {
+    return 0;
+  }
+  for(my $i = $firstPosAfterA; $i <= $#$x; $i++) {
+    if ( defined($$x[$i]) ) {
+      if ( $$x[$i] < $b ) {
+        $r++;
+      }
+      else {
+        # There's no sense to look further
+        last;
+      }
+    }
+  }
+
+# print "DEBUG: numPointsInInterval returns: firstPosAfterA=$firstPosAfterA , "
+#       . "r=$r points that are ($a <= point < $b)\n";
+  return $r;
+}
+
+
+
+#
+# Interpolate a value for a timestamp based on the values on previous stages.
+# It uses the values in the first (fresher, from 'latest' upwards) stage
+# with data all along its two surrounding (currStage)Samples:
+# * one value before the previous (currStage)Sample
+# * and one value after the posterior (currStage)Sample
+#
+# @arg the timestamp to interpolate
+# @arg ref to the array of OStage objects (0 == 'latest')
+# @arg position in the stage array of the one to which we are estimating
+# @return the value (if ok), undef (if errors or there are not previous points)
+#
+sub interpolateFromPrevStages {
+  my $timestamp      = shift;
+  my $stages         = shift;
+  my $currStagePos   = shift;
+  my @cachedSplines;
+  #
+  # In a future we may accept partial stages...
+  #
+  # my @partialStages = ();
+
+  if( ! looks_like_number($timestamp)) {
+    OInventory::log(3, "interpolateFromPrevStages "
+                     . "1st param must be a number ($timestamp)");
+    return undef;
+  }
+  if(ref($stages) ne 'ARRAY') {
+    OInventory::log(3, "interpolateFromPrevStages "
+                     . "2nd param must be a ref to stages. "
+                     . "Is a '" . ref($stages) . "'");
+    return undef;
+  }
+  if( ! looks_like_number($currStagePos)) {
+    OInventory::log(3, "interpolateFromPrevStages "
+                     . "3rtd param must be a number ($currStagePos)");
+    return undef;
+  }
+
+  my $currStageSampPeriod = $$stages[$currStagePos]->{descriptor}->{samplePeriod};
+
+  for (my $iStage = 0; $iStage < $currStagePos; $iStage++) {
+    #
+    # In a future we may accept partial stages...
+    #
+    # $partialStages[$iStage] = 0; # Just an initiallization
+    #
+
+    #
+    # By now we'll accept to interpolate from the first stage that has points in
+    #  the three currSamplePeriods between -2*currSamplePeriod and 
+    # +2*currSamplePeriod around the timestamp. This will allow us to ensure 
+    # that that stage has points all along 
+    # -1*currSamplePeriod and +1*currSamplePeriod
+    #
+    my $numPoints2SampsBefore
+         = numPointsInInterval(
+             $$stages[$iStage]->{timestamps},
+             $$stages[$iStage]->{values},
+             $timestamp - 2*$currStageSampPeriod,
+             $timestamp -   $currStageSampPeriod);
+    #
+    # In a future we may accept partial stages...
+    #
+    # my $numPoints1SampBefore
+    #      = numPointsInInterval(
+    #          $$stages[$iStage]->{timestamps},
+    #          $$stages[$iStage]->{values},
+    #          $timestamp - $currStageSampPeriod,
+    #          $timestamp                         );
+    # my $numPoints1SampAfter
+    #      = numPointsInInterval(
+    #          $$stages[$iStage]->{timestamps},
+    #          $$stages[$iStage]->{values},
+    #          $timestamp                         ,
+    #          $timestamp +   $currStageSampPeriod);
+    my $numPoints2SampsAfter
+         = numPointsInInterval(
+             $$stages[$iStage]->{timestamps},
+             $$stages[$iStage]->{values},
+             $timestamp +   $currStageSampPeriod,
+             $timestamp + 2*$currStageSampPeriod);
+
+# print "DEBUG: numPoints2SampsBefore=$numPoints2SampsBefore, numPoints2SampsAfter=$numPoints2SampsAfter\n";
+
+    if (    defined($numPoints2SampsBefore) && $numPoints2SampsBefore > 0
+         && defined($numPoints2SampsAfter)  && $numPoints2SampsAfter  > 0 ) {
+      #
+      # We can assure that this is the correct stage to get points from
+      # Still there may be gaps because of operational problems on vCenter,
+      # but if you can find points just before the previous sample
+      # and just after the posterior sample, then it's your stage.
+      #
+      if( ! defined ($cachedSplines[$iStage]) ) {
+        #
+        # If seems a good idea to cache splines
+        #
+        my ($cx, $cy) = getClearedFunction($$stages[$iStage]->{timestamps},
+                                           $$stages[$iStage]->{values});
+# print "DEBUG: there were " . ($#{$$stages[$iStage]->{timestamps}} + 1). " components and getClearedFunction returned " . ($#$cx + 1) . " components\n";
+        my $spline = Math::Spline->new($cx,$cy);
+        $cachedSplines[$iStage] = $spline;
+
+# print "DEBUG: values = " . points2string($cx,$cy) . "\n";
+      }
+      my $y_interp=$cachedSplines[$iStage]->evaluate($timestamp);
+# print "DEBUG: interpolation for $timestamp = $y_interp\n";
+      return $y_interp;
+    }
+    #
+    # In a future we may accept partial stages...
+    #
+    # elsif ( defined($numPoints1SampBefore) && $numPoints1SampBefore >= 0
+    #         defined($numPoints1SampAfter)  && $numPoints1SampAfter  >= 0) {
+    #   #
+    #   # It's a partial stage
+    #   #
+    #   $partialStages[$iStage] = 1;
+    # }
+
+  }
+  return undef;
 }
 
 #
-# Get first point of an array after a value
+# Print to a string an array of abscissa/ordinate points, for debugging purposes
 #
-# @arg filename
-# @return [$timestamp,$values], undef errors
+# @arg ref to abscissa array
+# @arg ref to ordinate array
+# @return string with the points
 #
-sub getFirstPointAfter() {
-  my $limit  = shift;
-  my $points = shift;
-# my ($points, $limit) = @_;
+sub points2string { 
+  my $cx = shift;
+  my $cy = shift;
+  return if ( ! defined ($cx) );
+  return if ( ! defined ($cy) );
+  return if ( ref($cx) ne 'ARRAY');
+  return if ( ref($cy) ne 'ARRAY');
+  my $r = 'Array of ' . ($#$cx + 1) . " points:\n";
+  for (my $i = 0 ; $i <= $#$cx ; $i++) {
+    $r .= "(" . $$cx[$i] . "," .  $$cy[$i] . ")\n";
+  }
+  return $r;
+}
 
-  if(ref($points) ne 'ARRAY') {
-    OInventory::log(3, "getFirstPointAfter 1st param must be a ref to points");
+#
+# Gets abscissas and ordinates array and return them after dropping points
+# with undefined corresponding ordinates
+#
+# @arg ref to abscissas array
+# @arg ref to ordinates array
+# @return array containing ref to new abscissas and ref to new ordinates (if ok), or undef (if error)
+#
+sub getClearedFunction {
+  my $x = shift;
+  my $y = shift;
+  my @cx;
+  my @cy;
+
+  if(ref($x) ne 'ARRAY') {
+    OInventory::log(3, "getClearedFunction "
+                     . "1st param must be a ref to abscissas. "
+                     . "Is a '" . ref($x) . "'");
     return undef;
   }
-  if( ! looks_like_number($limit)) {
-    OInventory::log(3, "getFirstPointAfter 2nd param must be a number ($limit)");
+  if(ref($y) ne 'ARRAY') {
+    OInventory::log(3, "getClearedFunction "
+                     . "2nd param must be a ref to ordinates. "
+                     . "Is a '" . ref($y) . "'");
     return undef;
+  }
+  if($#$x != $#$y) {
+    OInventory::log(3, "getClearedFunction: "
+                     . "x and y arrays must have equal length");
+  }
+  for(my $i = 0 ; $i <= $#$x; $i++) {
+    if(defined($$y[$i])) {
+      push @cx, $$x[$i];
+      push @cy, $$y[$i];
+    }
+  }
+  return (\@cx, \@cy);
+}
+
+#
+# Runs a RRDB algorythm for the perf data file of a stage
+#
+# It allows to have a fixed size for the complete perf data files on each stage.
+#
+# Grabs new points by interpolating the ones that find in previous stages.
+#
+# Writes the changes in a new file and once ended substitutes
+# the old file with the new one.
+# Next stages in the RRDB loop iteration will still be reading the old data,
+# because that OStage array is created (reading from perfData files)
+# just once for each Metric, at the beginning of the corresponding iteration.
+#
+# Let's show a diagram of the algorithm used for each point:
+#
+# time:        |------------------------------------------------------------------------->
+#
+# $stage[$i-2]->{timestamp}                          x
+# $stage[$i-2]->{lastTimestamp}                                                          x
+# $stage[$i-2]                                                (--|--|--|--|--|--|-...-|--)
+#                                                                                        |
+# $stage[$i-1]->{timestamp}      x                                                       |
+# $stage[$i-1]->{lastTimestamp}                                      x                   |
+# $stage[$i-1]                               (-----|----...----|-----)                   |
+# $newPoints[..]                                                           |-----|-----|xxxxxX
+#            
+# $stage[$i]->{lastTimestamp}                             x
+# $stage[$i]:                     (-------|-------|-------)
+#
+# $stage[$i-2] Points between previous and next samples                      |--|--|--|
+# $newPoints[0]                                                                  |
+#
+# $stage[$i-2] Points between previous and next samples                |--|--|--|
+# $newPoints[1]                                                            |
+#
+# @arg position of the stage to RRDB on the OStage array
+# @arg ref to array of OStage objects
+# @return number of points inserted (if ok), undef (if errors)
+#
+sub shiftPointsToPerfDataStage {
+
+#
+# time:        |------------------------------------------------------------------------->
+#
+# absolute last timestamp for these stages                                               x
+# $stage[$i-2]->{timestamp}                                   x                          |
+# $stage[$i-2]->{lastTimestamp}                               |                          x
+# $stage[$i-2]                                                (--|--|--|--|--|--|-...-|--)
+#                                                                                        |
+# $stage[$i-1]->{timestamp}                  x                                           |
+# $stage[$i-1]->{lastTimestamp}              |                       x                   |
+# $stage[$i-1]                               (-----|----...----|-----)                   |
+# $stage[$i-2] Points to calculate new points                          (--|--|--|-...-)
+# $newPoints[$i-1]                                                         |-----|xxxxxXxxxxxX
+# $newPoints[$i-1] last (will not be calculated)                                       x
+# $newPoints[$i-1] penultimate (will be calculated)                              x
+#            
+# $stage[$i]->{timestamp}         x
+# $stage[$i]->{lastTimestamp}     |                       x
+# $stage[$i]:                     (-------|-------|-------)
+# $stage[$i-2] Points to calculate new points                 (--|--|--|-...-)
+# $newPoints[$i]                                                  |-------|xxxxxxxXxxxxxxxX
+# $newPoints[$i] penultimate (will be calculated)                         x
+# $newPoints[$i] last                                                             x
+#
+# If $stage[$i-2] would have no points to give
+# we would have got them from the next stage with points.
+# Calculus done sample per sample.
+#
+
+#
+# This is the algorythm that we'll follow:
+#
+# * get the new timestamps that should be interpolated
+# * foreach timestamp:
+# ** foreach previous stage, from shorter to larger 
+# *** get its points between the previous timestamp and the later timestamp
+# *** move to next stage if there are no points
+# *** interpolate the new point using these points from previous stage
+# ** if couldn't interpolate trigger error
+# ** push the point
+# * build the new arrays of timestamps and values
+# * save the points in a new temporary file
+# * mv the temporary file onto the old perfData file
+
+  my $currStagePos = shift;
+  my $stages       = shift;
+
+  my @finalTimestamps = ();
+  my @finalValues     = ();
+
+# print "DEBUG, setting dummy perfData on line " . __LINE__ . "\n";
+# $$stages[$currStagePos]->{timestamp}     = 1505709689;
+# $$stages[$currStagePos]->{lastTimestamp} = 1505710169;
+# $$stages[$currStagePos]->{timestamps}    = [1505709689, 1505709849, 1505710009, 1505710169];
+# $$stages[$currStagePos]->{values}        = [3, 5, 7, 9];
+# $$stages[$currStagePos]->{numPoints}     = 4;
+# print "/DEBUG !!!\n";
+# print "DEBUG: Let's plot latest:    " . points2string($$stages[0]->{timestamps},             $$stages[0]->{values}) . "\n";
+# print "DEBUG: Let's plot currStage: " . points2string($$stages[$currStagePos]->{timestamps}, $$stages[$currStagePos]->{values}) . "\n";
+
+  #
+  # How many points would fit in currStage
+  #  ( from last timestamp on currStage
+  #  ] to the last timestamp on 'latest' stage
+  #
+  my $currNumNewPointsThatWouldFit
+       = floor(
+                (   $$stages[0]->{lastTimestamp}
+                  - $$stages[$currStagePos]->{lastTimestamp}
+                )
+                / $$stages[$currStagePos]->{descriptor}->{samplePeriod}
+              );
+
+  #
+  # "-1" because for each new currPoint we need to interpolate with points
+  # between previous currSamplePeriod and posterior currSamplePeriod
+  #
+  my $numNewPointsFromPrevStages = $currNumNewPointsThatWouldFit - 1;
+
+  my $currNewLastTimestamp
+     = $$stages[$currStagePos]->{lastTimestamp}
+       + $$stages[$currStagePos]->{descriptor}->{samplePeriod} * $numNewPointsFromPrevStages;
+
+  if( $currNumNewPointsThatWouldFit
+      > $$stages[$currStagePos]->{descriptor}->{maxPoints}) {
+    $numNewPointsFromPrevStages
+      = $$stages[$currStagePos]->{descriptor}->{maxPoints};
+  }
+
+  my $numNewPointsFromCurrStage =
+       $$stages[$currStagePos]->{descriptor}->{maxPoints}
+       - $numNewPointsFromPrevStages;
+
+  my $s = sprintf (
+          "Trying to feed the stage #%d (%s): Between latest point in currStage"
+        . " (%d) and latest point on 'latest stage' (%d) in this current stage "
+        . "there would fit %d current stage sample periods of %d s and last new"
+        . " point will be %d. We'll keep the last %d points from current stage "
+        . "we'll get next %d points interpolling from prevStages (fresher) "
+        , $currStagePos, $$stages[$currStagePos]
+        , $$stages[$currStagePos]->{lastTimestamp}, $$stages[0]->{lastTimestamp}
+        , $currNumNewPointsThatWouldFit
+        , $$stages[$currStagePos]->{descriptor}->{samplePeriod}
+        , $currNewLastTimestamp, $numNewPointsFromCurrStage
+        , $numNewPointsFromPrevStages);
+
+  OInventory::log(0, "$s");
+
+  # Sanity checks
+  if(   $numNewPointsFromCurrStage + $numNewPointsFromPrevStages
+     != $$stages[$currStagePos]->{descriptor}->{maxPoints}) {
+    OInventory::log(3,
+        "Bug! numNewPointsFromCurrStage + numNewPointsFromPrevStages "
+      . "($numNewPointsFromCurrStage + $numNewPointsFromPrevStages) != "
+      . $$stages[$currStagePos]->{descriptor}->{maxPoints});
+    return undef;
+  }
+
+  #
+  # We'll iterate for each new point.
+  # First we'll get the points that are just shifting from currStage
+  # Then we'll get new points interpolating for the first lower
+  # (fresher) stage that has points for previous
+  # and posterior currStageSamplePeriods
+  #
+  
+  for(my $i = $numNewPointsFromCurrStage - 1; $i >= 0; $i--) {
+    my $preservedTimestamp = $$stages[$currStagePos]->{lastTimestamp}
+       - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};
+    my $preservedValue 
+       = getValueForTimestamp(
+           $$stages[$currStagePos]->{timestamps}, 
+           $$stages[$currStagePos]->{values},
+           $preservedTimestamp
+         );
+    if ( defined $preservedValue ) {
+      push @finalTimestamps, $preservedTimestamp;
+      push @finalValues,     $preservedValue;
+# print "DEBUG: preserved: ($preservedTimestamp, $preservedValue)\n";
+    }
+    else {
+      #
+      # A gap in perfData is not an error itself.
+      # It can happen because of downtimes in this software, in vCenter, ...
+      #
+      OInventory::log(1, "Gap in perfData at $preservedTimestamp");
+      push @finalTimestamps, $preservedTimestamp;
+      push @finalValues, '';
+# print "DEBUG: preserved: ($preservedTimestamp, '')\n";
+    }
+  }
+  for (my $i = $numNewPointsFromPrevStages - 1; $i >= 0 ; $i--) {
+    my $newTimestamp = $currNewLastTimestamp - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};;
+    my $newValue = interpolateFromPrevStages($newTimestamp, $stages, $currStagePos);
+
+    push @finalTimestamps, $newTimestamp;
+    push @finalValues,     $newValue;
+
+  }
+
+  #
+  # Now we have all the points to be saved on
+  # current stage $$stages[$currStagePos] . Let's save them:
+  #
+
+  my $perfDataFilename = $$stages[$currStagePos]->{filename};
+  my $tmpFile          = $perfDataFilename  . ".rrdb_running";
+  OInventory::log(0, "Saving RRDB'ed perf data in temporary file $tmpFile");
+
+  if($#finalTimestamps != $#finalValues) {
+    OInventory::log(3, "Got different # of timestamps (" . ($#finalTimestamps + 1)
+                     . ") than values  (" . ($#finalValues + 1) . ")");
+    return undef;
+  }
+
+  #
+  # Print perf data
+  #
+  my $pDHandle;
+  if(!open($pDHandle, ">:utf8", $tmpFile)) {
+    OInventory::log(3, "Could not open tmp perf data file $tmpFile: $!");
+    return undef;
+  }
+
+  for(my $i = 0; $i <= $#finalTimestamps; $i++) {
+#   print $pDHandle $finalTimestamps[$i] . $csvSep . $finalValues[$i] . "\n";
+    my $val = defined($finalValues[$i]) ? $finalValues[$i] : '';
+    print $pDHandle $finalTimestamps[$i] . $csvSep . $val . "\n";
+  }
+
+  if(!close($pDHandle)) {
+    OInventory::log(3, "Could not close tmp perf data file $tmpFile: $!");
+    return undef;
+  }
+  OInventory::log(0, "Perf data saved successfuly in tmp file $tmpFile");
+
+  #
+  # Let's substitute the file
+  #
+  if(! move($tmpFile, $perfDataFilename)) {
+    OInventory::log(3, "Can't move the new perf data file $tmpFile "
+                     . "into $perfDataFilename: $!");
+    return undef;
+  }
+  return $#finalTimestamps + 1;
+
+}
+
+#
+# Get the position of the first value of an array of values (abscissa) greater
+# than a value and that has defined values in it's functions array (ordinate)
+#
+# @arg limit, the value to look for
+# @arg reference to the array of abscissas
+# @arg reference to the array of ordinates
+# @arg (optional) 0 == just if greater (default), 1 == if greater or equal
+# @return the position (if ok), -1 (if not found), undef (if error)
+#
+sub getPositionOfFirstAbscissaGreaterWithDefinedOrdinate {
+  my $limit  = shift;
+  my $x      = shift;
+  my $y      = shift;
+  my $ge     = shift;
+  $ge        ||= 0;
+
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "gpofagwdo: "
+                     . "1st param must be a number ($limit)");
+    return undef;
+  }
+
+  if(ref($x) ne 'ARRAY') {
+    OInventory::log(3, "gpofagwdo: "
+                     . "2nd param must be a ref to vals (x). "
+                     . "Is a '" . ref($x) . "'");
+    return undef;
+  }
+
+  if(ref($y) ne 'ARRAY') {
+    OInventory::log(3, "gpofagwdo: "
+                     . "3rd param must be a ref to vals (y). "
+                     . "Is a '" . ref($y) . "'");
+    return undef;
+  }
+  if($#$x != $#$y) {
+    OInventory::log(3, "gpofagwdo: "
+                     . "x and y arrays must have equal length");
+  }
+
+  for (my $i = 0; $i <= $#$x; $i++ ) {
+    if($ge == 1) {
+# print "gpofagwdo: [$i]=" . $$x[$i] . " (limit=$limit)\n";
+      return $i if($$x[$i] >= $limit && defined($$y[$i]));
+    }
+    else {
+# print "gpofagwdo: [$i]=" . $$x[$i] . " (limit=$limit)\n";
+      return $i if($$x[$i] >  $limit && defined($$y[$i]));
+    }
+  }
+  return -1;
+}
+
+
+#
+# Get the position of the first value of an array greater than a value
+#
+# @arg limit, the value to look for
+# @arg reference to the array of points
+# @arg (optional) 0 == just if greater (default), 1 == if greater or equal
+# @return the position (if ok), -1 (if not found), undef (if error)
+#
+sub getPositionOfFirstValueGreater {
+  my $limit  = shift;
+  my $points = shift;
+  my $ge     = shift;
+  $ge        ||= 0;
+
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "getPositionOfFirstValueGreater "
+                     . "1st param must be a number ($limit)");
+    return undef;
+  }
+
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getPositionOfFirstValueGreater "
+                     . "2nd param must be a ref to points. "
+                     . "Is a '" . ref($points) . "'");
+    return undef;
+  }
+
+  for (my $i = 0; $i <= $#$points; $i++ ) {
+    if($ge == 1) {
+      return $i if($$points[$i] >= $limit);
+    }
+    else {
+      return $i if($$points[$i] > $limit);
+    }
+  }
+  return -1;
+}
+
+
+#
+# Get first value of an array greater than a value
+#
+# @arg limit, the value to look for
+# @arg reference to the array of points
+# @return the value (if ok), undef (if error)
+#
+sub getFirstValueGreater {
+die "Deprecated vs getPositionOfFirstValueGreater";
+  my $limit  = shift;
+  my $points = shift;
+
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "getFirstValueGreater 1st param must be a number ($limit)");
+    return undef;
+  }
+
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getFirstValueGreater 2nd param must be a ref to points. "
+                     . "Is a '" . ref($points) . "'");
   }
 
   foreach my $point (@$points) {
@@ -1126,19 +1717,55 @@ sub getFirstPointAfter() {
 }
 
 #
+# Get the second half of an array, from the component that equals to certain value.
+#
+# @arg limit, the value to look for
+# @arg reference to the array of points
+# @return a ref to the array (if ok), undef (if error)
+#
+sub getValueAndGreater {
+  my $limit  = shift;
+  my $points = shift;
+  my @r;
+
+  if( ! looks_like_number($limit)) {
+    OInventory::log(3, "getValueAndGreater 1st param must be a number ($limit)");
+    return undef;
+  }
+
+  if(ref($points) ne 'ARRAY') {
+    OInventory::log(3, "getValueAndGreater 2nd param must be a ref to points. "
+                     . "Is a '" . ref($points) . "'");
+    return undef;
+  }
+
+  my $found = 0;
+  foreach my $point (@$points) {
+    if($found != 1 && $point == $limit) {
+      $found = 1;
+    }
+    if($found) {
+      push @r, $point;
+    }
+  }
+  return \@r;
+}
+
+#
 # Get performance data from a perf data file
 #
 # @arg filename
-# @return [$timestamp,$values], undef errors
+# @return {\@timestamps,\@values} (if ok), undef errors (if errors)
 #           where:
-#             $timestamp is the epoch timestamp of the first value
-#             $values is a ref to an array with the values
+#             @timestamps : timestamps in epoch
+#             @values     : values
 #
 sub getPerfDataFromFile {
   my $filename = shift;
-  my $timestamp;
+  my @timestamps;
   my @values;
 
+  OInventory::log(0, "Reading perfData from file '$filename'");
   if(! defined($filename)) {
     OInventory::log(3, "Missing filename argument to get PerfData from file");
     return undef;
@@ -1156,17 +1783,37 @@ sub getPerfDataFromFile {
   #
   # Let's read the file
   #
-  my $first = 1;
   while (my $line = <$handler>) {
     chomp $line;
-    next if $line =~ /^\s*$/;
-    if($first) {
-      $first = 0;
-      $line =~ s/^#//g;
-      $timestamp = $line;
+    next if $line =~ /^\s*$/; # empty
+    next if $line =~ /^\s*#/; # comment, somehow
+
+    my ($t, $v) = split(/$csvSep/, $line, 2);
+    if (! defined($t) || ! defined($v)) {
+      OInventory::log(3, "Can't parse the line '$line' from '$filename'");
+      return undef;
+    }
+    if ( $t eq '') {
+      OInventory::log(3, "Empty timestamp in line '$line' from '$filename'");
+      return undef;
+    }
+#   if ( $v eq '') {
+#     # We'll not stop parsing
+#     OInventory::log(2, "Empty value in line '$line' from '$filename'");
+#   }
+    if( ! looks_like_number($t)) {
+      OInventory::log(3, "Unknown timestamp in line '$line' from '$filename'");
+      return undef;
+    }
+    if($v ne '' && ! looks_like_number($v)) {
+      # We'll not stop parsing
+      # Must we log Error or Warning ... ?
+      OInventory::log(2, "Unknown value in line '$line' from '$filename'");
       next;
     }
-    push @values, $line;
+
+    push @timestamps, $t;
+    push @values,     $v;
   }
 
   #
@@ -1177,7 +1824,17 @@ sub getPerfDataFromFile {
     return undef;
   }
 
-  return [ $timestamp, \@values ];
+  #
+  # Sanity check.
+  # It should never happen, but...
+  #
+  if ($#timestamps != $#values) {
+    OInventory::log(3, "Got different number of timestamps ($#timestamps) than "
+                     . "values ($#values) from perf data file '$filename': $!");
+    return undef;
+  }
+
+  return ( \@timestamps, \@values );
 }
  
 
@@ -1368,18 +2025,20 @@ sub getLatestPerformance {
       next;
     }
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(1, "Profiling: Getting performance for "
+    OInventory::log(1, "Profiling: Getting latest performance for "
                      . ref($aEntity) . ": "
                      . "{name='" . $aEntity->{name} . "',mo_ref='"
                      . $aEntity->{mo_ref} . "'} took "
                      . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
-    if(! savePerfData($perfData, $aEntity)) {
-      OInventory::log(3, "Errors getting performance from " . ref($aEntity)
-                       . " with mo_ref '" . $aEntity->{mo_ref} . "'");
+    if(! savePerfData($perfData)) {
+      OInventory::log(3, "Errors getting latest performance from "
+                       . ref($aEntity) . " with mo_ref '"
+                       . $aEntity->{mo_ref} . "'");
       if(! --$maxErrs) {
-        OInventory::log(3, "Too many errors when getting performance from "
+        OInventory::log(3, "Too many errors trying to get performance. "
+                         . " Hopefully it's a transitory downtime in "
                          . "vCenter. We'll try again on next iteration");
         return 0;
       }
