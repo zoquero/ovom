@@ -1072,7 +1072,7 @@ sub getValueForTimestamp {
 
 
 #
-# Tells if are the points with defined values in the half-open interval ( [) )
+# Tells how many points are there (with defined values) in the interval
 #
 # It's a half-open interval ( [a, b) ) == left-closed and right-open
 #
@@ -1088,35 +1088,33 @@ sub getValueForTimestamp {
 #               (so, it will be 0 if doesn't contain points),
 #               || undef (if errors)
 #
-sub containsPointsInInterval {
+sub numPointsInInterval {
   my $x = shift;
   my $y = shift;
   my $a = shift;
   my $b = shift;
+  my $r = 0;
 
   if(! defined($x) || ! defined($y) || ! defined($a) || ! defined($b)) {
-    OInventory::log(3, "containsPointsInInterval: missing params");
+    OInventory::log(3, "numPointsInInterval: missing params");
     return -1;
   }
   if(ref($x) ne 'ARRAY') {
-    OInventory::log(3, "containsPointsInInterval 1st param must be a ref to x. "
+    OInventory::log(3, "numPointsInInterval 1st param must be a ref to x. "
                      . "Is a '" . ref($x) . "'");
     return undef;
   }
-
   if(ref($y) ne 'ARRAY') {
-    OInventory::log(3, "containsPointsInInterval 2nd param must be a ref to x. "
+    OInventory::log(3, "numPointsInInterval 2nd param must be a ref to x. "
                      . "Is a '" . ref($y) . "'");
     return undef;
   }
   if( ! looks_like_number($a)) {
-    OInventory::log(3, "interpolateFromPrevStages "
-                     . "3rd param must be a number ($a)");
+    OInventory::log(3, "numPointsInInterval 3rd param must be a number ($a)");
     return undef;
   }
   if( ! looks_like_number($b)) {
-    OInventory::log(3, "interpolateFromPrevStages "
-                     . "4th param must be a number ($b)");
+    OInventory::log(3, "numPointsInInterval 4th param must be a number ($b)");
     return undef;
   }
 
@@ -1133,21 +1131,24 @@ sub containsPointsInInterval {
   if($firstPosAfterA == -1) {
     return 0;
   }
-
-  my $firstPosAfterB =
-    getPositionOfFirstAbscissaGreaterWithDefinedOrdinate(
-      $b,
-      $x,
-      $y,
-      0
-    );
-  if(! defined($firstPosAfterB)) {
-    return undef;
-  }
-  if($firstPosAfterB == -1) {
+  if ( $$x[$firstPosAfterA] >= $b ) {
     return 0;
   }
-  return $firstPosAfterB-$firstPosAfterA+1;
+  for(my $i = $firstPosAfterA; $i <= $#$x; $i++) {
+    if ( defined($$x[$i]) ) {
+      if ( $$x[$i] < $b ) {
+        $r++;
+      }
+      else {
+        # There's no sense to look further
+        last;
+      }
+    }
+  }
+
+# print "DEBUG: numPointsInInterval returns: firstPosAfterA=$firstPosAfterA , "
+#       . "r=$r points that are ($a <= point < $b)\n";
+  return $r;
 }
 
 
@@ -1168,7 +1169,7 @@ sub interpolateFromPrevStages {
   my $timestamp      = shift;
   my $stages         = shift;
   my $currStagePos   = shift;
-  my @cachedSplines  = shift;
+  my @cachedSplines;
   #
   # In a future we may accept partial stages...
   #
@@ -1200,7 +1201,7 @@ sub interpolateFromPrevStages {
     # $partialStages[$iStage] = 0; # Just an initiallization
     #
 
-print "timestamp = $timestamp, stage=$iStage\n";
+print "timestamp = $timestamp, stage=" . $$stages[$iStage] . "\n";
 #   my ($newTimestamps, $newValues) = getNewPoints($currStagePos, $stages);
 
     #
@@ -1211,29 +1212,34 @@ print "timestamp = $timestamp, stage=$iStage\n";
     # -1*currSamplePeriod and +1*currSamplePeriod
     #
     my $numPoints2SampsBefore
-         = containsPointsInInterval(
+         = numPointsInInterval(
              $$stages[$iStage]->{timestamps},
              $$stages[$iStage]->{values},
              $timestamp - 2*$currStageSampPeriod,
              $timestamp -   $currStageSampPeriod);
-    my $numPoints1SampBefore
-         = containsPointsInInterval(
-             $$stages[$iStage]->{timestamps},
-             $$stages[$iStage]->{values},
-             $timestamp - $currStageSampPeriod,
-             $timestamp                         );
-    my $numPoints1SampAfter
-         = containsPointsInInterval(
-             $$stages[$iStage]->{timestamps},
-             $$stages[$iStage]->{values},
-             $timestamp                         ,
-             $timestamp +   $currStageSampPeriod);
+    #
+    # In a future we may accept partial stages...
+    #
+    # my $numPoints1SampBefore
+    #      = numPointsInInterval(
+    #          $$stages[$iStage]->{timestamps},
+    #          $$stages[$iStage]->{values},
+    #          $timestamp - $currStageSampPeriod,
+    #          $timestamp                         );
+    # my $numPoints1SampAfter
+    #      = numPointsInInterval(
+    #          $$stages[$iStage]->{timestamps},
+    #          $$stages[$iStage]->{values},
+    #          $timestamp                         ,
+    #          $timestamp +   $currStageSampPeriod);
     my $numPoints2SampsAfter
-         = containsPointsInInterval(
+         = numPointsInInterval(
              $$stages[$iStage]->{timestamps},
              $$stages[$iStage]->{values},
              $timestamp +   $currStageSampPeriod,
              $timestamp + 2*$currStageSampPeriod);
+
+# print "DEBUG: numPoints2SampsBefore=$numPoints2SampsBefore, numPoints2SampsAfter=$numPoints2SampsAfter\n";
 
     if (    defined($numPoints2SampsBefore) && $numPoints2SampsBefore > 0
          && defined($numPoints2SampsAfter)  && $numPoints2SampsAfter  > 0 ) {
@@ -1249,22 +1255,15 @@ print "timestamp = $timestamp, stage=$iStage\n";
         #
         my ($cx, $cy) = getClearedFunction($$stages[$iStage]->{timestamps},
                                            $$stages[$iStage]->{values});
-print "DEBUG: there were " . ($#{$$stages[$iStage]->{timestamps}} + 1). " components and getClearedFunction returned " . ($#$cx + 1) . " components\n";
+# print "DEBUG: there were " . ($#{$$stages[$iStage]->{timestamps}} + 1). " components and getClearedFunction returned " . ($#$cx + 1) . " components\n";
         my $spline = Math::Spline->new($cx,$cy);
         $cachedSplines[$iStage] = $spline;
-print "DEBUG: x: ";
-foreach my $z (@$cx) {
-print "$z,";
-}
-print "\n";
-print "DEBUG: y: ";
-foreach my $z (@$cy) {
-print "$z,";
-}
-print "\n";
+
+# print "DEBUG: values = " . points2string($cx,$cy) . "\n";
       }
       my $y_interp=$cachedSplines[$iStage]->evaluate($timestamp);
-print "DEBUG: interpolation for $timestamp = $y_interp\n";
+# print "DEBUG: interpolation for $timestamp = $y_interp\n";
+      return $y_interp;
     }
     #
     # In a future we may accept partial stages...
@@ -1277,10 +1276,30 @@ print "DEBUG: interpolation for $timestamp = $y_interp\n";
     #   $partialStages[$iStage] = 1;
     # }
 
-die "stopppp. BUG: looks like we are trying to interpolate a point that's very before the first point of the stage";
   }
+  return undef;
 }
 
+#
+# Print to a string an array of abscissa/ordinate points, for debugging purposes
+#
+# @arg ref to abscissa array
+# @arg ref to ordinate array
+# @return string with the points
+#
+sub points2string { 
+  my $cx = shift;
+  my $cy = shift;
+  return if ( ! defined ($cx) );
+  return if ( ! defined ($cy) );
+  return if ( ref($cx) ne 'ARRAY');
+  return if ( ref($cy) ne 'ARRAY');
+  my $r = 'Array of ' . ($#$cx + 1) . " points:\n";
+  for (my $i = 0 ; $i <= $#$cx ; $i++) {
+    $r .= "(" . $$cx[$i] . "," .  $$cy[$i] . ")\n";
+  }
+  return $r;
+}
 
 #
 # Gets abscissas and ordinates array and return them after dropping points
@@ -1391,12 +1410,15 @@ sub shiftPointsToPerfDataStage {
   my @finalValues;
 
 print "DEBUG, be carefull !!! Line " . __LINE__ . "\n";
-$$stages[$currStagePos]->{timestamp}     = 1505164374;
-$$stages[$currStagePos]->{lastTimestamp} = 1505164854;
-$$stages[$currStagePos]->{timestamps}    = [1505164374, 1505164534, 1505164694, 1505164854];
+$$stages[$currStagePos]->{timestamp}     = 1505709689;
+$$stages[$currStagePos]->{lastTimestamp} = 1505710169;
+$$stages[$currStagePos]->{timestamps}    = [1505709689, 1505709849, 1505710009, 1505710169];
 $$stages[$currStagePos]->{values}        = [3, 5, 7, 9];
 $$stages[$currStagePos]->{numPoints}     = 4;
 print "/DEBUG !!!\n";
+
+print "DEBUG: Let's plot latest:    " . points2string($$stages[0]->{timestamps},             $$stages[0]->{values}) . "\n";
+print "DEBUG: Let's plot currStage: " . points2string($$stages[$currStagePos]->{timestamps}, $$stages[$currStagePos]->{values}) . "\n";
 
   #
   # How many points would fit in currStage
@@ -1446,7 +1468,7 @@ print "/DEBUG !!!\n";
 
   OInventory::log(0, "$s");
 
-  # Sanity
+  # Sanity checks
   if(   $numNewPointsFromCurrStage + $numNewPointsFromPrevStages
      != $$stages[$currStagePos]->{descriptor}->{maxPoints}) {
     OInventory::log(3,
@@ -1464,37 +1486,45 @@ print "/DEBUG !!!\n";
   # and posterior currStageSamplePeriods
   #
   
-    for(my $i = $numNewPointsFromCurrStage - 1; $i >= 0; $i--) {
-      my $preservedTimestamp = $$stages[$currStagePos]->{lastTimestamp}
-         - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};
-      my $preservedValue 
-         = getValueForTimestamp(
-             $$stages[$currStagePos]->{timestamps}, 
-             $$stages[$currStagePos]->{values},
-             $preservedTimestamp
-           );
-      if ( defined $preservedValue ) {
-        push @finalTimestamps, $preservedTimestamp;
-        push @finalValues,     $preservedValue;
+  for(my $i = $numNewPointsFromCurrStage - 1; $i >= 0; $i--) {
+    my $preservedTimestamp = $$stages[$currStagePos]->{lastTimestamp}
+       - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};
+    my $preservedValue 
+       = getValueForTimestamp(
+           $$stages[$currStagePos]->{timestamps}, 
+           $$stages[$currStagePos]->{values},
+           $preservedTimestamp
+         );
+    if ( defined $preservedValue ) {
+      push @finalTimestamps, $preservedTimestamp;
+      push @finalValues,     $preservedValue;
 print "DEBUG: preserved: ($preservedTimestamp, $preservedValue)\n";
-      }
-      else {
-        #
-        # A gap in perfData is not an error itself.
-        # It can happen because of downtimes in this software, in vCenter, ...
-        #
-        OInventory::log(1, "Gap in perfData at $preservedTimestamp");
-        push @finalTimestamps, $preservedTimestamp;
-        push @finalValues, '';
+    }
+    else {
+      #
+      # A gap in perfData is not an error itself.
+      # It can happen because of downtimes in this software, in vCenter, ...
+      #
+      OInventory::log(1, "Gap in perfData at $preservedTimestamp");
+      push @finalTimestamps, $preservedTimestamp;
+      push @finalValues, '';
 print "DEBUG: preserved: ($preservedTimestamp, '')\n";
-      }
     }
-    for (my $i = $numNewPointsFromPrevStages - 1; $i >= 0 ; $i--) {
-      my $newTimestamp = $currNewLastTimestamp - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};;
+  }
+  for (my $i = $numNewPointsFromPrevStages - 1; $i >= 0 ; $i--) {
+    my $newTimestamp = $currNewLastTimestamp - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};;
 print "DEBUG: newTimestamp=$newTimestamp \n";
-      my $newValue = interpolateFromPrevStages($newTimestamp, $stages, $currStagePos);
-    }
-die "stop, continue here";
+    my $newValue = interpolateFromPrevStages($newTimestamp, $stages, $currStagePos);
+
+    push @finalTimestamps, $newTimestamp;
+    push @finalValues,     $newValue;
+
+  }
+  #
+  # Now we have all the points to be saved on
+  # current stage $$stages[$currStagePos] . Let's save them:
+  #
+die "stop, continue here. Let's save the points in a method like savePerfData";
 
 
 
