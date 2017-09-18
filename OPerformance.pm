@@ -944,8 +944,9 @@ sub doRrdb {
     $timeBefore=Time::HiRes::time;
     my $r = shiftPointsToPerfDataStage($iStage, $stages);
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Running RRDB on stage " . $$stages[$iStage]
-                       . " took" . sprintf("%.3f", $eTime) . " s");
+    OInventory::log(0, "Profiling: Running RRDB on stage "
+                       . $$stages[$iStage]->{descriptor}->{name}
+                       . " took " . sprintf("%.3f", $eTime) . " s");
 
     if( $r ) {
       OInventory::log(0, "Pushed and popped $r points to stage "
