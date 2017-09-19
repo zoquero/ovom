@@ -188,7 +188,8 @@ sub updatePciIfNeeded {
 #
 # As a sample, this is the list of the different groupInfo keys
 # (perfCounterInfo->groupInfo->key) of the perfCounterInfo
-# objects found on the $perfManagerView->perfCounter object on a vCenter 6.5:
+# objects found on the $perfManagerView->perfCounter object
+# on a regular vCenter 6.5:
 # * clusterServices
 # * cpu
 # * datastore
@@ -938,27 +939,27 @@ sub doRrdb {
   for (my $iStage = 1; $iStage <= $#$OPerformance::stageDescriptors; $iStage++) {
 
     OInventory::log(0, "Running RRDB for stage '"
-                     . $$stages[$iStage] . "'");
+                     . $$stages[$iStage]->{descriptor}->{name} . "'");
 
     my ($timeBefore,  $eTime);
     $timeBefore=Time::HiRes::time;
     my $r = shiftPointsToPerfDataStage($iStage, $stages);
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Running RRDB on stage "
+    OInventory::log(0, "Profiling: Running RRDB on stage '"
                        . $$stages[$iStage]->{descriptor}->{name}
-                       . " took " . sprintf("%.3f", $eTime) . " s");
+                       . "' took " . sprintf("%.3f", $eTime) . " s");
 
     if( $r ) {
-      OInventory::log(0, "Pushed and popped $r points to stage "
-                       . $$stages[$iStage]->{descriptor}->{name});
+      OInventory::log(0, "Pushed and popped $r points to stage '"
+                       . $$stages[$iStage]->{descriptor}->{name} . "'");
     }
     else {
       #
       # It will not be usual for the early stages (hour=>day)
       # but it will be usual for the later stages (month=>year)
       #
-      OInventory::log(0, "There are no points to push and pop to stage "
-                       . $$stages[$iStage]->{descriptor}->{name});
+      OInventory::log(0, "There are no points to push and pop to stage '"
+                       . $$stages[$iStage]->{descriptor}->{name} . "'");
       next;
     }
   }
@@ -1485,7 +1486,7 @@ sub shiftPointsToPerfDataStage {
         . "there would fit %d current stage sample periods of %d s and last new"
         . " point will be %d. We'll keep the last %d points from current stage "
         . "we'll get next %d points interpolling from prevStages (fresher) "
-        , $currStagePos, $$stages[$currStagePos]
+        , $currStagePos, $$stages[$currStagePos]->{descriptor}->{name}
         , $$stages[$currStagePos]->{lastTimestamp}, $$stages[0]->{lastTimestamp}
         , $currNumNewPointsThatWouldFit
         , $$stages[$currStagePos]->{descriptor}->{samplePeriod}
@@ -1687,34 +1688,6 @@ sub getPositionOfFirstValueGreater {
   return -1;
 }
 
-
-#
-# Get first value of an array greater than a value
-#
-# @arg limit, the value to look for
-# @arg reference to the array of points
-# @return the value (if ok), undef (if error)
-#
-sub getFirstValueGreater {
-die "Deprecated vs getPositionOfFirstValueGreater";
-  my $limit  = shift;
-  my $points = shift;
-
-  if( ! looks_like_number($limit)) {
-    OInventory::log(3, "getFirstValueGreater 1st param must be a number ($limit)");
-    return undef;
-  }
-
-  if(ref($points) ne 'ARRAY') {
-    OInventory::log(3, "getFirstValueGreater 2nd param must be a ref to points. "
-                     . "Is a '" . ref($points) . "'");
-  }
-
-  foreach my $point (@$points) {
-    return $point if($point > $limit);
-  }
-  return undef;
-}
 
 #
 # Get the second half of an array, from the component that equals to certain value.

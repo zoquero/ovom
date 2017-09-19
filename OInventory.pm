@@ -984,7 +984,11 @@ sub printInventoryForDebug {
   }
 }
 
-
+#
+# Create some folders
+#
+# @return 1 (ok) | 0 (errors)
+#
 sub createFoldersIfNeeded {
   my ($folder, $vCenterFolder);
 
@@ -994,25 +998,37 @@ sub createFoldersIfNeeded {
   $folder = $OInventory::configuration{'perfdata.root'};
   if(! -d $folder) {
     OInventory::log(1, "Creating perfdata.root folder $folder");
-    mkdir $folder or die "Failed to create $folder: $!";
+    if(! mkdir $folder) {
+      warn "Failed to create $folder: $!";
+      return 0;
+    }
   }
   $vCenterFolder = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
     OInventory::log(1, "Creating perfdata.root folder for "
                         . "the vCenter $vCenterFolder");
-    mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
+    if(! mkdir $vCenterFolder) {
+      warn "Failed to create $vCenterFolder: $!";
+      return 0;
+    }
   }
   $folder = $vCenterFolder . "/HostSystem";
   if(! -d $folder) {
     OInventory::log(1, "Creating perfdata.root folder for hosts of "
                         . "the vCenter $folder");
-    mkdir $folder or die "Failed to create $folder: $!";
+    if(! mkdir $folder) {
+      warn "Failed to create $folder: $!";
+      return 0;
+    }
   }
   $folder = $vCenterFolder . "/VirtualMachine";
   if(! -d $folder) {
     OInventory::log(1, "Creating perfdata.root folder for VMs of "
                         . "the vCenter $folder");
-    mkdir $folder or die "Failed to create $folder: $!";
+    if(! mkdir $folder) {
+      warn "Failed to create $folder: $!";
+      return 0;
+    }
   }
 
   ##############################
@@ -1021,27 +1037,43 @@ sub createFoldersIfNeeded {
   $folder = $OInventory::configuration{'inventory.export.root'};
   if(! -d $folder) {
     OInventory::log(1, "Creating inventory.export.root folder $folder");
-    mkdir $folder or die "Failed to create $folder: $!";
+    if(! mkdir $folder) {
+      warn "Failed to create $folder: $!";
+      return 0;
+    }
   }
   $vCenterFolder = "$folder/" . $OInventory::configuration{'vCenter.fqdn'};
   if(! -d $vCenterFolder) {
     OInventory::log(1, "Creating inventory.export.root folder for "
                         . "the vCenter $vCenterFolder");
-    mkdir $vCenterFolder or die "Failed to create $vCenterFolder: $!";
+    if(! mkdir $vCenterFolder) {
+      warn "Failed to create $vCenterFolder: $!";
+      return 0;
+    }
   }
-
+  return 1;
 }
 
+#
+# Read configuration, initialize log and open connections to vCenter and DB
+#
+# @return 1 (ok) | 0 (errors)
+#
 sub pickerInit {
   my ($timeBefore, $eTime);
-  readConfiguration();
+  if( ! readConfiguration() ) {
+    warn "Could not read configuration";
+    return 0;
+  }
 
   # Regular log
   my($clf) = $OInventory::configuration{'log.folder'} . "/picker.main.log";
   $OInventory::ovomGlobals{'pickerMainLogFile'} = $clf;
 
-  open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>:utf8", $clf)
-    or die "Could not open picker main log file '$clf': $!";
+  if(! open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>:utf8", $clf)) {
+    warn "Could not open picker main log file '$clf': $!";
+    return 0;
+  }
 
   $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
 
@@ -1049,20 +1081,29 @@ sub pickerInit {
   my($celf) = $OInventory::configuration{'log.folder'} . "/picker.error.log";
   $OInventory::ovomGlobals{'pickerErrorLogFile'} = $celf;
 
-  open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>:utf8", $celf)
-    or die "Could not open picker error log file '$celf': $!";
+  if(! open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>:utf8", $celf)) {
+    warn "Could not open picker error log file '$celf': $!";
+    return 0;
+  }
 
   $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;
 
   OInventory::log(1, "Init: Configuration read and log handlers open");
-  createFoldersIfNeeded();
+  if(! createFoldersIfNeeded() ){
+    warn "Could not create folders";
+    return 0;
+  }
 
   #
   # Let's connect to vC:
   #
   OInventory::log(1, "Let's connect to vCenter");
   $timeBefore=Time::HiRes::time;
-  return 0 if(! OInventory::connectToVcenter());
+  if(! OInventory::connectToVcenter()) {
+    OInventory::log(3, "Cannot connect to vCenter.");
+    warn "Can't connect to vCenter";
+    return 0;
+  }
   $eTime=Time::HiRes::time - $timeBefore;
   OInventory::log(1, "Profiling: Connecting to vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
@@ -1071,14 +1112,21 @@ sub pickerInit {
   # Connect to Database:
   #
   if(OvomDao::connect() != 1) {
-    OInventory::log(3, "Cannot connect to DataBase. Will not startup.");
-    die "Can't connect to DataBase";
+    OInventory::log(3, "Cannot connect to DataBase.");
+    warn "Can't connect to DataBase";
+    return 0;
   }
+  return 1;
 }
 
-
+#
+# Close connections to vCenter and DB and close log file descriptors
+#
+# @return 1 (ok) | 0 (errors)
+#
 sub pickerStop {
   my ($timeBefore, $eTime);
+  my $e = 0;
   OInventory::log(1, "Stopping picker");
 
   #
@@ -1086,7 +1134,7 @@ sub pickerStop {
   #
   if( OvomDao::disconnect() != 1 ) {
     OInventory::log(3, "Cannot disconnect from DataBase");
-    return 0;
+    $e++;
   }
 
   #
@@ -1094,35 +1142,58 @@ sub pickerStop {
   #
   OInventory::log(0, "Let's disconnect from vCenter");
   $timeBefore=Time::HiRes::time;
-  return 0 if(! OInventory::disconnectFromVcenter());
+  if(! OInventory::disconnectFromVcenter()) {
+    warn "Could not disconnect from vCenter";
+    $e++;
+  }
   $eTime=Time::HiRes::time - $timeBefore;
   OInventory::log(1, "Profiling: Disconnecting from vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
 
-  close($OInventory::ovomGlobals{'pickerMainLogHandle'})
-    or die "Could not close picker main log file '" .
-             $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+  if(! close($OInventory::ovomGlobals{'pickerMainLogHandle'})) {
+    warn "Could not close picker main log file '" .
+           $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+    $e++;
+  }
 
-  close($OInventory::ovomGlobals{'pickerErrorLogHandle'})
-    or die "Could not close picker error log file '" .
-             $OInventory::ovomGlobals{'pickerErrorLogFile'} . "': $!";
+  if(! close($OInventory::ovomGlobals{'pickerErrorLogHandle'})) {
+    warn "Could not close picker error log file '" .
+           $OInventory::ovomGlobals{'pickerErrorLogFile'} . "': $!";
+    $e++;
+  }
+  if($e) {
+    return 0;
+  }
+  else {
+    return 1;
+  }
 }
 
-
+#
+# Close connections to vCenter and DB and close log file descriptors
+#
+# @return 1 (ok) | 0 (errors)
+#
 sub readConfiguration {
   my $confFile = dirname(abs_path($0)) . '/ovom.conf';
-  open(CONFIG, '<:encoding(UTF-8)', $confFile)
-    or die "Can't read the configuration file $confFile: $!";
+  if(! open(CONFIG, '<:encoding(UTF-8)', $confFile)) {
+    warn "Can't read the configuration file $confFile: $!";
+    return 0;
+  }
   while (my $line = <CONFIG>) {
       chomp $line;                # no newline
       $line =~s/#.*//;            # no comments
-      $line =~s/^\s+//;           # no leading white
-      $line =~s/\s+$//;           # no trailing white
+      $line =~s/^\s+//;           # no leading white spaces
+      $line =~s/\s+$//;           # no trailing white spaces
       next unless length($line);  # anything left?
       my ($var, $value) = split(/\s*=\s*/, $line, 2);
       $configuration{$var} = $value;
   } 
-  close(CONFIG) or die "Can't close the configuration file $confFile: $!";
+  if( ! close(CONFIG) ) {
+    warn "Can't close the configuration file $confFile: $!";
+    return 0;
+  }
+  return 1;
 }
 
 
