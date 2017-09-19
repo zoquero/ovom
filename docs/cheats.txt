@@ -21,3 +21,17 @@ print " MoRefId :" . $entity->summary->vm->value      . "\n";
 print " UUID    :" . $entity->summary->config->uuid   . "\n";
 print " numCpu  :" . $entity->summary->config->numCpu . "\n";
 
+##
+
+SELECT a.mo_ref, a.counter_id, a.instance, b.name_info_summary
+       FROM perf_metric as a
+       inner join perf_counter_info as b
+       WHERE a.counter_id = b.pci_key
+             and mo_ref='vm-60843'
+             and counter_id = '2' 
+
+moref='vm-60843'; for i in $(cat /tmp/ids); do mysql -u root -pmysqlrootpassword ovomdb -e "SELECT a.mo_ref, a.counter_id, a.instance, b.name_info_summary FROM perf_metric as a inner join perf_counter_info as b WHERE a.counter_id = b.pci_key and mo_ref='$moref' and counter_id = '$i' " ; done  > ~/tmp/metric_ids.out
+
+epoch to string , command line:
+$ epoch=1505826239; perl -e "use POSIX qw(strftime);print strftime(\"%Y/%d/m %H:%M:%S\",localtime($epoch)) . \"\\n\"";
+
