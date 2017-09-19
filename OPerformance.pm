@@ -138,7 +138,7 @@ sub updatePciIfNeeded {
                    . "groupInfoSummary='" . $pCI->groupInfo->summary . "',"
                    . "key='"              . $pCI->key                . "',"
                    . "level='"            . $pCI->level              . "',"
-                   . "rollupType='"       . $pCI->rollupType         . "',"
+                   . "rollupType='"       . $pCI->rollupType->val    . "',"
                    . "unitInfoKey='"      . $pCI->unitInfo->key      . "',"
                    . "unitInfoLabel='"    . $pCI->unitInfo->label    . "',"
                    . "unitInfoSummary='"  . $pCI->unitInfo->summary  . "'");
