@@ -5,11 +5,13 @@ use warnings;
 use Exporter;
 use Cwd 'abs_path';
 use File::Basename;
-use POSIX qw/strftime/;
+use POSIX qw/strftime/;  ## time string to rotate logs
 use Time::Piece;
-use IO::Handle;  ## autoflush
-use Time::HiRes; ## gettimeofday
+use IO::Handle;          ## autoflush
+use Time::HiRes;         ## gettimeofday
 use VMware::VIRuntime;
+use Scalar::Util qw(looks_like_number);
+use File::Copy qw(move); ## move to rotate logs
 
 # Our packages
 use OvomDao;
@@ -1055,38 +1057,70 @@ sub createFoldersIfNeeded {
 }
 
 #
+# Open log files
+#
+# @return 1 (ok) | 0 (errors)
+#
+sub openLogFiles {
+  #
+  # Regular log
+  #
+  if( ! defined($OInventory::ovomGlobals{'pickerMainLogFile'})) {
+    $OInventory::ovomGlobals{'pickerMainLogFile'} =
+      $OInventory::configuration{'log.folder'}
+      . "/"
+      . $OInventory::configuration{'log.main.filename'};
+  }
+  if(! open($OInventory::ovomGlobals{'pickerMainLogHandle'},
+            ">>:utf8",
+            $OInventory::ovomGlobals{'pickerMainLogFile'})) {
+    warn "Could not open picker main log file '"
+         . $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+    return 0;
+  }
+  $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
+
+  #
+  # Error log
+  #
+  if(! defined($OInventory::ovomGlobals{'pickerErrorLogFile'})) {
+    $OInventory::ovomGlobals{'pickerErrorLogFile'} =
+      $OInventory::configuration{'log.folder'}
+      . "/"
+      . $OInventory::configuration{'log.error.filename'};
+  }
+  if(! open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>:utf8", $OInventory::ovomGlobals{'pickerErrorLogHandle'})) {
+    warn "Could not open picker error log file '"
+         . $OInventory::ovomGlobals{'pickerErrorLogHandle'} . "': $!";
+    return 0;
+  }
+  $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;
+  return 1;
+}
+
+#
 # Read configuration, initialize log and open connections to vCenter and DB
 #
 # @return 1 (ok) | 0 (errors)
 #
 sub pickerInit {
   my ($timeBefore, $eTime);
+
+  #
+  # Read configuration
+  #
   if( ! readConfiguration() ) {
     warn "Could not read configuration";
     return 0;
   }
 
-  # Regular log
-  my($clf) = $OInventory::configuration{'log.folder'} . "/picker.main.log";
-  $OInventory::ovomGlobals{'pickerMainLogFile'} = $clf;
-
-  if(! open($OInventory::ovomGlobals{'pickerMainLogHandle'}, ">>:utf8", $clf)) {
-    warn "Could not open picker main log file '$clf': $!";
+  #
+  # Open log files
+  #
+  if(! openLogFiles()) {
+    warn "Could not open log files";
     return 0;
   }
-
-  $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
-
-  # Error log
-  my($celf) = $OInventory::configuration{'log.folder'} . "/picker.error.log";
-  $OInventory::ovomGlobals{'pickerErrorLogFile'} = $celf;
-
-  if(! open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>:utf8", $celf)) {
-    warn "Could not open picker error log file '$celf': $!";
-    return 0;
-  }
-
-  $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;
 
   OInventory::log(1, "Init: Configuration read and log handlers open");
   if(! createFoldersIfNeeded() ){
@@ -1095,7 +1129,7 @@ sub pickerInit {
   }
 
   #
-  # Let's connect to vC:
+  # Connect to vC:
   #
   OInventory::log(1, "Let's connect to vCenter");
   $timeBefore=Time::HiRes::time;
@@ -1114,6 +1148,31 @@ sub pickerInit {
   if(OvomDao::connect() != 1) {
     OInventory::log(3, "Cannot connect to DataBase.");
     warn "Can't connect to DataBase";
+    return 0;
+  }
+  return 1;
+}
+
+#
+# Close log files
+#
+# @return 1 (ok) | 0 (errors)
+#
+sub closeLogFiles {
+  my $e = 0;
+  if(! close($OInventory::ovomGlobals{'pickerMainLogHandle'})) {
+    warn "Could not close picker main log file '"
+         . $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+    $e++;
+  }
+
+  if(! close($OInventory::ovomGlobals{'pickerErrorLogHandle'})) {
+    warn "Could not close picker error log file '"
+         . $OInventory::ovomGlobals{'pickerErrorLogFile'} . "': $!";
+    $e++;
+  }
+
+  if($e) {
     return 0;
   }
   return 1;
@@ -1150,17 +1209,12 @@ sub pickerStop {
   OInventory::log(1, "Profiling: Disconnecting from vCenter took "
                         . sprintf("%.3f", $eTime) . " s");
 
-  if(! close($OInventory::ovomGlobals{'pickerMainLogHandle'})) {
-    warn "Could not close picker main log file '" .
-           $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+  OInventory::log(1, "Closing log files");
+  if(! closeLogFiles()) {
+    warn "Could not close log files";
     $e++;
   }
 
-  if(! close($OInventory::ovomGlobals{'pickerErrorLogHandle'})) {
-    warn "Could not close picker error log file '" .
-           $OInventory::ovomGlobals{'pickerErrorLogFile'} . "': $!";
-    $e++;
-  }
   if($e) {
     return 0;
   }
@@ -1168,6 +1222,8 @@ sub pickerStop {
     return 1;
   }
 }
+
+
 
 #
 # Close connections to vCenter and DB and close log file descriptors
@@ -1197,6 +1253,95 @@ sub readConfiguration {
 }
 
 
+#
+# Rotate log files 
+#
+# No arguments, filenames and limits are set in configuration
+#
+# @return 1 (ok) | 0 (errors)
+#
+sub rotateLogFiles {
+  # Main log
+  my($mlf) = $OInventory::configuration{'log.main.filename'};
+  my($clf) = $OInventory::configuration{'log.folder'} . "/$mlf";
+  my($maxMainLogSizeBytes)
+    = $OInventory::configuration{'log.main.maxSizeBytes'};
+
+  if(! rotateFile($clf, $maxMainLogSizeBytes)) {
+    warn "Can't rotate main log file";
+    return 0;
+  }
+
+  # Error log
+  my($elf)  = $OInventory::configuration{'log.error.filename'};
+  my($celf) = $OInventory::configuration{'log.folder'} . "/$elf";
+  my($maxErrLogSizeBytes)
+    = $OInventory::configuration{'log.error.maxSizeBytes'};
+
+  if(! rotateFile($celf, $maxErrLogSizeBytes)) {
+    warn "Can't rotate error log file";
+    return 0;
+  }
+  return 1;
+} 
+
+#
+# Rotate file if needed
+#
+# @arg path to log file
+# @arg max size in bytes
+# @return 1 (ok) | 0 (errors)
+#
+sub rotateFile($$) {
+  my $filename       = shift;
+  my $maxSizeInBytes = shift;
+  if(! defined($filename) || $filename eq '') {
+    warn "rotateFile: Missing or empty 1st arg: filename ";
+    return 0;
+  }
+  if(! defined($maxSizeInBytes) || ! looks_like_number($maxSizeInBytes)) {
+    OInventory::log(3, "rotateFile: 2nd arg (maxSizeInBytes) doesn't seem a #");
+    return 0;
+  }
+
+  my @statOut = stat $filename;
+  if ($#statOut == -1) {
+    warn "Can't 'stat' file $filename";
+    return 0;
+  }
+  if ($#statOut < 7) {
+    warn "Errors calling 'stat' on file $filename";
+    return 0;
+  }
+  my $size   = $statOut[7];
+  my $nowStr = strftime('%Y%m%d_%H%M%S', gmtime);
+  my $newFilename = $filename . ".$nowStr";
+
+  if($size > $maxSizeInBytes) {
+    if(-e $newFilename) {
+      warn "Can't rotate $filename because $newFilename already exists";
+      return 0;
+    }
+    if(! move($filename, $newFilename)) {
+      warn "Errors moving $filename into $newFilename: $!";
+      return 0;
+    }
+#   warn "$filename rotated to $newFilename";
+  }
+  return 1;
+}
+
+
+#
+# Print a log message
+#
+# @arg log level 
+#        0 : debug
+#        1 : info
+#        2 : warning
+#        3 : error
+# @arg message
+#
 sub log ($$) {
   my ($logLevel, $msg) = @_;
   return if($OInventory::configuration{'log.level'} gt $logLevel);

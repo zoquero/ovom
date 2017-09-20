@@ -23,6 +23,24 @@ if( ! OInventory::pickerInit()) {
 
 my ($timeBefore, $r, $eTime);
 while(1) {
+
+  OInventory::log(1,
+    "Rotating log files if needed. Take a look at STDERR if fails");
+  if(! OInventory::closeLogFiles()) {
+    OInventory::log(3, "Can't close log files");
+    warn               "Can't close log files";
+    last;
+  }
+  if(! OInventory::rotateLogFiles()) {
+    warn "Can't rotate log files";
+    last;
+  }
+  if(! OInventory::openLogFiles()) {
+    warn "Can't open log files";
+    last;
+  }
+  OInventory::log(1, "Log files successfully rotated");
+
   #
   # Connect to Database if needed:
   #
