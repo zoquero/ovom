@@ -1546,14 +1546,8 @@ sub shiftPointsToPerfDataStage {
   for (my $i = $numNewPointsFromPrevStages - 1; $i >= 0 ; $i--) {
     my $newTimestamp = $currNewLastTimestamp - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};;
     my $newValue = interpolateFromPrevStages($newTimestamp, $stages, $currStagePos);
-    if( looks_like_number($newValue) ) {
-      push @finalTimestamps, $newTimestamp;
-      push @finalValues,     $newValue;
-    }
-    else {
-      OInventory::log(3, "The value calculated for timestamp $newTimestamp "
-        . "doesn't look like a number ($newValue). Were there empty values?");
-    }
+    push @finalTimestamps, $newTimestamp;
+    push @finalValues,     $newValue;
   }
 
   #
