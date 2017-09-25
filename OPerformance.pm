@@ -1341,8 +1341,11 @@ sub getClearedFunction {
   }
   for(my $i = 0 ; $i <= $#$x; $i++) {
     if(defined($$y[$i])) {
-      push @cx, $$x[$i];
-      push @cy, $$y[$i];
+      my $val = $$y[$i];
+      if(looks_like_number($val)) {
+        push @cx, $$x[$i];
+        push @cy, $val;
+      }
     }
   }
   return (\@cx, \@cy);
@@ -1543,17 +1546,20 @@ sub shiftPointsToPerfDataStage {
   for (my $i = $numNewPointsFromPrevStages - 1; $i >= 0 ; $i--) {
     my $newTimestamp = $currNewLastTimestamp - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};;
     my $newValue = interpolateFromPrevStages($newTimestamp, $stages, $currStagePos);
-
-    push @finalTimestamps, $newTimestamp;
-    push @finalValues,     $newValue;
-
+    if( looks_like_number($newValue) ) {
+      push @finalTimestamps, $newTimestamp;
+      push @finalValues,     $newValue;
+    }
+    else {
+      OInventory::log(3, "The value calculated for timestamp $newTimestamp "
+        . "doesn't look like a number ($newValue). Were there empty values?");
+    }
   }
 
   #
   # Now we have all the points to be saved on
   # current stage $$stages[$currStagePos] . Let's save them:
   #
-
   my $perfDataFilename = $$stages[$currStagePos]->{filename};
   my $tmpFile          = $perfDataFilename  . ".rrdb_running";
   OInventory::log(0, "Saving RRDB'ed perf data in temporary file $tmpFile");
