@@ -76,12 +76,13 @@ sub getPerfManager {
     eval {
       local $SIG{ALRM} = sub { die "Timeout getting perfManager" };
       my $maxSecs = $OInventory::configuration{'api.timeout'};
-      alarm $maxSecs;
       OInventory::log(0, "Getting perfManager with ${maxSecs}s timeout");
+      alarm $maxSecs;
       $perfManagerView = Vim::get_view(mo_ref => Vim::get_service_content()->perfManager);
       alarm 0;
     };
     if($@) {
+      alarm 0;
       if ($@ =~ /Timeout getting perfManager/) {
         OInventory::log(3, "Timeout! could not get perfManager from "
                          . "VIM service in a timely fashion: $@");
@@ -438,12 +439,13 @@ sub getPerfData {
   eval {
     local $SIG{ALRM} = sub { die "Timeout calling QueryPerf" };
     my $maxSecs = $OInventory::configuration{'api.timeout'};
-    alarm $maxSecs;
     OInventory::log(0, "Calling QueryPerf, with a timeout of $maxSecs seconds");
+    alarm $maxSecs;
     $r = $perfManager->QueryPerf(querySpec => $perfQuerySpec);
     alarm 0;
   };
   if ($@) {
+    alarm 0;
     if ($@ =~ /Timeout calling QueryPerf/) {
       OInventory::log(3, "Timeout! perfManager->QueryPerf did not respond "
                        . "in a timely fashion: $@");
@@ -1913,6 +1915,7 @@ sub getLatestPerformance {
       alarm 0;
     };
     if ($@) {
+      alarm 0;
       if ($@ =~ /Timeout calling QueryAvailablePerfMetric/) {
         OInventory::log(3, "Timeout! perfManager->QueryAvailablePerfMetric "
                          . "did not respond in a timely fashion: $@");

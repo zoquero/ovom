@@ -1,11 +1,9 @@
 Some things to be done:
 
-* Think what will happen on RRDB loop with gaps (when there's no perf data, because of vCenter downtimes, for example)
+* Pending solve bug on Interpolation: 'Argument "" isn't numeric in subtraction (-) at /usr/share/perl5/Math/Derivative.pm line 105" : Probably we are trying to interpolate with empty values, we should clear the array.
 * Flag files to trigger actions like: 1) pause inventory gathering 2) restart inventory gathering 3) launch new inventory gathering
-* Dao: PerfMetric not fully tested (update & delete)
 * Dao: pending testing update sqlPerfCounterInfoUpdate
 * aggressively cache retrieved objects at OPerformance::getLatestPerformance()
 * aggressively cache OPerformance::getPerfManager()
 * when should DBI::finish be called?
-* log rotation
 * getting hardware alarms

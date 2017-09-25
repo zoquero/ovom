@@ -138,12 +138,13 @@ sub connectToVcenter {
   eval {
     local $SIG{ALRM} = sub { die "Timeout connecting to vCenter" };
     my $maxSecs = $OInventory::configuration{'api.timeout'};
-    alarm $maxSecs;
     OInventory::log(0, "Connecting to vCenter, with ${maxSecs}s timeout");
+    alarm $maxSecs;
     Util::connect($vCWSUrl, $user, $pass);
     alarm 0;
   };
   if($@) {
+    alarm 0;
     OInventory::log(3, "Errors connecting to $vCWSUrl: $@");
     return 0;
   }
@@ -172,6 +173,7 @@ sub disconnectFromVcenter {
     alarm 0;
   };
   if($@) {
+    alarm 0;
     OInventory::log(3, "Errors disconnecting from vCenter : $@");
     return 0;
   }
@@ -676,7 +678,7 @@ sub updateOvomInventoryDatabaseFromVcenter {
 #
 sub pushToInventory {
   my $entityViews = shift;
-  my $type    = shift;
+  my $type        = shift;
   foreach my $aEntityView (@$entityViews) {
     my $aEntity;
     if($type eq 'Datacenter') {
@@ -916,6 +918,7 @@ sub updateInventory {
           alarm 0;
         };
         if ($@) {
+          alarm 0;
           OInventory::log(3, "Vim::find_entity_views failed: $@");
           return 0;
         }
@@ -932,6 +935,7 @@ sub updateInventory {
           alarm 0;
         };
         if ($@) {
+          alarm 0;
           OInventory::log(3, "Vim::find_entity_views failed: $@");
           return 0;
         }
@@ -1089,7 +1093,9 @@ sub openLogFiles {
       . "/"
       . $OInventory::configuration{'log.error.filename'};
   }
-  if(! open($OInventory::ovomGlobals{'pickerErrorLogHandle'}, ">>:utf8", $OInventory::ovomGlobals{'pickerErrorLogHandle'})) {
+  if(! open($OInventory::ovomGlobals{'pickerErrorLogHandle'},
+            ">>:utf8",
+            $OInventory::ovomGlobals{'pickerErrorLogFile'})) {
     warn "Could not open picker error log file '"
          . $OInventory::ovomGlobals{'pickerErrorLogHandle'} . "': $!";
     return 0;
@@ -1127,6 +1133,7 @@ sub pickerInit {
     warn "Could not create folders";
     return 0;
   }
+
 
   #
   # Connect to vC:
@@ -1380,6 +1387,13 @@ sub log ($$) {
   if($duplicate) {
     $logHandle = $OInventory::ovomGlobals{'pickerMainLogHandle'};
     print $logHandle "${nowStr}Z: [$crit] $msg\n";
+  }
+}
+
+sub watchOut {
+  my @files = glob("GLOB*");
+  if ($#files >= 0) {
+    Carp::croak "found!";
   }
 }
 
