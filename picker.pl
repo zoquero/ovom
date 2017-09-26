@@ -23,6 +23,14 @@ if( ! OInventory::pickerInit()) {
 
 my ($timeBefore, $r, $eTime);
 while(1) {
+  my $r = OInventory::askedToStop();
+  if( $r == -1 ) {
+    die "Can't remove signal file. Let's stop";
+  }
+  if($r) {
+    OInventory::log(2, "We're asked to stop. Let's finish. ");
+    goto LOOP_STOP;
+  }
 
   OInventory::log(1,
     "Rotating log files if needed. Take a look at STDERR if fails");
@@ -169,6 +177,7 @@ while(1) {
   sleep($sleepSecs);
 }
 
+LOOP_STOP:
 if( ! OInventory::pickerStop()) {
   die "Exiting";
 }

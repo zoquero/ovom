@@ -1105,6 +1105,32 @@ sub openLogFiles {
 }
 
 #
+# Tell if there exists the file that signals that we must stop
+#
+# @return 1 if asked, 0 if not, -1 if errors
+#
+sub askedToStop {
+  my $file = $OInventory::configuration{'signal.stop'};
+  if ( -e $file ) {
+    if ( -d $file ) {
+      if( ! rmdir $file ) {
+        OInventory::log(3, "Can't remove the signal file $file");
+        return -1;
+      }
+      return 1;
+    }
+    else {
+      if( ! unlink $file ) {
+        OInventory::log(3, "Can't remove the signal file $file");
+        return -1;
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
+#
 # Read configuration, initialize log and open connections to vCenter and DB
 #
 # @return 1 (ok) | 0 (errors)
