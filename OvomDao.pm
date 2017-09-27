@@ -347,36 +347,6 @@ sub transactionRollback {
   return 1;
 }
 
-sub select {
-die "deprecated method, must be deleted";
-  OInventory::log(0, "Selecting from DB");
-
-  eval {
-    $dbh->commit();
-    my $sth = $dbh->prepare('SELECT count(folder.id) FROM `folder`')
-                or die "Couldn't prepare statement: " . $dbh->errstr;
-    $sth->execute();
-
-    # Read the matching records and print them out          
-    my @data;
-    while (@data = $sth->fetchrow_array()) {
-      my $r = $data[0];
-      print "\tHem llegit: $r\n";
-    }
-
-    if ($sth->rows == 0) {
-      print "No names matched\n\n";
-    }
-  };
-
-  if($@) { OInventory::log(3, "Errors getting from DB: $@");
-    return 1;
-  }
-
-  OInventory::log(1, "Successfully selected from DB");
-  return 0;
-}
-
 
 #
 # Get all entities of a type from DB.

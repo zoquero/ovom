@@ -76,12 +76,13 @@ sub getPerfManager {
     eval {
       local $SIG{ALRM} = sub { die "Timeout getting perfManager" };
       my $maxSecs = $OInventory::configuration{'api.timeout'};
-      alarm $maxSecs;
       OInventory::log(0, "Getting perfManager with ${maxSecs}s timeout");
+      alarm $maxSecs;
       $perfManagerView = Vim::get_view(mo_ref => Vim::get_service_content()->perfManager);
       alarm 0;
     };
     if($@) {
+      alarm 0;
       if ($@ =~ /Timeout getting perfManager/) {
         OInventory::log(3, "Timeout! could not get perfManager from "
                          . "VIM service in a timely fashion: $@");
@@ -138,7 +139,7 @@ sub updatePciIfNeeded {
                    . "groupInfoSummary='" . $pCI->groupInfo->summary . "',"
                    . "key='"              . $pCI->key                . "',"
                    . "level='"            . $pCI->level              . "',"
-                   . "rollupType='"       . $pCI->rollupType         . "',"
+                   . "rollupType='"       . $pCI->rollupType->val    . "',"
                    . "unitInfoKey='"      . $pCI->unitInfo->key      . "',"
                    . "unitInfoLabel='"    . $pCI->unitInfo->label    . "',"
                    . "unitInfoSummary='"  . $pCI->unitInfo->summary  . "'");
@@ -188,7 +189,8 @@ sub updatePciIfNeeded {
 #
 # As a sample, this is the list of the different groupInfo keys
 # (perfCounterInfo->groupInfo->key) of the perfCounterInfo
-# objects found on the $perfManagerView->perfCounter object on a vCenter 6.5:
+# objects found on the $perfManagerView->perfCounter object
+# on a regular vCenter 6.5:
 # * clusterServices
 # * cpu
 # * datastore
@@ -230,6 +232,30 @@ sub initCounterInfo {
     return 0;
   }
 
+  #
+  # Let's save the csv file with PerfCounterInfo objects
+  #
+  my($inventoryBaseFolder) = $OInventory::configuration{'inventory.export.root'}
+                             . "/" . $OInventory::configuration{'vCenter.fqdn'};
+  my $pciCsv = "$inventoryBaseFolder/PerfCounterInfo.csv";
+  OInventory::log(1, "Let's write PerfCounterInfo objects into the CSV file "
+                        . $pciCsv);
+  my $csvHandler;
+  if( ! open($csvHandler, ">:utf8", $pciCsv) ) {
+    OInventory::log(3, "Could not open CSV file '$pciCsv': $!");
+    return 1;
+  }
+
+  my $l = "statsType${csvSep}perDeviceLevel${csvSep}nameInfoKey${csvSep}"
+        . "nameInfoLabel${csvSep}nameInfoSummary${csvSep}groupInfoKey${csvSep}"
+        . "groupInfoLabel${csvSep}groupInfoSummary${csvSep}key${csvSep}level"
+        . "${csvSep}rollupTypeVal${csvSep}unitInfoKey${csvSep}unitInfoLabel"
+        . "${csvSep}unitInfoSummary";
+  print $csvHandler "$l\n";
+
+  #
+  # Let's iterate foreach PerfCounterInfo to update DB
+  #
   foreach my $pCI (@$perfCounterInfo) {
     #
     # Reference it from allCounters and allCountersByGIKey vars
@@ -256,7 +282,41 @@ sub initCounterInfo {
       OInventory::log(3, "Could not update the perfCounter key="
                        . $pCI->key . " on DB");
     }
+
+    #
+    # Save perfCounterInfo objects in CSV files
+    #
+    my $s = $pCI->{statsType}->{val}     . $csvSep
+          . $pCI->{perDeviceLevel}       . $csvSep
+          . $pCI->{nameInfo}->{key}      . $csvSep
+          . $pCI->{nameInfo}->{label}    . $csvSep
+          . $pCI->{nameInfo}->{summary}  . $csvSep
+          . $pCI->{groupInfo}->{key}     . $csvSep
+          . $pCI->{groupInfo}->{label}   . $csvSep
+          . $pCI->{groupInfo}->{summary} . $csvSep
+          . $pCI->{key}                  . $csvSep
+          . $pCI->{level}                . $csvSep
+          . $pCI->{rollupType}->{val}    . $csvSep
+          . $pCI->{unitInfo}->{key}      . $csvSep
+          . $pCI->{unitInfo}->{label}    . $csvSep
+          . $pCI->{unitInfo}->{summary};
+    print $csvHandler "$s\n";
+
+#   if(! perfCounterInfos2Csv($pCI)) {
+#     OInventory::log(3, "Errors saving perfCounterInfo descriptors. "
+#                      . "We'll continue, anyway");
+#   }
+
   }
+
+  #
+  # Let's close the CSV file for PerfCounterInfo objects
+  #
+  if( ! close($csvHandler) ) {
+    OInventory::log(3, "Could not close the CSV file '$pciCsv': $!");
+    return 1;
+  }
+
   return 1;
 }
 
@@ -437,12 +497,13 @@ sub getPerfData {
   eval {
     local $SIG{ALRM} = sub { die "Timeout calling QueryPerf" };
     my $maxSecs = $OInventory::configuration{'api.timeout'};
-    alarm $maxSecs;
     OInventory::log(0, "Calling QueryPerf, with a timeout of $maxSecs seconds");
+    alarm $maxSecs;
     $r = $perfManager->QueryPerf(querySpec => $perfQuerySpec);
     alarm 0;
   };
   if ($@) {
+    alarm 0;
     if ($@ =~ /Timeout calling QueryPerf/) {
       OInventory::log(3, "Timeout! perfManager->QueryPerf did not respond "
                        . "in a timely fashion: $@");
@@ -554,8 +615,6 @@ sub savePerfData {
     return 0;
   }
 
-# if( ref($perfData) ne 'PerfEntityMetricCSV'
-#  && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV')
   if( ref($perfDataArray) ne 'ARRAY') {
     OInventory::log(3, "savePerfData: Got unexpected '" . ref($perfDataArray)
                      . "' instead of ARRAY of PerfEntityMetricCSV");
@@ -938,27 +997,27 @@ sub doRrdb {
   for (my $iStage = 1; $iStage <= $#$OPerformance::stageDescriptors; $iStage++) {
 
     OInventory::log(0, "Running RRDB for stage '"
-                     . $$stages[$iStage] . "'");
+                     . $$stages[$iStage]->{descriptor}->{name} . "'");
 
     my ($timeBefore,  $eTime);
     $timeBefore=Time::HiRes::time;
     my $r = shiftPointsToPerfDataStage($iStage, $stages);
     $eTime=Time::HiRes::time - $timeBefore;
-    OInventory::log(0, "Profiling: Running RRDB on stage "
+    OInventory::log(0, "Profiling: Running RRDB on stage '"
                        . $$stages[$iStage]->{descriptor}->{name}
-                       . " took " . sprintf("%.3f", $eTime) . " s");
+                       . "' took " . sprintf("%.3f", $eTime) . " s");
 
     if( $r ) {
-      OInventory::log(0, "Pushed and popped $r points to stage "
-                       . $$stages[$iStage]->{descriptor}->{name});
+      OInventory::log(0, "Pushed and popped $r points to stage '"
+                       . $$stages[$iStage]->{descriptor}->{name} . "'");
     }
     else {
       #
       # It will not be usual for the early stages (hour=>day)
       # but it will be usual for the later stages (month=>year)
       #
-      OInventory::log(0, "There are no points to push and pop to stage "
-                       . $$stages[$iStage]->{descriptor}->{name});
+      OInventory::log(0, "There are no points to push and pop to stage '"
+                       . $$stages[$iStage]->{descriptor}->{name} . "'");
       next;
     }
   }
@@ -1338,8 +1397,11 @@ sub getClearedFunction {
   }
   for(my $i = 0 ; $i <= $#$x; $i++) {
     if(defined($$y[$i])) {
-      push @cx, $$x[$i];
-      push @cy, $$y[$i];
+      my $val = $$y[$i];
+      if(looks_like_number($val)) {
+        push @cx, $$x[$i];
+        push @cy, $val;
+      }
     }
   }
   return (\@cx, \@cy);
@@ -1485,7 +1547,7 @@ sub shiftPointsToPerfDataStage {
         . "there would fit %d current stage sample periods of %d s and last new"
         . " point will be %d. We'll keep the last %d points from current stage "
         . "we'll get next %d points interpolling from prevStages (fresher) "
-        , $currStagePos, $$stages[$currStagePos]
+        , $currStagePos, $$stages[$currStagePos]->{descriptor}->{name}
         , $$stages[$currStagePos]->{lastTimestamp}, $$stages[0]->{lastTimestamp}
         , $currNumNewPointsThatWouldFit
         , $$stages[$currStagePos]->{descriptor}->{samplePeriod}
@@ -1540,17 +1602,14 @@ sub shiftPointsToPerfDataStage {
   for (my $i = $numNewPointsFromPrevStages - 1; $i >= 0 ; $i--) {
     my $newTimestamp = $currNewLastTimestamp - $i * $$stages[$currStagePos]->{descriptor}->{samplePeriod};;
     my $newValue = interpolateFromPrevStages($newTimestamp, $stages, $currStagePos);
-
     push @finalTimestamps, $newTimestamp;
     push @finalValues,     $newValue;
-
   }
 
   #
   # Now we have all the points to be saved on
   # current stage $$stages[$currStagePos] . Let's save them:
   #
-
   my $perfDataFilename = $$stages[$currStagePos]->{filename};
   my $tmpFile          = $perfDataFilename  . ".rrdb_running";
   OInventory::log(0, "Saving RRDB'ed perf data in temporary file $tmpFile");
@@ -1687,34 +1746,6 @@ sub getPositionOfFirstValueGreater {
   return -1;
 }
 
-
-#
-# Get first value of an array greater than a value
-#
-# @arg limit, the value to look for
-# @arg reference to the array of points
-# @return the value (if ok), undef (if error)
-#
-sub getFirstValueGreater {
-die "Deprecated vs getPositionOfFirstValueGreater";
-  my $limit  = shift;
-  my $points = shift;
-
-  if( ! looks_like_number($limit)) {
-    OInventory::log(3, "getFirstValueGreater 1st param must be a number ($limit)");
-    return undef;
-  }
-
-  if(ref($points) ne 'ARRAY') {
-    OInventory::log(3, "getFirstValueGreater 2nd param must be a ref to points. "
-                     . "Is a '" . ref($points) . "'");
-  }
-
-  foreach my $point (@$points) {
-    return $point if($point > $limit);
-  }
-  return undef;
-}
 
 #
 # Get the second half of an array, from the component that equals to certain value.
@@ -1926,6 +1957,30 @@ sub getLatestPerformance {
     my $filteredPerfMetricIds;
     my $desiredGroupInfo;
 
+    #
+    # Let's check if we are signaled to stop
+    #
+    if(OInventory::askedToStop()) {
+      OInventory::log(2, "We must stop. Let's finish. ");
+      #
+      # Let's create the flag file again, for the main loop to realize about
+      # this signal without having to change the return value of this function.
+      #
+      my $file = $OInventory::configuration{'signal.stop'};
+      my $hndl;
+      if(!open($hndl, ">:utf8", $file)) {
+        OInventory::log(3, "Can't touch again the signal file $file: $!");
+        return 0;
+      }
+      if(!close($hndl)) {
+        OInventory::log(3, "Can't close the signal file $file: $!");
+        return 0;
+      }
+      return 1;
+    }
+
+
+
     # TO_DO : code cleanup: move it to a getAvailablePerfMetric function
 
 
@@ -1940,6 +1995,7 @@ sub getLatestPerformance {
       alarm 0;
     };
     if ($@) {
+      alarm 0;
       if ($@ =~ /Timeout calling QueryAvailablePerfMetric/) {
         OInventory::log(3, "Timeout! perfManager->QueryAvailablePerfMetric "
                          . "did not respond in a timely fashion: $@");
@@ -2032,6 +2088,7 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
+
     if(! savePerfData($perfData)) {
       OInventory::log(3, "Errors getting latest performance from "
                        . ref($aEntity) . " with mo_ref '"
@@ -2057,36 +2114,6 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTimeB) . " s");
 
   return 1;
-}
-
-
-#
-# Gets performance metrics for a VM
-#
-# @param OVirtualMachine object
-# @return 1 ok, 0 errors
-#
-sub getVmPerfs {
-  return 1;
-}
-
-
-#
-# Gets performance metrics for a Host
-#
-# @param OHost object
-# @return 1 ok, 0 errors
-#
-sub getHostPerfs {
-  return 1;
-}
-
-
-sub saveVmPerf {
-}
-
-
-sub saveHostPerf {
 }
 
 1;

@@ -17,10 +17,34 @@ my $justOneIteration = 0;
 $justOneIteration = 1 if ( defined($ARGV[0]) && $ARGV[0] eq '--once' );
 my $inventoryRefreshCount = 0;
 
-OInventory::pickerInit();
+if( ! OInventory::pickerInit()) {
+  die "Exiting";
+}
 
 my ($timeBefore, $r, $eTime);
 while(1) {
+  if(OInventory::askedToStop()) {
+    OInventory::log(2, "We must stop. Let's finish. ");
+    goto LOOP_STOP;
+  }
+
+  OInventory::log(1,
+    "Rotating log files if needed. Take a look at STDERR if fails");
+  if(! OInventory::closeLogFiles()) {
+    OInventory::log(3, "Can't close log files");
+    warn               "Can't close log files";
+    last;
+  }
+  if(! OInventory::rotateLogFiles()) {
+    warn "Can't rotate log files";
+    last;
+  }
+  if(! OInventory::openLogFiles()) {
+    warn "Can't open log files";
+    last;
+  }
+  OInventory::log(1, "Log files successfully rotated");
+
   #
   # Connect to Database if needed:
   #
@@ -142,11 +166,22 @@ while(1) {
   }
 
   #
+  # Let's check again if we are signaled to stop
+  #
+  if(OInventory::askedToStop()) {
+    OInventory::log(2, "We must stop. Let's finish. ");
+    goto LOOP_STOP;
+  }
+
+  #
   # Sleep until next iteration
   #
   my $sleepSecs = $OInventory::configuration{'polling.wait_seconds'};
   OInventory::log(1, "Let's sleep ${sleepSecs}s after an iteration");
   sleep($sleepSecs);
 }
-OInventory::pickerStop();
 
+LOOP_STOP:
+if( ! OInventory::pickerStop()) {
+  die "Exiting";
+}
