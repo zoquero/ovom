@@ -243,7 +243,7 @@ sub initCounterInfo {
   my $csvHandler;
   if( ! open($csvHandler, ">:utf8", $pciCsv) ) {
     OInventory::log(3, "Could not open CSV file '$pciCsv': $!");
-    return 1;
+    return 0;
   }
 
   my $l = "statsType${csvSep}perDeviceLevel${csvSep}nameInfoKey${csvSep}"
@@ -301,12 +301,6 @@ sub initCounterInfo {
           . $pCI->{unitInfo}->{label}    . $csvSep
           . $pCI->{unitInfo}->{summary};
     print $csvHandler "$s\n";
-
-#   if(! perfCounterInfos2Csv($pCI)) {
-#     OInventory::log(3, "Errors saving perfCounterInfo descriptors. "
-#                      . "We'll continue, anyway");
-#   }
-
   }
 
   #
@@ -314,7 +308,7 @@ sub initCounterInfo {
   #
   if( ! close($csvHandler) ) {
     OInventory::log(3, "Could not close the CSV file '$pciCsv': $!");
-    return 1;
+    return 0;
   }
 
   return 1;
