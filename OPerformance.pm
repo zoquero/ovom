@@ -1901,6 +1901,30 @@ sub getLatestPerformance {
     my $filteredPerfMetricIds;
     my $desiredGroupInfo;
 
+    #
+    # Let's check if we are signaled to stop
+    #
+    if(OInventory::askedToStop()) {
+      OInventory::log(2, "We must stop. Let's finish. ");
+      #
+      # Let's create the flag file again, for the main loop to realize about
+      # this signal without having to change the return value of this function.
+      #
+      my $file = $OInventory::configuration{'signal.stop'};
+      my $hndl;
+      if(!open($hndl, ">:utf8", $file)) {
+        OInventory::log(3, "Can't touch again the signal file $file: $!");
+        return 0;
+      }
+      if(!close($hndl)) {
+        OInventory::log(3, "Can't close the signal file $file: $!");
+        return 0;
+      }
+      return 1;
+    }
+
+
+
     # TO_DO : code cleanup: move it to a getAvailablePerfMetric function
 
 

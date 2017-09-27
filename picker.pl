@@ -23,12 +23,8 @@ if( ! OInventory::pickerInit()) {
 
 my ($timeBefore, $r, $eTime);
 while(1) {
-  my $r = OInventory::askedToStop();
-  if( $r == -1 ) {
-    die "Can't remove signal file. Let's stop";
-  }
-  if($r) {
-    OInventory::log(2, "We're asked to stop. Let's finish. ");
+  if(OInventory::askedToStop()) {
+    OInventory::log(2, "We must stop. Let's finish. ");
     goto LOOP_STOP;
   }
 
@@ -167,6 +163,14 @@ while(1) {
   if($justOneIteration) {
     OInventory::log(1, "Running just one iteration, let's finish.");
     last;
+  }
+
+  #
+  # Let's check again if we are signaled to stop
+  #
+  if(OInventory::askedToStop()) {
+    OInventory::log(2, "We must stop. Let's finish. ");
+    goto LOOP_STOP;
   }
 
   #

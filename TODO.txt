@@ -1,5 +1,6 @@
 Some things to be done:
 
+* Write PerfMetrics to csv files, to be able to understand the graphs without having to access the database
 * Pending solve bug on Interpolation: 'Argument "" isn't numeric in subtraction (-) at /usr/share/perl5/Math/Derivative.pm line 105" : Probably we are trying to interpolate with empty values, we should clear the array.
 * Flag files to trigger actions like: 1) pause inventory gathering 2) restart inventory gathering 3) launch new inventory gathering
 * Dao: pending testing update sqlPerfCounterInfoUpdate

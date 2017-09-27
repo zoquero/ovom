@@ -1107,22 +1107,21 @@ sub openLogFiles {
 #
 # Tell if there exists the file that signals that we must stop
 #
-# @return 1 if asked, 0 if not, -1 if errors
+# @return 1 if asked or errors, 0 if not asked
 #
 sub askedToStop {
   my $file = $OInventory::configuration{'signal.stop'};
   if ( -e $file ) {
     if ( -d $file ) {
       if( ! rmdir $file ) {
-        OInventory::log(3, "Can't remove the signal file $file");
-        return -1;
+        OInventory::log(3, "Can't remove the signal folder $file");
       }
       return 1;
     }
     else {
       if( ! unlink $file ) {
         OInventory::log(3, "Can't remove the signal file $file");
-        return -1;
+        return 1;
       }
       return 1;
     }
@@ -1413,13 +1412,6 @@ sub log ($$) {
   if($duplicate) {
     $logHandle = $OInventory::ovomGlobals{'pickerMainLogHandle'};
     print $logHandle "${nowStr}Z: [$crit] $msg\n";
-  }
-}
-
-sub watchOut {
-  my @files = glob("GLOB*");
-  if ($#files >= 0) {
-    Carp::croak "found!";
   }
 }
 
