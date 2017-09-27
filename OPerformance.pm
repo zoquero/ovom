@@ -232,6 +232,30 @@ sub initCounterInfo {
     return 0;
   }
 
+  #
+  # Let's save the csv file with PerfCounterInfo objects
+  #
+  my($inventoryBaseFolder) = $OInventory::configuration{'inventory.export.root'}
+                             . "/" . $OInventory::configuration{'vCenter.fqdn'};
+  my $pciCsv = "$inventoryBaseFolder/PerfCounterInfo.csv";
+  OInventory::log(1, "Let's write PerfCounterInfo objects into the CSV file "
+                        . $pciCsv);
+  my $csvHandler;
+  if( ! open($csvHandler, ">:utf8", $pciCsv) ) {
+    OInventory::log(3, "Could not open CSV file '$pciCsv': $!");
+    return 1;
+  }
+
+  my $l = "statsType${csvSep}perDeviceLevel${csvSep}nameInfoKey${csvSep}"
+        . "nameInfoLabel${csvSep}nameInfoSummary${csvSep}groupInfoKey${csvSep}"
+        . "groupInfoLabel${csvSep}groupInfoSummary${csvSep}key${csvSep}level"
+        . "${csvSep}rollupTypeVal${csvSep}unitInfoKey${csvSep}unitInfoLabel"
+        . "${csvSep}unitInfoSummary";
+  print $csvHandler "$l\n";
+
+  #
+  # Let's iterate foreach PerfCounterInfo to update DB
+  #
   foreach my $pCI (@$perfCounterInfo) {
     #
     # Reference it from allCounters and allCountersByGIKey vars
@@ -258,7 +282,41 @@ sub initCounterInfo {
       OInventory::log(3, "Could not update the perfCounter key="
                        . $pCI->key . " on DB");
     }
+
+    #
+    # Save perfCounterInfo objects in CSV files
+    #
+    my $s = $pCI->{statsType}->{val}     . $csvSep
+          . $pCI->{perDeviceLevel}       . $csvSep
+          . $pCI->{nameInfo}->{key}      . $csvSep
+          . $pCI->{nameInfo}->{label}    . $csvSep
+          . $pCI->{nameInfo}->{summary}  . $csvSep
+          . $pCI->{groupInfo}->{key}     . $csvSep
+          . $pCI->{groupInfo}->{label}   . $csvSep
+          . $pCI->{groupInfo}->{summary} . $csvSep
+          . $pCI->{key}                  . $csvSep
+          . $pCI->{level}                . $csvSep
+          . $pCI->{rollupType}->{val}    . $csvSep
+          . $pCI->{unitInfo}->{key}      . $csvSep
+          . $pCI->{unitInfo}->{label}    . $csvSep
+          . $pCI->{unitInfo}->{summary};
+    print $csvHandler "$s\n";
+
+#   if(! perfCounterInfos2Csv($pCI)) {
+#     OInventory::log(3, "Errors saving perfCounterInfo descriptors. "
+#                      . "We'll continue, anyway");
+#   }
+
   }
+
+  #
+  # Let's close the CSV file for PerfCounterInfo objects
+  #
+  if( ! close($csvHandler) ) {
+    OInventory::log(3, "Could not close the CSV file '$pciCsv': $!");
+    return 1;
+  }
+
   return 1;
 }
 
@@ -557,8 +615,6 @@ sub savePerfData {
     return 0;
   }
 
-# if( ref($perfData) ne 'PerfEntityMetricCSV'
-#  && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV')
   if( ref($perfDataArray) ne 'ARRAY') {
     OInventory::log(3, "savePerfData: Got unexpected '" . ref($perfDataArray)
                      . "' instead of ARRAY of PerfEntityMetricCSV");
@@ -2032,6 +2088,7 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTime) . " s");
 
     $timeBefore=Time::HiRes::time;
+
     if(! savePerfData($perfData)) {
       OInventory::log(3, "Errors getting latest performance from "
                        . ref($aEntity) . " with mo_ref '"
@@ -2057,36 +2114,6 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTimeB) . " s");
 
   return 1;
-}
-
-
-#
-# Gets performance metrics for a VM
-#
-# @param OVirtualMachine object
-# @return 1 ok, 0 errors
-#
-sub getVmPerfs {
-  return 1;
-}
-
-
-#
-# Gets performance metrics for a Host
-#
-# @param OHost object
-# @return 1 ok, 0 errors
-#
-sub getHostPerfs {
-  return 1;
-}
-
-
-sub saveVmPerf {
-}
-
-
-sub saveHostPerf {
 }
 
 1;
