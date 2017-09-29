@@ -16,7 +16,7 @@ It's in an initial development stage but its goals are:
 * Extract performance metrics:
     * (done! v0.2) Extract realtime performance metrics of hosts, clusters and VMs
     * (done! v0.2) Store them on plain CSV files
-    * (done! v0.3) Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
+    * (done! v0.3 & v0.4) Housekeep them in a RRDB style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
 * Show performance graphics:
     * Offer a simple Web UI to allow have graphs for custom intervals on-demand.
 * Report alarms based on thresholds
@@ -31,6 +31,29 @@ It's in an initial development stage but its goals are:
 * http://www.virtuallyghetto.com/2011/11/when-do-vsphere-morefs-change.html
 
 # Installation
+
+## vCenter Perl SDK API
+https://code.vmware.com/web/sdk/65/vsphere-perl
+
+## Packages for ovom core
+
+A basic perl installation (perl perl-base perl-modules). Just as an example, here's the list of packages to which belong all the files that were open by a run of picker.pl, as shown by strace:
+```
+$ sudo apt-get install base-files language-pack-es-base libc6:amd64 libdbd-mysql-perl libdbi-perl libgcc1:amd64 libhttp-cookies-perl libhttp-date-perl libhttp-message-perl libicu55:amd64 libio-socket-ssl-perl liblzma5:amd64 libmath-derivative-perl libmath-spline-perl libmysqlclient20:amd64 libnet-http-perl libnet-ssleay-perl libnss-mdns:amd64 libssl1.0.0:amd64 libstdc++6:amd64 liburi-perl libwww-perl libxml2:amd64 libxml-libxml-perl libxml-sax-base-perl mysql-server-core netbase openssl zlib1g:amd64
+```
+
+## Packages for ovom web interface
+```
+$ sudo apt-get install apache2 libcgi-session-perl
+```
+
+## Configuration for ovom web interface
+```
+$ sudo a2enmod cgi
+$ sudo cp extra/100-owebui /etc/apache2/sites-available/100-owebui.conf
+$ sudo a2ensite 100-owebui
+$ sudo service apache2 restart
+```
 
 ## User
 
@@ -88,6 +111,7 @@ $ mysql -u root       -prootpassword ovomdb < db/deletedb.sql
 ```
 
 # Execution
+(probably it's more elegant to set those env vars in script to be sourced before calling picker.pl)
 
 ```
 $ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
