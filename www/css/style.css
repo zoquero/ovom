@@ -1,0 +1,44 @@
+html {
+  text-align: center;
+  font-family: Arial;
+}
+
+table,tr,td {
+  border-collapse: collapse;
+  border: 0px solid #aaaaaa;
+  cellspacing: 1;
+  cellpadding: 1;
+  margin:  2px;
+  padding: 2px 2px;
+  vertical-align:middle;
+  margin-left: auto;
+  margin-right: auto;
+}
+form {
+  display:inline;
+}
+a {
+  text-decoration: none;
+}
+#Prova td,th {
+  background-color: #101010;
+}
+
+tr:nth-child(even) {background-color: #eaeaea}
+tr:nth-child(odd)  {background-color: #f4f4f4}
+tr:hover           {background-color: #f8f8f8} 
+th                 {background-color: #66b2ff} 
+
+input[type=text],textarea {
+  width: 100%;
+  padding: 4px 4px;
+  margin: 4px 0;
+  box-sizing: border-box;
+  border: 1px solid #555;
+  outline: none;
+  background-color: #F5F5E5;
+}
+
+input[type=text]:focus,textarea:focus {
+  background-color: #F5F5B5;
+}

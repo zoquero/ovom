@@ -5,34 +5,50 @@ use strict;
 use CGI;
 use CGI::Carp qw/fatalsToBrowser warningsToBrowser/;
 use CGI::Session ( '-ip_match' );
+use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, '..', '.');
+# Our own libs:
+use OInventory;
+use OWwwLibs;
 
-my $q = new CGI;
-my $usr = $q->param('usr');
-my $pwd = $q->param('pwd');
+#
+# Read configuration
+#
+if( ! OInventory::readConfiguration() ) {
+  die "Could not read configuration";
+}
+
+my $adminUsername = $OInventory::configuration{'auth.admin.username'};
+my $adminPassword = $OInventory::configuration{'auth.admin.password'};
+
+my $cgiObject = new CGI;
+my $username = $cgiObject->param('username');
+my $password = $cgiObject->param('password');
 my $session;
 
-if($usr ne '') {
+if($username ne '') {
   # process the form
-  if($usr eq "demo" and $pwd eq "demo") {
+  if($username eq $adminUsername and $password eq $adminPassword) {
     $session = new CGI::Session();
     print $session->header(-location=>'index.pl');
   }
   else {
-    print $q->header(-type=>"text/html",-location=>"login.pl");
+    print $cgiObject->header(-type=>"text/html",-location=>"login.pl");
   }
 }
-elsif($q->param('action') eq 'logout') {
+elsif($cgiObject->param('action') eq 'logout') {
   $session = CGI::Session->load() or die CGI::Session->errstr;
   $session->delete();
   print $session->header(-location=>'login.pl');
 }
 else {
-  print $q->header;
-  print <<'HTML';
-    <form method="post">
-      Username: <input type="text"     name="usr"><br/>
-      Password: <input type="password" name="pwd"><br/>
-      <input type="submit" value="Authenticate"><br/>
-    </form>
-HTML
+  OWwwLibs::respondAuthForm($cgiObject);
+##   print $cgiObject->header;
+##   print <<'HTML';
+##     <form method="post">
+##       Username: <input type="text"     name="usr"><br/>
+##       Password: <input type="password" name="pwd"><br/>
+##       <input type="submit" value="Authenticate"><br/>
+##     </form>
+## HTML
 }

@@ -1,0 +1,39 @@
+<html>
+  <head>
+<tmpl_var name=HEAD>
+  </head>
+  <body>
+    <h1> <tmpl_var name=APP_TITLE> </h1>
+
+    <form method="post">
+      <table align='center' border=1>
+  
+        <tr>
+          <td>
+            <p>Username: </p>
+          </td>
+          <td>
+            <input type="text" name="username">
+          </td>
+        </tr>
+  
+        <tr>
+          <td>
+            <p>Password: </p>
+          </td>
+          <td>
+            <input type="password" name="password">
+          </td>
+        </tr>
+  
+        <tr>
+          <td colspan="2">
+            <input type="submit" value="Authenticate">
+          </td>
+        </tr>
+  
+      </table>
+    </form>
+
+  </body>
+</html>
