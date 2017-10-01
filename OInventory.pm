@@ -1263,7 +1263,7 @@ sub pickerStop {
 # @return 1 (ok) | 0 (errors)
 #
 sub readConfiguration {
-  my $confFile = dirname(abs_path($0)) . '/ovom.conf';
+  my $confFile = dirname(abs_path(__FILE__)) . '/ovom.conf';
   if(! open(CONFIG, '<:encoding(UTF-8)', $confFile)) {
     warn "Can't read the configuration file $confFile: $!";
     return 0;
