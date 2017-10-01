@@ -18,8 +18,8 @@ if( ! OInventory::readConfiguration() ) {
   die "Could not read configuration";
 }
 
-my $adminUsername = $OInventory::configuration{'auth.admin.username'};
-my $adminPassword = $OInventory::configuration{'auth.admin.password'};
+my $adminUsername = $OInventory::configuration{'web.auth.admin.username'};
+my $adminPassword = $OInventory::configuration{'web.auth.admin.password'};
 
 my $cgiObject = new CGI;
 my $username = $cgiObject->param('username');
@@ -29,6 +29,7 @@ my $session;
 if($username ne '') {
   if($username eq $adminUsername and $password eq $adminPassword) {
     $session = new CGI::Session();
+    $session->expire($OInventory::configuration{'web.session.timeoutSecs'});
     print $session->header(-location=>'index.pl');
   }
   else {

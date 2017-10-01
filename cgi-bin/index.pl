@@ -13,6 +13,10 @@ use lib File::Spec->catdir($FindBin::Bin, '..', '.');
 use OInventory;
 use OWwwLibs;
 
+###############################################################################
+#######                              Main                                 #####
+###############################################################################
+
 #
 # Read configuration
 #
@@ -30,6 +34,15 @@ elsif($session->is_empty) {
   OWwwLibs::respondSessionNotInitiated($cgiObject);
 }
 else {
-  OWwwLibs::respondContent($cgiObject);
+  $session->expire($OInventory::configuration{'web.session.timeoutSecs'});
+  my $actionId = $cgiObject->url_param('actionId');
+  if(! defined($actionId) || $actionId eq '' || $actionId == $OWwwLibs::ACTION_ID_MENU_ENTRY) {
+#   OWwwLibs::respondContent($cgiObject, "Will be left content", "will be right content");
+    my $menuEntryId = $cgiObject->url_param('menuEntryId');
+    OWwwLibs::respondShowNavEntry($cgiObject, $menuEntryId);
+  }
+  else {
+    OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");
+  }
 }
 exit(0);
