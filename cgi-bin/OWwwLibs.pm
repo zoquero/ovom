@@ -4,6 +4,9 @@ use warnings;
 use Carp;
 use HTML::Template;
 
+#
+# Return a string with the HTML HEAD contents
+#
 sub getHead {
   my $appTitle = $OInventory::configuration{'app.title'};
   my $h = <<"_HEAD_END_";
@@ -20,6 +23,18 @@ _HEAD_END_
 }
 
 #
+# Return a string with the footer, previous to the end of the body
+#
+sub getFooter {
+  my $appName = $OInventory::configuration{'app.name'};
+  my $appSite = $OInventory::configuration{'app.site'};
+  my $h = <<"_FOOTER_";
+<p class="ofooter" align="center">Powered by $appName: <a href="$appSite" target="_blank">$appSite</a></p>
+_FOOTER_
+  return $h;
+}
+
+#
 # Return an HTTP response showing that the session is expired
 #
 sub respondSessionExpired {
@@ -28,8 +43,9 @@ sub respondSessionExpired {
 
   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
   my $template = HTML::Template->new(filename => 'templates/session.expired.tmpl'); 
-  $template->param(HEAD => getHead() ); 
+  $template->param(HEAD      => getHead() ); 
   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
   print $template->output();
 }
 
@@ -44,6 +60,7 @@ sub respondSessionNotInitiated {
   my $template = HTML::Template->new(filename => 'templates/session.not_initiated.tmpl'); 
   $template->param(HEAD      => getHead() ); 
   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
   print $template->output();
 }
 
@@ -56,8 +73,9 @@ sub respondAuthForm {
 
   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
   my $template = HTML::Template->new(filename => 'templates/auth.form.tmpl'); 
-  $template->param(HEAD => getHead() ); 
+  $template->param(HEAD      => getHead() ); 
   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
   print $template->output();
 }
 
@@ -70,8 +88,9 @@ sub respondContent {
 
   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
   my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
-  $template->param(HEAD => getHead() ); 
+  $template->param(HEAD      => getHead() ); 
   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
   print $template->output();
 }
 

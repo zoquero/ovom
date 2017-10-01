@@ -27,7 +27,6 @@ my $password = $cgiObject->param('password');
 my $session;
 
 if($username ne '') {
-  # process the form
   if($username eq $adminUsername and $password eq $adminPassword) {
     $session = new CGI::Session();
     print $session->header(-location=>'index.pl');
@@ -43,12 +42,4 @@ elsif($cgiObject->param('action') eq 'logout') {
 }
 else {
   OWwwLibs::respondAuthForm($cgiObject);
-##   print $cgiObject->header;
-##   print <<'HTML';
-##     <form method="post">
-##       Username: <input type="text"     name="usr"><br/>
-##       Password: <input type="password" name="pwd"><br/>
-##       <input type="submit" value="Authenticate"><br/>
-##     </form>
-## HTML
 }
