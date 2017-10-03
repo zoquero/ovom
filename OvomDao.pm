@@ -351,8 +351,12 @@ sub transactionRollback {
 #
 # Get all entities of a type from DB.
 #
+# @arg entityType (Folder | Datacenter | ClusterComputeResource
+#                         | HostSystem | VirtualMachine | PerfCounterInfo)
 # @return undef (if errors),
 #         or a reference to array of references to entity objects (if ok)
+#         : objects OFolder | ODatacenter | OCluster | OHost
+#                           | OVirtualMachine | OPerfCounterInfo
 #
 sub getAllEntitiesOfType {
   my $entityType = shift;

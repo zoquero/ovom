@@ -64,6 +64,14 @@ $ sudo a2ensite 100-owebui
 $ sudo service apache2 restart
 ```
 
+## Folders
+
+PENDING! we'll list here the folders to be created
+
+```
+$ sudo setfacl -m user:www-data:rw- /var/log/ovom/
+```
+
 ## User
 
 ```

@@ -1066,41 +1066,50 @@ sub createFoldersIfNeeded {
 # @return 1 (ok) | 0 (errors)
 #
 sub openLogFiles {
+  my $logMainFilename;
+  my $logErrorFilename;
+  if(defined($OInventory::ovomGlobals{'isWeb'}) && $OInventory::ovomGlobals{'isWeb'} == 1) {
+    $logMainFilename  = $OInventory::configuration{'web.log.main.filename'};
+    $logErrorFilename = $OInventory::configuration{'web.log.error.filename'};
+  }
+  else {
+    $logMainFilename  = $OInventory::configuration{'log.main.filename'};
+    $logErrorFilename = $OInventory::configuration{'log.error.filename'};
+  }
+
   #
   # Regular log
   #
-  if( ! defined($OInventory::ovomGlobals{'pickerMainLogFile'})) {
-    $OInventory::ovomGlobals{'pickerMainLogFile'} =
+  if( ! defined($OInventory::ovomGlobals{'mainLogFile'})) {
+    $OInventory::ovomGlobals{'mainLogFile'} =
       $OInventory::configuration{'log.folder'}
-      . "/"
-      . $OInventory::configuration{'log.main.filename'};
+      . "/" . $logMainFilename;
   }
-  if(! open($OInventory::ovomGlobals{'pickerMainLogHandle'},
+  if(! open($OInventory::ovomGlobals{'mainLogHandle'},
             ">>:utf8",
-            $OInventory::ovomGlobals{'pickerMainLogFile'})) {
-    warn "Could not open picker main log file '"
-         . $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+            $OInventory::ovomGlobals{'mainLogFile'})) {
+    warn "Could not open main log file '"
+         . $OInventory::ovomGlobals{'mainLogFile'} . "': $!";
     return 0;
   }
-  $OInventory::ovomGlobals{'pickerMainLogHandle'}->autoflush;
+  $OInventory::ovomGlobals{'mainLogHandle'}->autoflush;
 
   #
   # Error log
   #
-  if(! defined($OInventory::ovomGlobals{'pickerErrorLogFile'})) {
-    $OInventory::ovomGlobals{'pickerErrorLogFile'} =
+  if(! defined($OInventory::ovomGlobals{'errorLogFile'})) {
+    $OInventory::ovomGlobals{'errorLogFile'} =
       $OInventory::configuration{'log.folder'}
-      . "/"
-      . $OInventory::configuration{'log.error.filename'};
+      . "/" . $logErrorFilename;
   }
-  if(! open($OInventory::ovomGlobals{'pickerErrorLogHandle'},
+  if(! open($OInventory::ovomGlobals{'errorLogHandle'},
             ">>:utf8",
-            $OInventory::ovomGlobals{'pickerErrorLogFile'})) {
-    warn "Could not open picker error log file '"
-         . $OInventory::ovomGlobals{'pickerErrorLogHandle'} . "': $!";
+            $OInventory::ovomGlobals{'errorLogFile'})) {
+    warn "Could not open error log file '"
+         . $OInventory::ovomGlobals{'errorLogHandle'} . "': $!";
     return 0;
   }
-  $OInventory::ovomGlobals{'pickerErrorLogHandle'}->autoflush;
+  $OInventory::ovomGlobals{'errorLogHandle'}->autoflush;
   return 1;
 }
 
@@ -1186,21 +1195,47 @@ sub pickerInit {
 }
 
 #
+# Read configuration and initialize log for web user interface
+#
+# @return 1 (ok) | 0 (errors) (now dies)
+#
+sub webuiInit {
+  $OInventory::ovomGlobals{'isWeb'} = 1;
+
+  #
+  # Read configuration
+  #
+  if( ! readConfiguration() ) {
+    die "Could not read configuration";
+  }
+
+  #
+  # Open log files
+  #
+  if(! openLogFiles()) {
+    die "Could not open log files";
+  }
+
+  OInventory::log(0, "Init: Configuration read and log handlers open");
+  return 1;
+}
+
+#
 # Close log files
 #
 # @return 1 (ok) | 0 (errors)
 #
 sub closeLogFiles {
   my $e = 0;
-  if(! close($OInventory::ovomGlobals{'pickerMainLogHandle'})) {
+  if(! close($OInventory::ovomGlobals{'mainLogHandle'})) {
     warn "Could not close picker main log file '"
-         . $OInventory::ovomGlobals{'pickerMainLogFile'} . "': $!";
+         . $OInventory::ovomGlobals{'mainLogFile'} . "': $!";
     $e++;
   }
 
-  if(! close($OInventory::ovomGlobals{'pickerErrorLogHandle'})) {
+  if(! close($OInventory::ovomGlobals{'errorLogHandle'})) {
     warn "Could not close picker error log file '"
-         . $OInventory::ovomGlobals{'pickerErrorLogFile'} . "': $!";
+         . $OInventory::ovomGlobals{'errorLogFile'} . "': $!";
     $e++;
   }
 
@@ -1256,6 +1291,18 @@ sub pickerStop {
 }
 
 
+#
+# Close log file descriptors for Web User Interface
+#
+# @return 1 (ok) | 0 (errors) (now dies)
+#
+sub webuiStop {
+  OInventory::log(0, "Closing log files for Web UI request");
+  if(! closeLogFiles()) {
+    die "Could not close log files";
+  }
+  return 1;
+}
 
 #
 # Close connections to vCenter and DB and close log file descriptors
@@ -1293,8 +1340,19 @@ sub readConfiguration {
 # @return 1 (ok) | 0 (errors)
 #
 sub rotateLogFiles {
+  my $logMainFilename;
+  my $logErrorFilename;
+  if(defined($OInventory::ovomGlobals{'isWeb'}) && $OInventory::ovomGlobals{'isWeb'} == 1) {
+    $logMainFilename  = $OInventory::configuration{'web.log.main.filename'};
+    $logErrorFilename = $OInventory::configuration{'web.log.error.filename'};
+  }
+  else {
+    $logMainFilename  = $OInventory::configuration{'log.main.filename'};
+    $logErrorFilename = $OInventory::configuration{'log.error.filename'};
+  }
+
   # Main log
-  my($mlf) = $OInventory::configuration{'log.main.filename'};
+  my($mlf) = $logMainFilename;
   my($clf) = $OInventory::configuration{'log.folder'} . "/$mlf";
   my($maxMainLogSizeBytes)
     = $OInventory::configuration{'log.main.maxSizeBytes'};
@@ -1305,7 +1363,7 @@ sub rotateLogFiles {
   }
 
   # Error log
-  my($elf)  = $OInventory::configuration{'log.error.filename'};
+  my($elf)  = $logErrorFilename;
   my($celf) = $OInventory::configuration{'log.folder'} . "/$elf";
   my($maxErrLogSizeBytes)
     = $OInventory::configuration{'log.error.maxSizeBytes'};
@@ -1398,19 +1456,19 @@ sub log ($$) {
   my $duplicate = 0;
   if($logLevel == 3) {
     # Error !
-    $logHandle = $OInventory::ovomGlobals{'pickerErrorLogHandle'};
+    $logHandle = $OInventory::ovomGlobals{'errorLogHandle'};
     if($OInventory::configuration{'log.duplicateErrors'}) {
       $duplicate = 1;
     }
   }
   else {
     # Main log
-    $logHandle = $OInventory::ovomGlobals{'pickerMainLogHandle'};
+    $logHandle = $OInventory::ovomGlobals{'mainLogHandle'};
   }
   print $logHandle "${nowStr}Z: [$crit] $msg\n";
 
   if($duplicate) {
-    $logHandle = $OInventory::ovomGlobals{'pickerMainLogHandle'};
+    $logHandle = $OInventory::ovomGlobals{'mainLogHandle'};
     print $logHandle "${nowStr}Z: [$crit] $msg\n";
   }
 }

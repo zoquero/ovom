@@ -7,8 +7,8 @@ use HTML::Template;
 #
 # Available action ids:
 #
-use constant ACTION_ID_MENU_ENTRY         => 0;
-use constant ACTION_ID_ON_MANAGED_OBJECT  => 1;
+our $ACTION_ID_MENU_ENTRY        = 0;
+our $ACTION_ID_ON_MANAGED_OBJECT = 1;
 
 #
 # Navigation entries tree:
@@ -18,7 +18,7 @@ my $neMain =
     'id'      => 0,
     'display' => 'Main menu',
     'parent'  => '',
-    'childs'  => [ 1, 2, 3],
+    'childs'  => [1, 2, 3],
     'method'  => undef,
   };
 my $neInventory =
@@ -26,8 +26,9 @@ my $neInventory =
     'id'      => 1,
     'display' => 'Inventory',
     'parent'  => 0,
-    'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowInventory
+    'childs'  => [4, 5, 6, 7],
+#   'method'  => \&OWwwLibs::respondShowInventory
+    'method'  => undef
   };
 my $neAlerts =
   {
@@ -45,6 +46,39 @@ my $neAbout =
     'childs'  => undef,
     'method'  => \&OWwwLibs::respondShowAbout
   };
+my $neAllFolders =
+  {
+    'id'      => 4,
+    'display' => 'All folders',
+    'parent'  => 1,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::respondShowInventory
+  };
+my $neAllDatacenters =
+  {
+    'id'      => 5,
+    'display' => 'All datacenters',
+    'parent'  => 1,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::respondShowInventory
+  };
+
+my $neAllVMs =
+  {
+    'id'      => 6,
+    'display' => 'All virtual machines',
+    'parent'  => 1,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::respondShowInventory
+  };
+my $neAllHosts =
+  {
+    'id'      => 7,
+    'display' => 'All hosts',
+    'parent'  => 1,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::respondShowInventory
+  };
 
 my $navEntries =
   {
@@ -52,6 +86,10 @@ my $navEntries =
     1 => $neInventory,
     2 => $neAlerts,
     3 => $neAbout,
+    4 => $neAllFolders,
+    5 => $neAllDatacenters,
+    6 => $neAllVMs,
+    7 => $neAllHosts,
   };
 
 #
@@ -104,7 +142,7 @@ sub getLinkToMenuEntry {
   if (!defined $$navEntries{$menuEntryId}) {
     return '';
   }
-  return "<a href='?actionId=" . ACTION_ID_MENU_ENTRY . "&menuEntryId=$menuEntryId'>" . $$navEntries{$menuEntryId}{'display'} . "</a>";
+  return "<a href='?actionId=" . $ACTION_ID_MENU_ENTRY . "&menuEntryId=$menuEntryId'>" . $$navEntries{$menuEntryId}{'display'} . "</a>";
 }
  
 #
@@ -139,12 +177,11 @@ sub respondShowNavEntry {
   }
   if(defined($siblings) && $#$siblings > -1) {
     $menuBody .= "<ul>\n";
-#   $menuBody .= "<li><b>" . $$attributes{'display'} . "</b></li>\n";
     foreach my $aSibling (sort @$siblings) {
       $menuBody .= "<b>"  if($aSibling == $id);
       $menuBody .= "<li>" . getLinkToMenuEntry($aSibling);
       if($aSibling == $id) {
-        $menuBody .= "</b> &ngt;</li>\n";
+        $menuBody .= "</b> &gt;</li>\n";
       }
       else {
         $menuBody .= "</li>\n";
@@ -169,7 +206,6 @@ sub respondShowNavEntry {
       }
       $contentsBody .= "</ul>\n";
     }
-
   }
   respondContent($cgiObject, $menuBody, $contentsBody);
 }
@@ -197,11 +233,46 @@ sub triggerError {
 #
 # Show the inventory
 #
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
 sub respondShowInventory {
   my $cgiObject    = shift;
+  my $retval = 0;
+  my $output = '';
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
 
-  return "Here we'll show the inventory body using the DAO of ovom core";
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $output .= "Can't connect to DataBase. ";
+    $retval  = 0;
+    goto _SHOW_INVENTORY_END_;
+  }
+
+  my $folders = OvomDao::getAllEntitiesOfType('Folder');
+  if(! defined($folders)) {
+    $output .= "There were errors trying to get the list of folders. ";
+    $retval  = 0;
+    goto _SHOW_INVENTORY_DISCONNECT_;
+  }
+
+  _SHOW_INVENTORY_DISCONNECT_:
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $output .= "Cannot disconnect from DataBase. ";
+    $retval  = 0;
+  }
+
+  $output .= "Folders: " . $#$folders;
+  $retval  = 1;
+
+  _SHOW_INVENTORY_END_:
+  return { retval => $retval, output => $output };
 }
 
 #

@@ -20,8 +20,8 @@ use OWwwLibs;
 #
 # Read configuration
 #
-if( ! OInventory::readConfiguration() ) {
-  die "Could not read configuration";
+if( ! OInventory::webuiInit() ) {
+  die "Could not read configuration and open log files";
 }
 
 my $session   = CGI::Session->load();
@@ -37,9 +37,12 @@ else {
   $session->expire($OInventory::configuration{'web.session.timeoutSecs'});
   my $actionId = $cgiObject->url_param('actionId');
   if(! defined($actionId) || $actionId eq '' || $actionId == $OWwwLibs::ACTION_ID_MENU_ENTRY) {
-#   OWwwLibs::respondContent($cgiObject, "Will be left content", "will be right content");
     my $menuEntryId = $cgiObject->url_param('menuEntryId');
     OWwwLibs::respondShowNavEntry($cgiObject, $menuEntryId);
+  }
+  elsif($actionId == $OWwwLibs::ACTION_ID_ON_MANAGED_OBJECT) {
+    OWwwLibs::triggerError($cgiObject, "Still not implemented");
+#   OWwwLibs::respondShowInventory($cgiObject);
   }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");
