@@ -96,7 +96,10 @@ $ sudo chown -R ovom:ovom "$OVOM_BASE"
 ## vCenter access
 By now it just needs inventory access. A role like *Read-only* would be more than enough. In future releases it may need permissions for vMotion and Storage vMotion.
 
-Just set the credentials in the environment variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+Copy **`extra/secrets.conf.sample`** in to **`secrets.conf`** and set the credentials in its variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+```
+$ cp extra/secrets.conf.sample secrets.conf
+```
 
 ## Database
 
@@ -106,7 +109,7 @@ You can use *root* MySQL user to create the database and tables and use a new de
 
 Configuration steps regarding database:
 
-* Set the credentials for that new mysql user in the environment variables **`OVOM_DB_USERNAME`** and **`OVOM_DB_PASSWORD`**
+* Set the credentials for that new mysql user in the variables **`OVOM_DB_USERNAME`** and **`OVOM_DB_PASSWORD`** of the previously created file **`secrets.conf`**
 
 * Set the database configuration in the file **`ovom.conf`**:
     * **`db.hostname`**
@@ -128,19 +131,12 @@ $ mysql -u root       -prootpassword ovomdb < db/deletedb.sql
 ```
 
 # Execution
-(probably it's more elegant to set those env vars in script to be sourced before calling picker.pl)
 
 ```
-$ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
-              OVOM_DB_PASSWORD=ovomdbpass  \
-              OVOM_VC_USERNAME=vcenteruser \
-              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\""
+$ su ovom -c "\"$OVOM_BASE/picker.pl\""
 ```
 
 To just run a loop:
 ```
-$ su ovom -c "OVOM_DB_USERNAME=ovomdbuser  \
-              OVOM_DB_PASSWORD=ovomdbpass  \
-              OVOM_VC_USERNAME=vcenteruser \
-              OVOM_VC_PASSWORD=vcenterpass \"$OVOM_BASE/picker.pl\" --once"
+$ su ovom -c "\"$OVOM_BASE/picker.pl\" --once"
 ```

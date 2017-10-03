@@ -36,7 +36,8 @@ elsif($session->is_empty) {
 else {
   $session->expire($OInventory::configuration{'web.session.timeoutSecs'});
   my $actionId = $cgiObject->url_param('actionId');
-  if(! defined($actionId) || $actionId eq '' || $actionId == $OWwwLibs::ACTION_ID_MENU_ENTRY) {
+  if(! defined($actionId) || $actionId eq ''
+            || $actionId == $OWwwLibs::ACTION_ID_MENU_ENTRY) {
     my $menuEntryId = $cgiObject->url_param('menuEntryId');
     OWwwLibs::respondShowNavEntry($cgiObject, $menuEntryId);
   }

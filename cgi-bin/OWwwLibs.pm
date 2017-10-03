@@ -27,7 +27,6 @@ my $neInventory =
     'display' => 'Inventory',
     'parent'  => 0,
     'childs'  => [4, 5, 6, 7],
-#   'method'  => \&OWwwLibs::respondShowInventory
     'method'  => undef
   };
 my $neAlerts =
@@ -52,7 +51,7 @@ my $neAllFolders =
     'display' => 'All folders',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowInventory
+    'method'  => \&OWwwLibs::respondShowFolders
   };
 my $neAllDatacenters =
   {
@@ -60,7 +59,7 @@ my $neAllDatacenters =
     'display' => 'All datacenters',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowInventory
+    'method'  => \&OWwwLibs::respondShowFolders
   };
 
 my $neAllVMs =
@@ -69,7 +68,7 @@ my $neAllVMs =
     'display' => 'All virtual machines',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowInventory
+    'method'  => \&OWwwLibs::respondShowFolders
   };
 my $neAllHosts =
   {
@@ -77,7 +76,7 @@ my $neAllHosts =
     'display' => 'All hosts',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowInventory
+    'method'  => \&OWwwLibs::respondShowFolders
   };
 
 my $navEntries =
@@ -191,7 +190,15 @@ sub respondShowNavEntry {
   }
   if(defined($$attributes{'method'})
      &&  ref($$attributes{'method'}) eq 'CODE') {
-    $contentsBody = $$attributes{'method'}->($cgiObject);
+    my $r = $$attributes{'method'}->($cgiObject);
+    if( ${$r}{retval} ) {
+      $contentsBody = ${$r}{output};
+    }
+    else {
+      triggerError($cgiObject, "respondShowNavEntry: Errors running method for "
+                             . "the navigation entry with $id");
+      return;
+    }
   }
   else {
     my $childIds = getChildNavEntries($id);
@@ -237,7 +244,7 @@ sub triggerError {
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub respondShowInventory {
+sub respondShowFolders {
   my $cgiObject    = shift;
   my $retval = 0;
   my $output = '';
@@ -268,7 +275,13 @@ sub respondShowInventory {
     $retval  = 0;
   }
 
-  $output .= "Folders: " . $#$folders;
+  $output .= $#$folders . " folders:<br/>\n";
+  $output .= "<ul>\n";
+  foreach my $aFolder (@$folders) {
+    $output .= "<li>" . $aFolder->{name} . "</li>\n";
+  }
+  $output .= "</ul>\n";
+
   $retval  = 1;
 
   _SHOW_INVENTORY_END_:
@@ -278,15 +291,24 @@ sub respondShowInventory {
 #
 # Show the alerts
 #
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
 sub respondShowAlerts {
   my $cgiObject    = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
-
-  return "Here we'll show the alerts body using the DAO of ovom core and the perfData files";
+  my $retval = 1;
+  my $output = "Here we'll show the alerts body using the DAO of ovom core and the perfData files";
+  return { retval => $retval, output => $output };
 }
 
 #
 # Show the 'about' entry
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
 #
 sub respondShowAbout {
   my $cgiObject    = shift;
@@ -294,7 +316,7 @@ sub respondShowAbout {
   my $appName  = $OInventory::configuration{'app.name'};
   my $appTitle = $OInventory::configuration{'app.title'};
   my $appSite  = $OInventory::configuration{'app.site'};
-
+  my $retval = 1;
   my $t = <<"_ABOUT_";
 
 <p><b>$appTitle</b> (<b>$appName</b>) is a free software tool<br/>
@@ -302,10 +324,8 @@ to facilitate some tasks of vSphere administrators.<br/>
 The software and its documentation can be found<br/>
 at <a href='$appSite' target='_blank'>$appSite</a></p>
 _ABOUT_
-  return $t;
 
-
-
+  return { retval => $retval, output => $t };
 }
 
 #
@@ -386,6 +406,7 @@ sub respondAuthForm {
 
 #
 # Return an HTTP response showing the content
+# based on a the template with a table.
 #
 sub respondContent {
   my $cgiObject        = shift;

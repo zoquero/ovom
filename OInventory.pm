@@ -1310,6 +1310,9 @@ sub webuiStop {
 # @return 1 (ok) | 0 (errors)
 #
 sub readConfiguration {
+  #
+  # Read regular configuration file
+  #
   my $confFile = dirname(abs_path(__FILE__)) . '/ovom.conf';
   if(! open(CONFIG, '<:encoding(UTF-8)', $confFile)) {
     warn "Can't read the configuration file $confFile: $!";
@@ -1328,6 +1331,38 @@ sub readConfiguration {
     warn "Can't close the configuration file $confFile: $!";
     return 0;
   }
+
+  #
+  # Read secrets file
+  # If it exists, we will just take the variables regarding autentification
+  # and export them as environment vars
+  #
+  $confFile = dirname(abs_path(__FILE__)) . '/secrets.conf';
+  if( -f $confFile ) {
+    if(! open(CONFIG, '<:encoding(UTF-8)', $confFile)) {
+      warn "Can't read the configuration file $confFile: $!";
+      return 0;
+    }
+    while (my $line = <CONFIG>) {
+        chomp $line;                # no newline
+        $line =~s/#.*//;            # no comments
+        $line =~s/^\s+//;           # no leading white spaces
+        $line =~s/\s+$//;           # no trailing white spaces
+        next unless length($line);  # anything left?
+        my ($var, $value) = split(/\s*=\s*/, $line, 2);
+        if(   $var eq 'OVOM_DB_USERNAME' || $var eq 'OVOM_DB_PASSWORD'
+           || $var eq 'OVOM_VC_USERNAME' || $var eq 'OVOM_VC_PASSWORD') {
+          if(!defined($ENV{$var})) {
+            $ENV{$var} = $value;
+          }
+        }
+    } 
+    if( ! close(CONFIG) ) {
+      warn "Can't close the configuration file $confFile: $!";
+      return 0;
+    }
+  }
+
   return 1;
 }
 
