@@ -2,7 +2,6 @@ html {
   text-align: center;
   font-family: Arial;
 }
-
 table,tr,td {
   border-collapse: collapse;
   border: 0px solid #aaaaaa;
@@ -13,6 +12,7 @@ table,tr,td {
   vertical-align:middle;
   margin-left: auto;
   margin-right: auto;
+  vertical-align: top;
 }
 form {
   display:inline;
@@ -23,12 +23,10 @@ a {
 #Prova td,th {
   background-color: #101010;
 }
-
 tr:nth-child(even) {background-color: #eaeaea}
 tr:nth-child(odd)  {background-color: #f4f4f4}
 tr:hover           {background-color: #f8f8f8} 
 th                 {background-color: #66b2ff} 
-
 input[type=text],textarea {
   width: 100%;
   padding: 4px 4px;
@@ -38,11 +36,9 @@ input[type=text],textarea {
   outline: none;
   background-color: #F5F5E5;
 }
-
 input[type=text]:focus,textarea:focus {
   background-color: #F5F5B5;
 }
-
 p.ofooter {
   display:          inline;
   font-family:      Bookman Old Style;

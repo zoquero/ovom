@@ -35,7 +35,7 @@ my $neAlerts =
     'display' => 'Alerts',
     'parent'  => 0,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowAlerts
+    'method'  => \&OWwwLibs::getContentsForShowAlerts
   };
 my $neAbout =
   {
@@ -43,7 +43,7 @@ my $neAbout =
     'display' => 'About',
     'parent'  => 0,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowAbout
+    'method'  => \&OWwwLibs::getContentsForShowAbout
   };
 my $neAllFolders =
   {
@@ -51,7 +51,7 @@ my $neAllFolders =
     'display' => 'All folders',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowFolders
+    'method'  => \&OWwwLibs::getContentsForShowFolders
   };
 my $neAllDatacenters =
   {
@@ -59,7 +59,7 @@ my $neAllDatacenters =
     'display' => 'All datacenters',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowFolders
+    'method'  => \&OWwwLibs::getContentsForShowFolders
   };
 
 my $neAllVMs =
@@ -68,7 +68,7 @@ my $neAllVMs =
     'display' => 'All virtual machines',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowFolders
+    'method'  => \&OWwwLibs::getContentsForShowFolders
   };
 my $neAllHosts =
   {
@@ -76,7 +76,7 @@ my $neAllHosts =
     'display' => 'All hosts',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::respondShowFolders
+    'method'  => \&OWwwLibs::getContentsForShowFolders
   };
 
 my $navEntries =
@@ -145,7 +145,8 @@ sub getLinkToMenuEntry {
 }
  
 #
-# Show a navigation entry
+# Shows a navigation entry.
+# It prints full HTTP response body, not just a canvas.
 #
 # @arg CGI object
 # @arg menu entry id
@@ -238,13 +239,13 @@ sub triggerError {
 }
 
 #
-# Show the inventory
+# Gets the string to show the contents for "All folders"
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub respondShowFolders {
+sub getContentsForShowFolders {
   my $cgiObject    = shift;
   my $retval = 0;
   my $output = '';
@@ -289,13 +290,13 @@ sub respondShowFolders {
 }
 
 #
-# Show the alerts
+# Gets the string to show the contents for "Alerts"
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub respondShowAlerts {
+sub getContentsForShowAlerts {
   my $cgiObject    = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   my $retval = 1;
@@ -304,13 +305,13 @@ sub respondShowAlerts {
 }
 
 #
-# Show the 'about' entry
+# Gets the string to show the contents for "About" menu entry
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub respondShowAbout {
+sub getContentsForShowAbout {
   my $cgiObject    = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   my $appName  = $OInventory::configuration{'app.name'};
@@ -360,7 +361,8 @@ _FOOTER_
 }
 
 #
-# Return an HTTP response showing that the session is expired
+# Return an HTTP response showing that the session is expired.
+# It prints full HTTP response body, not just a canvas.
 #
 sub respondSessionExpired {
   my $cgiObject = shift;
@@ -375,7 +377,8 @@ sub respondSessionExpired {
 }
 
 #
-# Return an HTTP response showing that the session has not been initiated
+# Return an HTTP response showing that the session has not been initiated.
+# It prints full HTTP response body, not just a canvas.
 #
 sub respondSessionNotInitiated {
   my $cgiObject = shift;
@@ -390,7 +393,8 @@ sub respondSessionNotInitiated {
 }
 
 #
-# Return an HTTP response showing the authentication form
+# Return an HTTP response showing the authentication form.
+# It prints full HTTP response body, not just a canvas.
 #
 sub respondAuthForm {
   my $cgiObject = shift;
@@ -407,6 +411,7 @@ sub respondAuthForm {
 #
 # Return an HTTP response showing the content
 # based on a the template with a table.
+# It prints full HTTP response body, not just a canvas.
 #
 sub respondContent {
   my $cgiObject        = shift;
