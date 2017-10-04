@@ -285,7 +285,7 @@ sub getContentsForShowAllFolders {
   $output .= $#$folders . " folders:<br/>\n";
   $output .= "<ul>\n";
   foreach my $aFolder (@$folders) {
-    $output .= getLinkToEntity($aFolder) . "\n";
+    $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
   }
   $output .= "</ul>\n";
 
@@ -294,7 +294,6 @@ sub getContentsForShowAllFolders {
   _SHOW_INVENTORY_END_:
   return { retval => $retval, output => $output };
 }
-
 
 #
 # Gets the string with a link to a managed object
@@ -306,10 +305,8 @@ sub getLinkToEntity {
   my $mObject = shift;
   my $type    = ref($mObject);
   die "Must get a object param" if(!defined($mObject));
-  return "<li><a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&moref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a></li>";
+  return "<a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&mo_ref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a>";
 }
-
-
 
 #
 # Gets the string to show the contents for "Alerts"
@@ -473,7 +470,7 @@ sub respondContent {
 #
 # @arg cgiObject
 # @arg Reference to hash of arguments with keys:
-#      * 'type'  : entity type
+#      * 'type'   : entity type
 #      * 'mo_ref' : entity's mo_ref
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
@@ -490,12 +487,46 @@ sub getContentsForEntity {
   my $type   = $args->{'type'};
   my $mo_ref = $args->{'mo_ref'};
 
-  my $retval = 1;
-  my $output = <<"_ENTITY_CONTENTS_";
+  my $retval;
+  my $output;
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $output .= "Can't connect to DataBase. ";
+    $retval  = 0;
+    goto _SHOW_ENTITIES_END_;
+  }
 
-<p>Here we'll show the contents for the entity of type $type and mo_ref $mo_ref</p>
-_ENTITY_CONTENTS_
+  if($type eq 'OFolder') {
+    my $entities = OvomDao::getChildEntitiesOfFolder($mo_ref);
+    if(! defined($entities)) {
+      $output .= "There were errors trying to get the list of entities. ";
+      $retval  = 0;
+      goto _SHOW_ENTITIES_DISCONNECT_;
+    }
+    $retval = 1;
+    $output  = "Sub-Folders: <br/>\n";
+    $output .= "<ul>";
+    foreach my $aFolder (@{$entities->{OFolder}}) {
+      $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+    }
+    $output .= "</ul>";
+  }
+  else {
+    $retval = 0;
+    $output = "<p>Now it's just implemented showing Folders. Job to do...</p>";
+  }
 
+  _SHOW_ENTITIES_DISCONNECT_:
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $output .= "Cannot disconnect from DataBase. ";
+    $retval  = 0;
+  }
+  _SHOW_ENTITIES_END_:
   return { retval => $retval, output => $output };
 }
 
@@ -537,20 +568,26 @@ _ENTITY_CONTENTS_
 sub respondShowEntity {
   my $cgiObject = shift;
   my $type      = shift;
-  my $moref     = shift;
+  my $mo_ref     = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   die "Must get a type param"       if(! defined($type));
-  die "Must get a moref param"      if(! defined($moref));
-  my $menuCanvas       = "menu per type $type i moref $moref";
-  my $contentsCanvas   = "contents per type $type i moref $moref";
+  die "Must get a mo_ref param"      if(! defined($mo_ref));
+  my $menuCanvasRet     = "menu per type $type i mo_ref $mo_ref";
+  my $contentsCanvasRet = getContentsForEntity($cgiObject, { type => $type, mo_ref => $mo_ref });
+
+  if(! $contentsCanvasRet->{retval}) {
+    triggerError($cgiObject, "Errors getting the entity: "
+                           . $contentsCanvasRet->{output});
+    return;
+  }
 
   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
   my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
   $template->param(HEAD      => getHead() ); 
   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
   $template->param(FOOTER    => getFooter() ); 
-  $template->param(NAVIGATION_CANVAS => $menuCanvas ); 
-  $template->param(CONTENTS_CANVAS   => $contentsCanvas ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+  $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
   print $template->output();
 }
 

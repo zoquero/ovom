@@ -42,9 +42,9 @@ else {
     OWwwLibs::respondShowNavEntry($cgiObject, $menuEntryId);
   }
   elsif($actionId == $OWwwLibs::ACTION_ID_ON_MANAGED_OBJECT) {
-    my $type        = $cgiObject->url_param('type');
-    my $moref       = $cgiObject->url_param('moref');
-    OWwwLibs::respondShowEntity($cgiObject, $type, $moref);
+    my $type   = $cgiObject->url_param('type');
+    my $mo_ref = $cgiObject->url_param('mo_ref');
+    OWwwLibs::respondShowEntity($cgiObject, $type, $mo_ref);
   }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");

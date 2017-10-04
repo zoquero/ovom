@@ -16,6 +16,10 @@ our $dbh;
 our $sqlFolderSelectAll       = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
+our $sqlFolderSelectAllChild  = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
+                              . 'FROM folder as a '
+                              . 'inner join folder as b where a.parent = b.id '
+                              . 'and b.mo_ref = ?';
 our $sqlFolderSelectByMoref   = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                               . 'FROM folder as a '
                               . 'inner join folder as b '
@@ -349,6 +353,116 @@ sub transactionRollback {
 
 
 #
+# Get all entities of a type from DB that are son of an entity.
+#
+# @arg entityType (Folder | Datacenter | ClusterComputeResource
+#                         | HostSystem | VirtualMachine | PerfCounterInfo)
+# @arg mo_ref of the parent folder
+# @return undef (if errors),
+#         or a reference to array of references to entity objects (if ok)
+#         : objects OFolder | ODatacenter | OCluster | OHost
+#                           | OVirtualMachine | OPerfCounterInfo
+#
+sub getAllChildEntitiesOfType {
+  my $entityType = shift;
+  my $mo_ref     = shift;
+  my @r = ();
+  my @data;
+
+  if(!defined($mo_ref) || $mo_ref eq '') {
+    Carp::croak("OvomDao.getAllChildEntitiesOfType needs a mo_ref as 2nd arg");
+    return undef;
+  }
+
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $stmt;
+  my $sthRes;
+  OInventory::log(0, "Getting entities of type $entityType son of $mo_ref");
+
+  if($entityType eq 'Folder') {
+    $stmt = $sqlFolderSelectAllChild;
+  }
+# elsif($entityType eq 'Datacenter') {
+#   $stmt = $sqlDatacenterSelectAllChild;
+# }
+# elsif($entityType eq 'ClusterComputeResource') {
+#   $stmt = $sqlClusterSelectAllChild;
+# }
+# elsif($entityType eq 'HostSystem') {
+#   $stmt = $sqlHostSelectAllChild;
+# }
+# elsif($entityType eq 'VirtualMachine') {
+#   $stmt = $sqlVirtualMachineSelectAllChild;
+# }
+# elsif($entityType eq 'PerfCounterInfo') {
+#   $stmt = $sqlPerfCounterInfoSelectAllChild;
+# }
+  else {
+    Carp::croak("Not implemented in OvomDao.getAllChildEntitiesOfType");
+    return undef;
+  }
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement to get ${entityType}s: "
+                     . "son of $mo_ref: (" . $dbh->err . ") :" . $dbh->errstr;
+    $sthRes = $sth->execute($mo_ref);
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get ${entityType}s "
+                  . "son of $mo_ref");
+      $sth->finish();
+      return undef;
+    }
+
+    while (@data = $sth->fetchrow_array()) {
+      my $e;
+      if($entityType eq 'Folder') {
+        $e = OFolder->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'Datacenter') {
+        $e = ODatacenter->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'ClusterComputeResource') {
+        $e = OCluster->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'HostSystem') {
+        $e = OHost->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'VirtualMachine') {
+        $e = OVirtualMachine->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'PerfCounterInfo') {
+        $e = OPerfCounterInfo->new(\@data);
+        push @r, $e;
+      }
+      else {
+        Carp::croak("Not implemented for $entityType "
+                  . "in OvomDao.getAllChildEntitiesOfType");
+        return undef;
+      }
+    }
+  };
+  if($@) {
+    OInventory::log(3, "Errors getting ${entityType}s from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: select child ${entityType}s took "
+                        . sprintf("%.3f", $eTime) . " s "
+                        . "and returned " . ($#r + 1) . " entities");
+  return \@r;
+}
+
+
+#
 # Get all entities of a type from DB.
 #
 # @arg entityType (Folder | Datacenter | ClusterComputeResource
@@ -447,6 +561,38 @@ sub getAllEntitiesOfType {
                         . "and returned " . ($#r + 1) . " entities");
   return \@r;
 }
+
+#
+# Get the child entities of certain folder 
+#
+# @arg folder mo_ref
+# @return undef (if errors),
+#         or a reference to a hash of arrays
+#         of references to entity objects (if ok)
+#         hash keys: OFolder | ODatacenter | OCluster | OHost | OVirtualMachine
+#
+sub getChildEntitiesOfFolder {
+  my $folderMoRef = shift;
+  my $r = {};
+  $r->{OFolder} = [];
+  my $p;
+
+  if(!defined($folderMoRef)) {
+    OInventory::log(3, "getChildEntitiesOfFolder needs a folder moRef");
+    return undef;
+  }
+
+  $p = getAllChildEntitiesOfType('Folder', $folderMoRef);
+  if(!defined($p)) {
+    OInventory::log(3, "getChildEntitiesOfFolder errors getting child folders");
+    return undef;
+  }
+  $r->{OFolder} = $p;
+
+  return $r;
+}
+
+
 
 #
 # Update an entity
