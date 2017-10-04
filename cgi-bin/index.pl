@@ -42,8 +42,9 @@ else {
     OWwwLibs::respondShowNavEntry($cgiObject, $menuEntryId);
   }
   elsif($actionId == $OWwwLibs::ACTION_ID_ON_MANAGED_OBJECT) {
-    OWwwLibs::triggerError($cgiObject, "Still not implemented");
-#   OWwwLibs::respondShowInventory($cgiObject);
+    my $type        = $cgiObject->url_param('type');
+    my $moref       = $cgiObject->url_param('moref');
+    OWwwLibs::respondShowEntity($cgiObject, $type, $moref);
   }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");

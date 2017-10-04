@@ -5,6 +5,13 @@ use Carp;
 use HTML::Template;
 
 #
+# Naming convention for the main methods:
+# * respond*        : These methods return the full HTTP Response
+# * getMenuFor*     : These methods return string for the left ("menu") canvas
+# * getContentsFor* : These methods return string for the right ("contents") canvas
+#
+
+#
 # Available action ids:
 #
 our $ACTION_ID_MENU_ENTRY        = 0;
@@ -51,7 +58,7 @@ my $neAllFolders =
     'display' => 'All folders',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForShowFolders
+    'method'  => \&OWwwLibs::getContentsForShowAllFolders
   };
 my $neAllDatacenters =
   {
@@ -59,7 +66,7 @@ my $neAllDatacenters =
     'display' => 'All datacenters',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForShowFolders
+    'method'  => \&OWwwLibs::getContentsForUnimplemented
   };
 
 my $neAllVMs =
@@ -68,7 +75,7 @@ my $neAllVMs =
     'display' => 'All virtual machines',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForShowFolders
+    'method'  => \&OWwwLibs::getContentsForUnimplemented
   };
 my $neAllHosts =
   {
@@ -76,7 +83,7 @@ my $neAllHosts =
     'display' => 'All hosts',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForShowFolders
+    'method'  => \&OWwwLibs::getContentsForUnimplemented
   };
 
 my $navEntries =
@@ -225,9 +232,7 @@ sub triggerError {
   my $cgiObject    = shift;
   my $errorMessage = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
-  if(! defined($errorMessage) ) {
-    $errorMessage = "Undefined error message";
-  }
+  $errorMessage = "Undefined error message" if(! defined($errorMessage));
 
   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
   my $template = HTML::Template->new(filename => 'templates/error.tmpl'); 
@@ -241,11 +246,12 @@ sub triggerError {
 #
 # Gets the string to show the contents for "All folders"
 #
+# @param cgiObject
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsForShowFolders {
+sub getContentsForShowAllFolders {
   my $cgiObject    = shift;
   my $retval = 0;
   my $output = '';
@@ -279,7 +285,7 @@ sub getContentsForShowFolders {
   $output .= $#$folders . " folders:<br/>\n";
   $output .= "<ul>\n";
   foreach my $aFolder (@$folders) {
-    $output .= "<li>" . $aFolder->{name} . "</li>\n";
+    $output .= getLinkToEntity($aFolder) . "\n";
   }
   $output .= "</ul>\n";
 
@@ -288,6 +294,22 @@ sub getContentsForShowFolders {
   _SHOW_INVENTORY_END_:
   return { retval => $retval, output => $output };
 }
+
+
+#
+# Gets the string with a link to a managed object
+#
+# @param reference to the managed object
+# @return String with the html anchor
+#
+sub getLinkToEntity {
+  my $mObject = shift;
+  my $type    = ref($mObject);
+  die "Must get a object param" if(!defined($mObject));
+  return "<li><a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&moref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a></li>";
+}
+
+
 
 #
 # Gets the string to show the contents for "Alerts"
@@ -301,6 +323,21 @@ sub getContentsForShowAlerts {
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   my $retval = 1;
   my $output = "Here we'll show the alerts body using the DAO of ovom core and the perfData files";
+  return { retval => $retval, output => $output };
+}
+
+#
+# Gets the string to show the contents for "Alerts"
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForUnimplemented {
+  my $cgiObject    = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $output = "This feature is still not implemented.";
+  my $retval = 1;
   return { retval => $retval, output => $output };
 }
 
@@ -427,6 +464,92 @@ sub respondContent {
   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
   $template->param(FOOTER    => getFooter() ); 
   $template->param(NAVIGATION_CANVAS => $navigationCanvas ); 
+  $template->param(CONTENTS_CANVAS   => $contentsCanvas ); 
+  print $template->output();
+}
+
+#
+# Gets the string to show the contents for an entity
+#
+# @arg cgiObject
+# @arg Reference to hash of arguments with keys:
+#      * 'type'  : entity type
+#      * 'mo_ref' : entity's mo_ref
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForEntity {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
+  my $args       = shift;
+  die "Must get an args object param"
+    if(ref($args) ne 'HASH'
+       || !defined($args->{'type'})
+       || !defined($args->{'mo_ref'}));
+  my $type   = $args->{'type'};
+  my $mo_ref = $args->{'mo_ref'};
+
+  my $retval = 1;
+  my $output = <<"_ENTITY_CONTENTS_";
+
+<p>Here we'll show the contents for the entity of type $type and mo_ref $mo_ref</p>
+_ENTITY_CONTENTS_
+
+  return { retval => $retval, output => $output };
+}
+
+#
+# Gets the string to show the left menu for an entity
+#
+# @arg cgiObject
+# @arg Reference to hash of arguments with keys:
+#      * 'type'  : entity type
+#      * 'mo_ref' : entity's mo_ref
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getMenuForEntity {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
+  my $args       = shift;
+  die "Must get an args object param"
+    if(ref($args) ne 'HASH'
+       || !defined($args->{'type'})
+       || !defined($args->{'mo_ref'}));
+  my $type   = $args->{'type'};
+  my $mo_ref = $args->{'mo_ref'};
+
+  my $retval = 1;
+  my $output = <<"_ENTITY_CONTENTS_";
+
+<p>Here we'll show the menu for the entity of type $type and mo_ref $mo_ref</p>
+_ENTITY_CONTENTS_
+
+  return { retval => $retval, output => $output };
+}
+
+#
+# Return an HTTP response showing the contents for an Entity
+# It prints full HTTP response body, not just a canvas.
+#
+sub respondShowEntity {
+  my $cgiObject = shift;
+  my $type      = shift;
+  my $moref     = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  die "Must get a type param"       if(! defined($type));
+  die "Must get a moref param"      if(! defined($moref));
+  my $menuCanvas       = "menu per type $type i moref $moref";
+  my $contentsCanvas   = "contents per type $type i moref $moref";
+
+  print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+  my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+  $template->param(HEAD      => getHead() ); 
+  $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvas ); 
   $template->param(CONTENTS_CANVAS   => $contentsCanvas ); 
   print $template->output();
 }
