@@ -103,6 +103,10 @@ our $sqlClusterDelete = 'DELETE FROM cluster where mo_ref = ?';
 our $sqlVirtualMachineSelectAll = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                                 . 'FROM virtualmachine as a '
                                 . 'inner join folder as b where a.parent = b.id';
+our $sqlVirtualMachineSelectAllChild = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
+                                     . 'FROM virtualmachine as a '
+                                     . 'inner join folder as b where a.parent = b.id '
+                                     . 'and b.mo_ref = ?';
 our $sqlVirtualMachineSelectByMoref = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                                     . 'FROM virtualmachine as a '
                                     . 'inner join folder as b '
@@ -392,14 +396,15 @@ sub getAllChildEntitiesOfType {
 # elsif($entityType eq 'HostSystem') {
 #   $stmt = $sqlHostSelectAllChild;
 # }
-# elsif($entityType eq 'VirtualMachine') {
-#   $stmt = $sqlVirtualMachineSelectAllChild;
-# }
+  elsif($entityType eq 'VirtualMachine') {
+    $stmt = $sqlVirtualMachineSelectAllChild;
+  }
 # elsif($entityType eq 'PerfCounterInfo') {
 #   $stmt = $sqlPerfCounterInfoSelectAllChild;
 # }
   else {
-    Carp::croak("Not implemented in OvomDao.getAllChildEntitiesOfType");
+    Carp::croak("Not implemented for $entityType "
+              . "in OvomDao.getAllChildEntitiesOfType");
     return undef;
   }
 
@@ -574,7 +579,6 @@ sub getAllEntitiesOfType {
 sub getChildEntitiesOfFolder {
   my $folderMoRef = shift;
   my $r = {};
-  $r->{OFolder} = [];
   my $p;
 
   if(!defined($folderMoRef)) {
@@ -582,12 +586,17 @@ sub getChildEntitiesOfFolder {
     return undef;
   }
 
-  $p = getAllChildEntitiesOfType('Folder', $folderMoRef);
-  if(!defined($p)) {
-    OInventory::log(3, "getChildEntitiesOfFolder errors getting child folders");
-    return undef;
+  # @arg entityType (Folder | Datacenter | ClusterComputeResource
+  #                         | HostSystem | VirtualMachine | PerfCounterInfo)
+
+  for my $type (('Folder', 'VirtualMachine')) {
+    $p = getAllChildEntitiesOfType($type, $folderMoRef);
+    if(!defined($p)) {
+      OInventory::log(3, "getChildEntitiesOfFolder errors getting child $type");
+      return undef;
+    }
+    $r->{$type} = $p;
   }
-  $r->{OFolder} = $p;
 
   return $r;
 }

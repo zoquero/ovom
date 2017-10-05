@@ -266,6 +266,8 @@ sub getContentsForShowAllFolders {
     goto _SHOW_INVENTORY_END_;
   }
 
+  # @arg entityType (Folder | Datacenter | ClusterComputeResource
+  #                         | HostSystem | VirtualMachine | PerfCounterInfo)
   my $folders = OvomDao::getAllEntitiesOfType('Folder');
   if(! defined($folders)) {
     $output .= "There were errors trying to get the list of folders. ";
@@ -304,7 +306,7 @@ sub getContentsForShowAllFolders {
 sub getLinkToEntity {
   my $mObject = shift;
   my $type    = ref($mObject);
-  die "Must get a object param" if(!defined($mObject));
+  die "Must get an object param" if(!defined($mObject));
   return "<a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&mo_ref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a>";
 }
 
@@ -508,14 +510,21 @@ sub getContentsForEntity {
     $retval = 1;
     $output  = "Sub-Folders: <br/>\n";
     $output .= "<ul>";
-    foreach my $aFolder (@{$entities->{OFolder}}) {
+    foreach my $aFolder (@{$entities->{Folder}}) {
+      $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+    }
+    $output .= "</ul>";
+
+    $output .= "VirtualMachines: <br/>\n";
+    $output .= "<ul>";
+    foreach my $aFolder (@{$entities->{VirtualMachine}}) {
       $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
     }
     $output .= "</ul>";
   }
   else {
     $retval = 0;
-    $output = "<p>Now it's just implemented showing Folders. Job to do...</p>";
+    $output = "<p>Now it's just implemented showing Folders ($type). Job to do...</p>";
   }
 
   _SHOW_ENTITIES_DISCONNECT_:
