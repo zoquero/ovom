@@ -495,32 +495,70 @@ sub getContentsForEntity {
   # Connect to Database:
   #
   if(OvomDao::connect() != 1) {
-    $output .= "Can't connect to DataBase. ";
-    $retval  = 0;
+    $output = "Can't connect to DataBase. ";
+    $retval = 0;
     goto _SHOW_ENTITIES_END_;
   }
 
+  #
+  # Let's load the entity from our inventory DB
+  #
+# @arg entity type (  Folder | Datacenter | ClusterComputeResource
+#                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
+  my $oEntityName = OvomDao::objectName2EntityName($type);
+  if(! defined($oEntityName) || $oEntityName eq '') {
+      $output = "Can't get the entity name for the object name $type";
+      $retval = 0;
+      goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+  my $entity     = OvomDao::loadEntity($mo_ref, $oEntityName);
+  if (! defined($entity)) {
+      $output = "Can't find the $type $mo_ref in the Inventory DB. ";
+      $retval = 0;
+      goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+
+  $output = "<h2>$oEntityName: " . $entity->{name} . "</h2>\n";
+  $output .= "<h3>Description</h3>\n";
+  $output .= "<p>$oEntityName with mo_ref=$mo_ref</p>\n";
   if($type eq 'OFolder') {
     my $entities = OvomDao::getChildEntitiesOfFolder($mo_ref);
     if(! defined($entities)) {
-      $output .= "There were errors trying to get the list of entities. ";
-      $retval  = 0;
+      $output = "There were errors trying to get the list of entities. ";
+      $retval = 0;
       goto _SHOW_ENTITIES_DISCONNECT_;
     }
-    $retval = 1;
-    $output  = "Sub-Folders: <br/>\n";
-    $output .= "<ul>";
-    foreach my $aFolder (@{$entities->{Folder}}) {
-      $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+    #
+    # Sub-folders
+    #
+    $retval  = 1;
+    $output .= "<h3>Related entities</h3>\n";
+    $output .= "<h4>Sub-Folders</h4>\n";
+    if($#{$entities->{Folder}} > -1) {
+      $output .= "<ul>";
+      foreach my $aFolder (@{$entities->{Folder}}) {
+        $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+      }
+      $output .= "</ul>";
     }
-    $output .= "</ul>";
+    else {
+      $output .= "None";
+    }
 
-    $output .= "VirtualMachines: <br/>\n";
-    $output .= "<ul>";
-    foreach my $aFolder (@{$entities->{VirtualMachine}}) {
-      $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+    #
+    # Contained VirtualMachines
+    #
+    $output  .= "<h4>VirtualMachines</h4>\n";
+    if($#{$entities->{VirtualMachine}} > -1) {
+      $output .= "<ul>";
+      foreach my $aFolder (@{$entities->{VirtualMachine}}) {
+        $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+      }
+      $output .= "</ul>";
     }
-    $output .= "</ul>";
+    else {
+      $output .= "None";
+    }
   }
   else {
     $retval = 0;

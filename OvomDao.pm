@@ -929,6 +929,74 @@ sub delete {
 }
 
 #
+# Convert from VMware's entity name to ovom object name
+#
+# @arg entity name
+# @return undef (if errors), or the ovom's object name (if ok)
+#
+sub entityName2ObjectName {
+  my $entityName = shift;
+  return undef if(!defined($entityName));
+
+  if($entityName eq 'Folder') {
+    return 'OFolder';
+  }
+  elsif($entityName eq 'Datacenter') {
+    return 'ODatacenter';
+  }
+  elsif($entityName eq 'ClusterComputeResource') {
+    return 'OCluster';
+  }
+  elsif($entityName eq 'HostSystem') {
+    return 'OHost';
+  }
+  elsif($entityName eq 'VirtualMachine') {
+    return 'OVirtualMachine';
+  }
+  elsif($entityName eq 'PerfCounterInfo') {
+    return 'OPerfCounterInfo';
+  }
+  else {
+    return undef;
+  }
+}
+
+
+#
+# Convert from ovom object name to VMware's entity name
+#
+# @arg ovom's object name
+# @return undef (if errors), or the entity name (if ok)
+#
+sub objectName2EntityName {
+  my $objectName = shift;
+  return undef if(!defined($objectName));
+
+  if($objectName eq 'OFolder') {
+    return 'Folder';
+  }
+  elsif($objectName eq 'ODatacenter') {
+    return 'Datacenter';
+  }
+  elsif($objectName eq 'OCluster') {
+    return 'ClusterComputeResource';
+  }
+  elsif($objectName eq 'OHost') {
+    return 'HostSystem';
+  }
+  elsif($objectName eq 'OVirtualMachine') {
+    return 'VirtualMachine';
+  }
+  elsif($objectName eq 'OPerfCounterInfo') {
+    return 'PerfCounterInfo';
+  }
+  else {
+    return undef;
+  }
+}
+
+
+#
 # Get an Entity from DB by mo_ref.
 #
 # @arg mo_ref

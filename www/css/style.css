@@ -4,11 +4,11 @@ html {
 }
 table,tr,td {
   border-collapse: collapse;
-  border: 0px solid #aaaaaa;
+  border: 1px solid #aaaaaa;
   cellspacing: 1;
   cellpadding: 1;
-  margin:  2px;
-  padding: 2px 2px;
+  margin:  4px;
+  padding: 5px 5px;
   vertical-align:middle;
   margin-left: auto;
   margin-right: auto;
