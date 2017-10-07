@@ -573,6 +573,7 @@ sub getContentsForEntity {
 
   my $retval;
   my $output;
+  my $snippetRet;
   #
   # Connect to Database:
   #
@@ -585,8 +586,8 @@ sub getContentsForEntity {
   #
   # Let's load the entity from our inventory DB
   #
-# @arg entity type (  Folder | Datacenter | ClusterComputeResource
-#                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
+  # @arg entity type (  Folder | Datacenter | ClusterComputeResource
+  #                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
   my $oEntityName = OvomDao::objectName2EntityName($type);
   if(! defined($oEntityName) || $oEntityName eq '') {
       $output = "Can't get the entity name for the object name $type";
@@ -600,52 +601,21 @@ sub getContentsForEntity {
       goto _SHOW_ENTITIES_DISCONNECT_;
   }
 
-  $output = "<h2>$oEntityName: " . $entity->{name} . "</h2>\n";
-  $output .= "<h3>Description</h3>\n";
-  $output .= "<p>$oEntityName with mo_ref=$mo_ref</p>\n";
   if($type eq 'OFolder') {
-    my $entities = OvomDao::getChildEntitiesOfFolder($mo_ref);
-    if(! defined($entities)) {
-      $output = "There were errors trying to get the list of entities. ";
+    $snippetRet = getContentsSnippetForFolder($cgiObject, { type => $type, mo_ref => $mo_ref, entity => $entity, oEntityName => $oEntityName });
+    if(! $snippetRet->{retval}) {
+      $output = "There were errors trying to get the contents for the entity. ";
       $retval = 0;
       goto _SHOW_ENTITIES_DISCONNECT_;
-    }
-    #
-    # Sub-folders
-    #
-    $retval  = 1;
-    $output .= "<h3>Related entities</h3>\n";
-    $output .= "<h4>Sub-Folders</h4>\n";
-    if($#{$entities->{Folder}} > -1) {
-      $output .= "<ul>";
-      foreach my $aFolder (@{$entities->{Folder}}) {
-        $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
-      }
-      $output .= "</ul>";
-    }
-    else {
-      $output .= "None";
-    }
-
-    #
-    # Contained VirtualMachines
-    #
-    $output  .= "<h4>VirtualMachines</h4>\n";
-    if($#{$entities->{VirtualMachine}} > -1) {
-      $output .= "<ul>";
-      foreach my $aFolder (@{$entities->{VirtualMachine}}) {
-        $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
-      }
-      $output .= "</ul>";
-    }
-    else {
-      $output .= "None";
     }
   }
   else {
     $retval = 0;
-    $output = "<p>Now it's just implemented showing Folders ($type). Job to do...</p>";
+    $output = "<p>We still haven't implemented showing $type</p>";
+    goto _SHOW_ENTITIES_DISCONNECT_;
   }
+  $output = $snippetRet->{output};
+  $retval = 1;
 
   _SHOW_ENTITIES_DISCONNECT_:
   #
@@ -656,6 +626,104 @@ sub getContentsForEntity {
     $retval  = 0;
   }
   _SHOW_ENTITIES_END_:
+  return { retval => $retval, output => $output };
+}
+
+
+#
+# Gets the string to show the contents for an entity
+#
+# @arg cgiObject
+# @arg Reference to hash of arguments with keys:
+#      * 'type'   : entity type
+#      * 'mo_ref' : entity's mo_ref
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsSnippetForFolder {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
+  my $args       = shift;
+  die "Must get an args object param"
+    if(ref($args) ne 'HASH'
+       || !defined($args->{'type'})
+       || !defined($args->{'mo_ref'}));
+  my $retval;
+  my $output;
+  my $type        = $args->{'type'};
+  my $mo_ref      = $args->{'mo_ref'};
+  my $entity      = $args->{'entity'};
+  my $oEntityName = $args->{'oEntityName'};
+
+  if (! defined($type) || $type eq '') {
+      $output = "Missing type arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if ($type ne 'OFolder') {
+      $output = "This method is just for OFolder.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if (! defined($mo_ref)) {
+      $output = "Missing mo_ref arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if (! defined($oEntityName)) {
+      $output = "Missing oEntityName arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if (! defined($entity)) {
+      $output = "Missing $type arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+
+  $output = "<h2>$oEntityName: " . $entity->{name} . "</h2>\n";
+  $output .= "<h3>Description</h3>\n";
+  $output .= "<p>$oEntityName with mo_ref=$mo_ref</p>\n";
+  my $entities = OvomDao::getChildEntitiesOfFolder($mo_ref);
+  if(! defined($entities)) {
+    $output = "There were errors trying to get the list of entities. ";
+    $retval = 0;
+    # We'll disconnect from DB in the caller
+    return { retval => $retval, output => $output };
+  }
+  #
+  # Sub-folders
+  #
+  $retval  = 1;
+  $output .= "<h3>Related entities</h3>\n";
+  $output .= "<h4>Sub-Folders</h4>\n";
+  if($#{$entities->{Folder}} > -1) {
+    $output .= "<ul>";
+    foreach my $aFolder (@{$entities->{Folder}}) {
+      $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+    }
+    $output .= "</ul>";
+  }
+  else {
+    $output .= "None";
+  }
+
+  #
+  # Contained VirtualMachines
+  #
+  $output  .= "<h4>VirtualMachines</h4>\n";
+  if($#{$entities->{VirtualMachine}} > -1) {
+    $output .= "<ul>";
+    foreach my $aFolder (@{$entities->{VirtualMachine}}) {
+      $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+    }
+    $output .= "</ul>";
+  }
+  else {
+    $output .= "None";
+  }
+
   return { retval => $retval, output => $output };
 }
 
