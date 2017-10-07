@@ -66,7 +66,7 @@ my $neAllDatacenters =
     'display' => 'All datacenters',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForUnimplemented
+    'method'  => \&OWwwLibs::getContentsForShowAllDatacenters
   };
 
 my $neAllVMs =
@@ -251,11 +251,13 @@ sub triggerError {
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsForShowAllFolders {
-  my $cgiObject    = shift;
+sub getContentsForShowAllEntitiesOfType {
+  my $cgiObject = shift;
+  my $entType   = shift;
   my $retval = 0;
   my $output = '';
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  die "Must get a entType param"    if(!defined($entType) || $entType eq '');
 
   #
   # Connect to Database:
@@ -268,9 +270,9 @@ sub getContentsForShowAllFolders {
 
   # @arg entityType (Folder | Datacenter | ClusterComputeResource
   #                         | HostSystem | VirtualMachine | PerfCounterInfo)
-  my $folders = OvomDao::getAllEntitiesOfType('Folder');
-  if(! defined($folders)) {
-    $output .= "There were errors trying to get the list of folders. ";
+  my $entities = OvomDao::getAllEntitiesOfType($entType);
+  if(! defined($entities)) {
+    $output .= "There were errors trying to get the list of ${entType}s. ";
     $retval  = 0;
     goto _SHOW_INVENTORY_DISCONNECT_;
   }
@@ -284,10 +286,10 @@ sub getContentsForShowAllFolders {
     $retval  = 0;
   }
 
-  $output .= $#$folders . " folders:<br/>\n";
+  $output .= $#$entities . " ${entType}s:<br/>\n";
   $output .= "<ul>\n";
-  foreach my $aFolder (@$folders) {
-    $output .= "<li>" . getLinkToEntity($aFolder) . "</li>\n";
+  foreach my $aEntity (@$entities) {
+    $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
   }
   $output .= "</ul>\n";
 
@@ -295,6 +297,35 @@ sub getContentsForShowAllFolders {
 
   _SHOW_INVENTORY_END_:
   return { retval => $retval, output => $output };
+}
+
+#
+# Gets the string to show the contents for "All folders"
+#
+# @param cgiObject
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAllFolders {
+  my $cgiObject = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  return getContentsForShowAllEntitiesOfType($cgiObject, 'Folder');
+}
+
+
+#
+# Gets the string to show the contents for "All Datacenters"
+#
+# @param cgiObject
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAllDatacenters {
+  my $cgiObject = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  return getContentsForShowAllEntitiesOfType($cgiObject, 'Datacenter');
 }
 
 #
