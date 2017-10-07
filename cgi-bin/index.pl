@@ -46,6 +46,11 @@ else {
     my $mo_ref = $cgiObject->url_param('mo_ref');
     OWwwLibs::respondShowEntity($cgiObject, $type, $mo_ref);
   }
+  elsif($actionId == $OWwwLibs::ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT) {
+    my $type   = $cgiObject->url_param('type');
+    my $mo_ref = $cgiObject->url_param('mo_ref');
+    OWwwLibs::respondShowLatestPerformance($cgiObject, $type, $mo_ref);
+  }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");
   }

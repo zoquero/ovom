@@ -14,8 +14,9 @@ use HTML::Template;
 #
 # Available action ids:
 #
-our $ACTION_ID_MENU_ENTRY        = 0;
-our $ACTION_ID_ON_MANAGED_OBJECT = 1;
+our $ACTION_ID_MENU_ENTRY                       = 0;
+our $ACTION_ID_ON_MANAGED_OBJECT                = 1;
+our $ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT = 2;
 
 #
 # Navigation entries tree:
@@ -154,9 +155,8 @@ sub getSiblingNavEntries {
 #
 sub getLinkToMenuEntry {
   my $menuEntryId = shift;
-
   if (!defined $$navEntries{$menuEntryId}) {
-    return '';
+    die "Menu entry not defined for $menuEntryId"
   }
   return "<a href='?actionId=" . $ACTION_ID_MENU_ENTRY . "&menuEntryId=$menuEntryId'>" . $$navEntries{$menuEntryId}{'display'} . "</a>";
 }
@@ -393,6 +393,22 @@ sub getLinkToEntity {
 }
 
 #
+# Gets the string with a link to latest performance graphs of a managed object
+#
+# @param reference to the managed object
+# @return String with the html anchor
+#
+sub getLinkToLatestPerformanceGraphs {
+  my $type   = shift;
+  my $mo_ref = shift;
+  die "Must get a type param"   if(!defined($type));
+  die "Must get a mo_ref param" if(!defined($mo_ref));
+  die "Empty type param"        if($type eq '');
+  die "Empty mo_ref param"      if($mo_ref eq '');
+  return "<a href='?actionId=$ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT&type=$type&mo_ref=$mo_ref'>Latest performance</a>";
+}
+
+#
 # Gets the string to show the contents for "Alerts"
 #
 # @return ref to hash with keys:
@@ -603,19 +619,25 @@ sub getContentsForEntity {
 
   if($type eq 'OFolder') {
     $snippetRet = getContentsSnippetForFolder($cgiObject, { type => $type, mo_ref => $mo_ref, entity => $entity, oEntityName => $oEntityName });
-    if(! $snippetRet->{retval}) {
-      $output = "There were errors trying to get the contents for the entity. ";
-      $retval = 0;
-      goto _SHOW_ENTITIES_DISCONNECT_;
-    }
+  }
+  elsif($type eq 'OVirtualMachine') {
+    $snippetRet = getContentsSnippetForVirtualMachine($cgiObject, { type => $type, mo_ref => $mo_ref, entity => $entity, oEntityName => $oEntityName });
   }
   else {
     $retval = 0;
     $output = "<p>We still haven't implemented showing $type</p>";
     goto _SHOW_ENTITIES_DISCONNECT_;
   }
-  $output = $snippetRet->{output};
-  $retval = 1;
+
+  if(! $snippetRet->{retval}) {
+    $output = "There were errors trying to get the contents for the $type: " . $snippetRet->{output};
+    $retval = 0;
+    goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+  else {
+    $output = $snippetRet->{output};
+    $retval = 1;
+  }
 
   _SHOW_ENTITIES_DISCONNECT_:
   #
@@ -629,9 +651,8 @@ sub getContentsForEntity {
   return { retval => $retval, output => $output };
 }
 
-
 #
-# Gets the string to show the contents for an entity
+# Gets the string to show the contents for latest performance of an entity
 #
 # @arg cgiObject
 # @arg Reference to hash of arguments with keys:
@@ -641,7 +662,7 @@ sub getContentsForEntity {
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsSnippetForFolder {
+sub getContentsForLatestPerformance {
   my $cgiObject  = shift;
   die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
   my $args       = shift;
@@ -649,42 +670,113 @@ sub getContentsSnippetForFolder {
     if(ref($args) ne 'HASH'
        || !defined($args->{'type'})
        || !defined($args->{'mo_ref'}));
+  my $type   = $args->{'type'};
+  my $mo_ref = $args->{'mo_ref'};
+
   my $retval;
   my $output;
+  my $snippetRet;
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $output = "Can't connect to DataBase. ";
+    $retval = 0;
+    goto _SHOW_ENTITIES_END_;
+  }
+
+  #
+  # Let's load the entity from our inventory DB
+  #
+  # @arg entity type (  Folder | Datacenter | ClusterComputeResource
+  #                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
+  my $oEntityName = OvomDao::objectName2EntityName($type);
+  if(! defined($oEntityName) || $oEntityName eq '') {
+      $output = "Can't get the entity name for the object name $type";
+      $retval = 0;
+      goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+  my $entity     = OvomDao::loadEntity($mo_ref, $oEntityName);
+  if (! defined($entity)) {
+      $output = "Can't find the $type $mo_ref in the Inventory DB. ";
+      $retval = 0;
+      goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+
+  $snippetRet = getContentsSnippetForLatestPerformance($cgiObject, { type => $type, mo_ref => $mo_ref, entity => $entity, oEntityName => $oEntityName });
+  if(! $snippetRet->{retval}) {
+    $output = "There were errors trying to get the performance for the $type: " . $snippetRet->{output};
+    $retval = 0;
+    goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+  else {
+    $output = $snippetRet->{output};
+    $retval = 1;
+  }
+
+  _SHOW_ENTITIES_DISCONNECT_:
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $output .= "Cannot disconnect from DataBase. ";
+    $retval  = 0;
+  }
+  _SHOW_ENTITIES_END_:
+  return { retval => $retval, output => $output };
+}
+
+#
+# Gets the string to show the snippet of contents for an entity
+#
+# @arg cgiObject
+# @arg Reference to hash of arguments with keys:
+#      * 'type'        : entity type      (repetitive ...)
+#      * 'mo_ref'      : entity's mo_ref  (repetitive ...)
+#      * 'entity'      : entity
+#      * 'oEntityName' : Classname of its ovom class
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsSnippetForFolder {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
+  my $args       = shift;
+  my $retval;
+  my $output;
+
+  if(ref($args) ne 'HASH') {
+    return { retval => 0, output => "Missing args hash param." };
+  }
+  if(   !defined($args->{'type'})
+     || !defined($args->{'mo_ref'})
+     || !defined($args->{'entity'})
+     || !defined($args->{'oEntityName'})) {
+    return { retval => 0, output => "Some keys are missing in hash arg" };
+  }
+
   my $type        = $args->{'type'};
   my $mo_ref      = $args->{'mo_ref'};
   my $entity      = $args->{'entity'};
   my $oEntityName = $args->{'oEntityName'};
 
   if (! defined($type) || $type eq '') {
-      $output = "Missing type arg.";
-      $retval = 0;
-      return { retval => $retval, output => $output };
+    return { retval => 0, output => "Missing type arg." };
   }
   if ($type ne 'OFolder') {
-      $output = "This method is just for OFolder.";
-      $retval = 0;
-      return { retval => $retval, output => $output };
+    return { retval => 0, output => "This method is just for OFolder." };
   }
-  if (! defined($mo_ref)) {
-      $output = "Missing mo_ref arg.";
-      $retval = 0;
-      return { retval => $retval, output => $output };
+  if (! defined($mo_ref) || $mo_ref eq '') {
+    return { retval => 0, output => "Missing mo_ref arg." };
   }
-  if (! defined($oEntityName)) {
-      $output = "Missing oEntityName arg.";
-      $retval = 0;
-      return { retval => $retval, output => $output };
+  if (! defined($oEntityName) || $oEntityName eq '') {
+    return { retval => 0, output => "Missing oEntityName arg." };
   }
   if (! defined($entity)) {
-      $output = "Missing $type arg.";
-      $retval = 0;
-      return { retval => $retval, output => $output };
+    return { retval => 0, output => "Missing $type arg." };
   }
 
-  $output = "<h2>$oEntityName: " . $entity->{name} . "</h2>\n";
-  $output .= "<h3>Description</h3>\n";
-  $output .= "<p>$oEntityName with mo_ref=$mo_ref</p>\n";
   my $entities = OvomDao::getChildEntitiesOfFolder($mo_ref);
   if(! defined($entities)) {
     $output = "There were errors trying to get the list of entities. ";
@@ -692,6 +784,13 @@ sub getContentsSnippetForFolder {
     # We'll disconnect from DB in the caller
     return { retval => $retval, output => $output };
   }
+
+  #
+  # Summary
+  #
+  $output = "<h2>$oEntityName: " . $entity->{name} . "</h2>\n";
+  $output .= "<h3>Description</h3>\n";
+  $output .= "<p>$oEntityName with mo_ref='<b><em>$mo_ref</em></b>'</p>\n";
   #
   # Sub-folders
   #
@@ -723,6 +822,130 @@ sub getContentsSnippetForFolder {
   else {
     $output .= "None";
   }
+
+  return { retval => $retval, output => $output };
+}
+
+
+#
+# Gets the string to show the snippet of contents for latest performance for an entity
+#
+# @arg cgiObject
+# @arg Reference to hash of arguments with keys:
+#      * 'type'        : entity type      (repetitive ...)
+#      * 'mo_ref'      : entity's mo_ref  (repetitive ...)
+#      * 'entity'      : entity
+#      * 'oEntityName' : Classname of its ovom class
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsSnippetForLatestPerformance {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
+  my $args       = shift;
+  my $retval;
+  my $output;
+
+  if(ref($args) ne 'HASH') {
+    return { retval => 0, output => "Missing args hash param." };
+  }
+  if(   !defined($args->{'type'})
+     || !defined($args->{'mo_ref'})
+     || !defined($args->{'entity'})
+     || !defined($args->{'oEntityName'})) {
+    return { retval => 0, output => "Some keys are missing in hash arg" };
+  }
+
+  my $type        = $args->{'type'};
+  my $mo_ref      = $args->{'mo_ref'};
+  my $entity      = $args->{'entity'};
+  my $oEntityName = $args->{'oEntityName'};
+
+  if (! defined($type) || $type eq '') {
+    return { retval => 0, output => "Missing type arg." };
+  }
+  if (! defined($mo_ref) || $mo_ref eq '') {
+    return { retval => 0, output => "Missing mo_ref arg." };
+  }
+  if (! defined($oEntityName) || $oEntityName eq '') {
+    return { retval => 0, output => "Missing oEntityName arg." };
+  }
+  if (! defined($entity)) {
+    return { retval => 0, output => "Missing $type arg." };
+  }
+
+  $output = <<"_PERFORMANCE_CONTENTS_";
+<h2>Performance for $oEntityName $entity->{name}</h2>
+_PERFORMANCE_CONTENTS_
+  $retval = 1;
+
+  return { retval => $retval, output => $output };
+}
+
+#
+# Gets the string to show the snippet of contents for an entity
+#
+# @arg cgiObject
+# @arg Reference to hash of arguments with keys:
+#      * 'type'   : entity type
+#      * 'mo_ref' : entity's mo_ref
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsSnippetForVirtualMachine {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
+  my $args       = shift;
+  die "Must get an args object param"
+    if(ref($args) ne 'HASH'
+       || !defined($args->{'type'})
+       || !defined($args->{'mo_ref'}));
+  my $retval;
+  my $output;
+  my $type        = $args->{'type'};
+  my $mo_ref      = $args->{'mo_ref'};
+  my $entity      = $args->{'entity'};
+  my $oEntityName = $args->{'oEntityName'};
+
+  if (! defined($type) || $type eq '') {
+      $output = "Missing type arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if ($type ne 'OVirtualMachine') {
+      $output = "This method is just for OVirtualMachine.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if (! defined($mo_ref)) {
+      $output = "Missing mo_ref arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if (! defined($oEntityName)) {
+      $output = "Missing oEntityName arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+  if (! defined($entity)) {
+      $output = "Missing $type arg.";
+      $retval = 0;
+      return { retval => $retval, output => $output };
+  }
+
+  my $link = getLinkToLatestPerformanceGraphs($type, $mo_ref);
+  $retval = 1;
+  $output = <<"_ENTITY_CONTENTS_";
+<h2>$oEntityName: $entity->{name}</h2>
+<h3>Description</h3>
+<p>$oEntityName with mo_ref='<b><em>$mo_ref</em></b>'</p>
+<h3>Related entities</h3>
+<p>Still in development.</p>
+<h3>Performance</h3>
+<p>$link.</p>
+_ENTITY_CONTENTS_
 
   return { retval => $retval, output => $output };
 }
@@ -768,12 +991,44 @@ sub respondShowEntity {
   my $mo_ref     = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   die "Must get a type param"       if(! defined($type));
-  die "Must get a mo_ref param"      if(! defined($mo_ref));
-  my $menuCanvasRet     = "menu per type $type i mo_ref $mo_ref";
-  my $contentsCanvasRet = getContentsForEntity($cgiObject, { type => $type, mo_ref => $mo_ref });
+  die "Must get a mo_ref param"     if(! defined($mo_ref));
+  my $menuCanvasRet     = "menu per type $type <br/> i mo_ref $mo_ref";
+  my $contentsCanvasRet
+     = getContentsForEntity($cgiObject, { type => $type, mo_ref => $mo_ref });
 
   if(! $contentsCanvasRet->{retval}) {
     triggerError($cgiObject, "Errors getting the entity: "
+                           . $contentsCanvasRet->{output});
+    return;
+  }
+
+  print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+  my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+  $template->param(HEAD      => getHead() ); 
+  $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+  $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
+  print $template->output();
+}
+
+#
+# Return an HTTP response showing the contents for an Entity
+# It prints full HTTP response body, not just a canvas.
+#
+sub respondShowLatestPerformance {
+  my $cgiObject = shift;
+  my $type      = shift;
+  my $mo_ref     = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  die "Must get a type param"       if(! defined($type));
+  die "Must get a mo_ref param"     if(! defined($mo_ref));
+  my $menuCanvasRet     = "menu per type $type <br/> i mo_ref $mo_ref";
+  my $contentsCanvasRet
+     = getContentsForLatestPerformance($cgiObject, { type => $type, mo_ref => $mo_ref });
+
+  if(! $contentsCanvasRet->{retval}) {
+    triggerError($cgiObject, "Errors getting the performance of the entity: "
                            . $contentsCanvasRet->{output});
     return;
   }
