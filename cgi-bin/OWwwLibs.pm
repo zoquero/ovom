@@ -33,7 +33,7 @@ my $neInventory =
     'id'      => 1,
     'display' => 'Inventory',
     'parent'  => 0,
-    'childs'  => [4, 5, 6, 7],
+    'childs'  => [4, 5, 6, 7, 8],
     'method'  => undef
   };
 my $neAlerts =
@@ -75,7 +75,7 @@ my $neAllVMs =
     'display' => 'All virtual machines',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForUnimplemented
+    'method'  => \&OWwwLibs::getContentsForShowAllVirtualMachines
   };
 my $neAllHosts =
   {
@@ -83,8 +83,17 @@ my $neAllHosts =
     'display' => 'All hosts',
     'parent'  => 1,
     'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForUnimplemented
+    'method'  => \&OWwwLibs::getContentsForShowAllHosts
   };
+my $neAllClusters =
+  {
+    'id'      => 8,
+    'display' => 'All clusters',
+    'parent'  => 1,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForShowAllClusters
+  };
+
 
 my $navEntries =
   {
@@ -96,6 +105,7 @@ my $navEntries =
     5 => $neAllDatacenters,
     6 => $neAllVMs,
     7 => $neAllHosts,
+    8 => $neAllClusters,
   };
 
 #
@@ -286,7 +296,7 @@ sub getContentsForShowAllEntitiesOfType {
     $retval  = 0;
   }
 
-  $output .= $#$entities . " ${entType}s:<br/>\n";
+  $output .= ($#$entities + 1) . " ${entType}s:<br/>\n";
   $output .= "<ul>\n";
   foreach my $aEntity (@$entities) {
     $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
@@ -313,7 +323,6 @@ sub getContentsForShowAllFolders {
   return getContentsForShowAllEntitiesOfType($cgiObject, 'Folder');
 }
 
-
 #
 # Gets the string to show the contents for "All Datacenters"
 #
@@ -326,6 +335,48 @@ sub getContentsForShowAllDatacenters {
   my $cgiObject = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   return getContentsForShowAllEntitiesOfType($cgiObject, 'Datacenter');
+}
+
+#
+# Gets the string to show the contents for "All Hosts"
+#
+# @param cgiObject
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAllHosts {
+  my $cgiObject = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  return getContentsForShowAllEntitiesOfType($cgiObject, 'HostSystem');
+}
+
+#
+# Gets the string to show the contents for "All VirtualMachines"
+#
+# @param cgiObject
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAllVirtualMachines {
+  my $cgiObject = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  return getContentsForShowAllEntitiesOfType($cgiObject, 'VirtualMachine');
+}
+
+#
+# Gets the string to show the contents for "All Clusters"
+#
+# @param cgiObject
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAllClusters {
+  my $cgiObject = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  return getContentsForShowAllEntitiesOfType($cgiObject, 'ClusterComputeResource');
 }
 
 #
