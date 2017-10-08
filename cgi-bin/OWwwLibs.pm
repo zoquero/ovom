@@ -1022,7 +1022,7 @@ sub getContentsSnippetForPerformance {
   my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
   my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
 
-  my $perfGraph = OPerformance::getPathToPerfGraphFile($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds);
+  my $perfGraph = OPerformance::getPathToPerfGraphFiles($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds);
 
   $output = <<"_PERFORMANCE_CONTENTS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>

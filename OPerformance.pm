@@ -2116,19 +2116,22 @@ sub getLatestPerformance {
 # It creates a new PNG file with the graph and returns its full path.
 # Deleting that file is responsibility of the caller.
 #
-# @return 1 ok, 0 errors
+# @return path (if ok), undef (if errors)
 #
-sub getPathToPerfGraphFile {
+sub getPathToPerfGraphFiles {
   my $type          = shift;
   my $mo_ref        = shift;
   my $fromEpoch     = shift;
   my $toEpoch       = shift;
   my $perfMetricIds = shift;
+  my $r = '';
   my $entityName = OvomDao::oClassName2EntityName($type);
+  my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+  my @filenames;
 
-  #############################
+  #
   # Folder for performance data
-  #############################
+  #
   my $folder = $OInventory::configuration{'perfdata.root'}
              . "/"
              . $OInventory::configuration{'vCenter.fqdn'}
@@ -2137,11 +2140,143 @@ sub getPathToPerfGraphFile {
              . "/"
              . $mo_ref;
 
+  #
+  # Let's load stage descriptors
+  #
+  my $sd = getStageDescriptors();
+  if( ! defined ($sd) ) {
+    return undef;
+  }
+
   my $r = "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder<br/>";
   foreach my $pmi (@$perfMetricIds) {
-    $r .= $pmi . "<br/>";
+#   $r .= "pmi = " . $pmi . "<br/>";
+    my $prefix = $mo_ref . $basenameSeparator . $pmi->counterId . $basenameSeparator . $pmi->instance;
+    foreach my $aSD (@$sd) {
+      my $filename = $folder . "/" . $prefix . "." . $aSD->{name} . ".csv";
+#     $r .= "a sd = " . $aSD->{name} . ": $filename<br/>\n";
+      push @filenames, $filename;
+    }
+    my $resultingCsvFile = getOneCsvFromAllStages($fromEpoch, $toEpoch, $prefix, \@filenames);
+    if (! defined($resultingCsvFile)) {
+      return undef;
+    }
+    my $g = csv2Graph($fromEpoch, $toEpoch, $mo_ref, $pmi->counterId, $pmi->instance, $resultingCsvFile);
+    $r .= "resultingCsvFile for mo_ref=$mo_ref, counterId=" . $pmi->counterId . ", instance= " . $pmi->instance . " csv = $resultingCsvFile , graph = $g <br/>\n";
+
   }
+
   return $r;
+}
+
+#
+# Generate a PNG graph from a CSV file
+#
+sub csv2Graph {
+  my $fromEpoch  = shift;
+  my $toEpoch    = shift;
+  my $mo_ref     = shift;
+  my $counterId  = shift;
+  my $instance   = shift;
+  my $csv        = shift;
+  my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+  my $prefix = $mo_ref . $basenameSeparator . $counterId . $basenameSeparator . $instance;
+  my $output = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.png";
+
+  # Let's continue here !!!
+
+  return $output;
+}
+
+#
+# Creates a new temporary file and prints on it all
+# the points from the files between the two epoch instants
+#
+# @arg lower bound in epoch
+# @arg upper bound in epoch
+# @arg string to identify the object (ex.: mo_ref___PerfMetricId)
+# @arg reference to the array of filenames (paths)
+# @arg mo_ref of the object
+# @return the path of the new CSV (if ok) or undef (if errors)
+#
+sub getOneCsvFromAllStages {
+  my $fromEpoch    = shift;
+  my $toEpoch      = shift;
+  my $prefix       = shift;
+  my $filenamesRef = shift;
+  my $outputHandler;
+  my $inputHandler;
+
+  my @linesToSave;
+
+  my $csv = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.csv";
+
+  if( ! open($outputHandler, ">:utf8", $csv) ) {
+    OInventory::log(3, "Could not open CSV output file '$csv': $!");
+    return undef;
+  }
+
+  foreach my $aPath (@$filenamesRef) {
+    if( ! open($inputHandler, "<:utf8", $aPath) ) {
+      OInventory::log(3, "Could not open CSV input file '$aPath': $!");
+      return undef;
+    }
+
+    #
+    # Let's read the file
+    #
+    while (my $line = <$inputHandler>) {
+      chomp $line;
+      next if $line =~ /^\s*$/; # empty
+      next if $line =~ /^\s*#/; # comment, somehow
+  
+      my ($t, $v) = split(/$csvSep/, $line, 2);
+      if (! defined($t) || ! defined($v)) {
+        OInventory::log(3, "Can't parse the line '$line' from '$aPath'");
+        return undef;
+      }
+      if ( $t eq '') {
+        OInventory::log(3, "Empty timestamp in line '$line' from '$aPath'");
+        return undef;
+      }
+      if( ! looks_like_number($t)) {
+        OInventory::log(3, "Unknown timestamp in line '$line' from '$aPath'");
+        return undef;
+      }
+      if($v ne '' && ! looks_like_number($v)) {
+        # We'll not stop parsing
+        # Must we log Error or Warning ... ?
+        OInventory::log(2, "Unknown value in line '$line' from '$aPath'");
+        next;
+      }
+
+      if($t >= $fromEpoch && $t <= $toEpoch) {
+        push @linesToSave, $line;
+      }
+    }
+
+    #
+    # Let's close this stage file
+    #
+    if( ! close($inputHandler) ) {
+      OInventory::log(3, "Could not close CSV input file '$aPath': $!");
+      return undef;
+    }
+
+  }
+
+  #
+  # Let's print the choosen lines in the output file
+  #
+  foreach my $aLine (sort @linesToSave) {
+    print $outputHandler "$aLine\n";
+  }
+
+  if( ! close($outputHandler) ) {
+    OInventory::log(3, "Could not close CSV output file '$csv': $!");
+    return undef;
+  }
+  return $csv;
 }
 
 1;
