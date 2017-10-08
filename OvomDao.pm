@@ -144,6 +144,9 @@ our $sqlPerfMetricSelectAll
 our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
+our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+                                  . 'FROM perf_metric as a '
+                                  . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert
                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
                               . 'VALUES (?, ?, ?)';
@@ -995,7 +998,6 @@ sub oClassName2EntityName {
   }
 }
 
-
 #
 # Get an Entity from DB by mo_ref.
 #
@@ -1159,6 +1161,62 @@ sub loadEntity {
   OInventory::log(1, "Profiling: select a ${entityType} took "
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
+}
+
+
+
+#
+# Get the Perf Metrics saved for an entity by its mo_ref.
+#
+# @arg mo_ref
+# @return undef (if errors), or a reference to an array of OMockView::OMockPerfMetricId objects (if ok)
+#
+sub loadPerfMetricIdsForEntity {
+  my $mo_ref = shift;
+  my $stmt;
+  my @r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $pmiInstance;
+  my $pmiMor;
+
+  if (! defined ($mo_ref)) {
+    Carp::croak("Got an undefined mo_ref trying to load PerfMetricIds for $mo_ref");
+    return undef;
+  }
+  $stmt = $sqlPerfMetricSelectEntityPMs;
+  OInventory::log(0, "selecting from db the PerfMetrics for $mo_ref");
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement for PerfMetricIds of $mo_ref: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr;
+    my $sthRes;
+    $sthRes = $sth->execute($mo_ref);
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get "
+                . "the PerfMetricIds for ${mo_ref}");
+      $sth->finish();
+      return undef;
+    }
+
+    while (@data = $sth->fetchrow_array()) {
+      my $e = OMockView::OMockPerfMetricId->new(\@data);
+      push @r, $e;
+    }
+  };
+
+  if($@) {
+    OInventory::log(3, "Errors getting the PerfMetriIds of $mo_ref from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: select PerfMetricIds for $mo_ref took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return \@r;
 }
 
 
