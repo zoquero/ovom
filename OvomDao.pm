@@ -968,7 +968,7 @@ sub entityName2ObjectName {
 # @arg ovom's object name
 # @return undef (if errors), or the entity name (if ok)
 #
-sub objectName2EntityName {
+sub oClassName2EntityName {
   my $objectName = shift;
   return undef if(!defined($objectName));
 

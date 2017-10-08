@@ -722,7 +722,7 @@ sub getContentsForEntity {
   #
   # @arg entity type (  Folder | Datacenter | ClusterComputeResource
   #                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
-  my $oEntityName = OvomDao::objectName2EntityName($type);
+  my $oEntityName = OvomDao::oClassName2EntityName($type);
   if(! defined($oEntityName) || $oEntityName eq '') {
       $output = "Can't get the entity name for the object name $type";
       $retval = 0;
@@ -808,7 +808,7 @@ sub getContentsForPerformance {
   #
   # @arg entity type (  Folder | Datacenter | ClusterComputeResource
   #                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
-  my $oEntityName = OvomDao::objectName2EntityName($type);
+  my $oEntityName = OvomDao::oClassName2EntityName($type);
   if(! defined($oEntityName) || $oEntityName eq '') {
       $output = "Can't get the entity name for the object name $type";
       $retval = 0;
@@ -1016,8 +1016,8 @@ sub getContentsSnippetForPerformance {
 <h3>Description</h3>
 <p>$oEntityName with mo_ref='<b><em>$mo_ref</em></b>'</p>
 <p style="font-family:Courier New;">Interval:<br/>
-from&nbsp;Y/M/D H:M:S $fromStr ($fromEpoch in epoch)<br/>
-to&nbsp;&nbsp;&nbsp;Y/M/D H:M:S $toStr ($toEpoch in epoch) </p>
+from&nbsp;Y/M/D H:M:S $fromStr ($fromEpoch in <em>epoch</em>)<br/>
+to&nbsp;&nbsp;&nbsp;Y/M/D H:M:S $toStr ($toEpoch in <em>epoch</em>) </p>
 
 <p>result: perfGraph=$perfGraph</p>
 _PERFORMANCE_CONTENTS_

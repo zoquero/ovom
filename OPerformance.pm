@@ -688,6 +688,7 @@ sub savePerfData {
       my $value     = $p->value;
       my $csvPath   = join($basenameSeparator,
                         ($csvFolder . "/" . $mo_ref, $counterId, $instance));
+die "csvPath = $csvPath";
       my $csvPathLatest = $csvPath . ".latest.csv";
       OInventory::log(0, "Saving in $csvPathLatest");
 
@@ -2111,7 +2112,10 @@ sub getLatestPerformance {
 }
 
 #
-# Gets last performance data from hosts and VMs
+# Gets last performance data from hosts and VMs.
+#
+# It creates a new PNG file with the graph and returns its full path.
+# Deleting that file is responsibility of the caller.
 #
 # @return 1 ok, 0 errors
 #
@@ -2120,7 +2124,20 @@ sub getPathToPerfGraphFile {
   my $mo_ref    = shift;
   my $fromEpoch = shift;
   my $toEpoch   = shift;
-  return "type=$type, mo_ref=$mo_ref, fromEpoch=$fromEpoch, toEpoch=$toEpoch";
+  my $entityName = OvomDao::oClassName2EntityName($type);
+
+  #############################
+  # Folder for performance data
+  #############################
+  my $folder = $OInventory::configuration{'perfdata.root'}
+             . "/"
+             . $OInventory::configuration{'vCenter.fqdn'}
+             . "/"
+             . $entityName
+             . "/"
+             . $mo_ref;
+
+  return "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder";
 }
 
 1;
