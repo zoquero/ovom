@@ -19,10 +19,16 @@ sub new {
   }
 
   my $self = bless {
-    _counterId => shift @$args,
-    _instance  => shift @$args,
+    _entity_mo_ref => shift @$args,
+    _counterId     => shift @$args,
+    _instance      => shift @$args,
   }, $class;
   return $self;
+}
+
+sub entity_mo_ref {
+  my ($self) = @_;
+  return $self->{_entity_mo_ref};
 }
 
 sub instance {
@@ -37,7 +43,7 @@ sub counterId {
 
 sub stringify {
   my ($self) = @_;
-  return sprintf "'%s': {counterId='%s',instance='%s'}", ref($self), $self->{_counterId}, $self->{_instance};
+  return sprintf "'%s': {entity_mo_ref='%s',counterId='%s',instance='%s'}", ref($self), $self->{_entity_mo_ref}, $self->{_counterId}, $self->{_instance};
 }
 
 1;

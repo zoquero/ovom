@@ -556,7 +556,7 @@ sub registerPerfDataSaved {
   if( ! defined($lastRegister)) {
     OInventory::log(0, "No previous PerfMetricId like this, let's insert:");
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-                          [ $perfData->id->counterId, $perfData->id->instance ]
+                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
                         );
     if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
@@ -574,7 +574,7 @@ sub registerPerfDataSaved {
 
     OInventory::log(0, "Let's update previous PerfMetricId:");
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-                          [ $perfData->id->counterId, $perfData->id->instance ]
+                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
                         );
     # TO_DO : update unimplemented for PerfMetric , 2nd extra argument
     if( ! OvomDao::update($aPerfMetricId, $entity) ) {
@@ -688,7 +688,6 @@ sub savePerfData {
       my $value     = $p->value;
       my $csvPath   = join($basenameSeparator,
                         ($csvFolder . "/" . $mo_ref, $counterId, $instance));
-die "csvPath = $csvPath";
       my $csvPathLatest = $csvPath . ".latest.csv";
       OInventory::log(0, "Saving in $csvPathLatest");
 
@@ -2120,10 +2119,11 @@ sub getLatestPerformance {
 # @return 1 ok, 0 errors
 #
 sub getPathToPerfGraphFile {
-  my $type      = shift;
-  my $mo_ref    = shift;
-  my $fromEpoch = shift;
-  my $toEpoch   = shift;
+  my $type          = shift;
+  my $mo_ref        = shift;
+  my $fromEpoch     = shift;
+  my $toEpoch       = shift;
+  my $perfMetricIds = shift;
   my $entityName = OvomDao::oClassName2EntityName($type);
 
   #############################
@@ -2137,7 +2137,11 @@ sub getPathToPerfGraphFile {
              . "/"
              . $mo_ref;
 
-  return "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder";
+  my $r = "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder<br/>";
+  foreach my $pmi (@$perfMetricIds) {
+    $r .= $pmi . "<br/>";
+  }
+  return $r;
 }
 
 1;

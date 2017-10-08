@@ -821,8 +821,16 @@ sub getContentsForPerformance {
       goto _SHOW_ENTITIES_DISCONNECT_;
   }
 
-  $args->{entity}      = $entity;
-  $args->{oEntityName} = $oEntityName;
+  my $perfMetricIds = OvomDao::loadPerfMetricIdsForEntity($mo_ref);
+  if(!defined($perfMetricIds)) {
+    $output = "Could not get PerfMetricIds for $mo_ref";
+    $retval = 0;
+    goto _SHOW_ENTITIES_DISCONNECT_;
+  }
+
+  $args->{entity}        = $entity;
+  $args->{oEntityName}   = $oEntityName;
+  $args->{perfMetricIds} = $perfMetricIds;
   $snippetRet = getContentsSnippetForPerformance($cgiObject, $args);
   if(! $snippetRet->{retval}) {
     $output = "There were errors trying to get the performance for the $type: " . $snippetRet->{output};
@@ -982,14 +990,16 @@ sub getContentsSnippetForPerformance {
   if(   !defined($args->{'type'})
      || !defined($args->{'mo_ref'})
      || !defined($args->{'entity'})
-     || !defined($args->{'oEntityName'})) {
+     || !defined($args->{'oEntityName'})
+     || !defined($args->{'perfMetricIds'})) {
     return { retval => 0, output => "Some keys are missing in hash arg" };
   }
 
-  my $type        = $args->{'type'};
-  my $mo_ref      = $args->{'mo_ref'};
-  my $entity      = $args->{'entity'};
-  my $oEntityName = $args->{'oEntityName'};
+  my $type          = $args->{'type'};
+  my $mo_ref        = $args->{'mo_ref'};
+  my $entity        = $args->{'entity'};
+  my $oEntityName   = $args->{'oEntityName'};
+  my $perfMetricIds = $args->{'perfMetricIds'};
 
   if (! defined($type) || $type eq '') {
     return { retval => 0, output => "Missing type arg." };
@@ -1001,7 +1011,10 @@ sub getContentsSnippetForPerformance {
     return { retval => 0, output => "Missing oEntityName arg." };
   }
   if (! defined($entity)) {
-    return { retval => 0, output => "Missing $type arg." };
+    return { retval => 0, output => "Missing entity arg." };
+  }
+  if (! defined($perfMetricIds)) {
+    return { retval => 0, output => "Missing perfMetricIds arg." };
   }
 
   my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour}, $args->{fromDay}, $args->{fromMonth}, $args->{fromYear});
@@ -1009,7 +1022,7 @@ sub getContentsSnippetForPerformance {
   my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
   my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
 
-  my $perfGraph = OPerformance::getPathToPerfGraphFile($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch);
+  my $perfGraph = OPerformance::getPathToPerfGraphFile($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds);
 
   $output = <<"_PERFORMANCE_CONTENTS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>
