@@ -2110,4 +2110,17 @@ sub getLatestPerformance {
   return 1;
 }
 
+#
+# Gets last performance data from hosts and VMs
+#
+# @return 1 ok, 0 errors
+#
+sub getPathToPerfGraphFile {
+  my $type      = shift;
+  my $mo_ref    = shift;
+  my $fromEpoch = shift;
+  my $toEpoch   = shift;
+  return "type=$type, mo_ref=$mo_ref, fromEpoch=$fromEpoch, toEpoch=$toEpoch";
+}
+
 1;

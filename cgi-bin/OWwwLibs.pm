@@ -3,6 +3,10 @@ use strict;
 use warnings;
 use Carp;
 use HTML::Template;
+use Data::Dumper;
+use Time::Local;
+# Our modules:
+use OPerformance;
 
 #
 # Naming convention for the main methods:
@@ -409,6 +413,120 @@ sub getLinkToLatestPerformanceGraphs {
 }
 
 #
+# Gets the HTML for a select tag with numerical options
+#
+# @param name of the form input
+# @param min val
+# @param max val
+# @return String with the html 
+#
+sub getHtmlFormSelectNumerical {
+  my $name = shift;
+  my $min  = shift;
+  my $max  = shift;
+  my $sel  = shift;
+  die "getHtmlFormSelectNumerical: missing name"
+    if(!defined($name) || $name eq '');
+  die "getHtmlFormSelectNumerical: missing min"      if(!defined($min));
+  die "getHtmlFormSelectNumerical: missing max"      if(!defined($max));
+  die "getHtmlFormSelectNumerical: missing selected" if(!defined($sel));
+
+  my $t = "<select name=\"$name\">\n";
+  my $selected;
+  for (my $i = $min; $i <= $max; $i++) {
+    if ($i == $sel) {
+      $selected = "selected";
+    }
+    else {
+      $selected = "";
+    }
+    $t .= "<option value=\"$i\" $selected>$i</option>\n";
+  }
+  $t .= "</select>\n";
+  return $t;
+}
+
+#
+# Gets the HTML for the form to ask for custom interval performance graphs
+#
+# @param type of entity, used in OvomDao to look for it
+# @param entity's mo_ref
+# @return String with the html form
+#
+sub getFormForCustomPerfGraphsInterval {
+  my $type   = shift;
+  my $mo_ref = shift;
+  die "Must get a type param"   if(!defined($type));
+  die "Must get a mo_ref param" if(!defined($mo_ref));
+  die "Empty type param"        if($type eq '');
+  die "Empty mo_ref param"      if($mo_ref eq '');
+
+  my $now = time;
+  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now-3600);
+  my $currYear = $year + 1900;
+  my $fromYear   = getHtmlFormSelectNumerical('fromYear',  2016, $currYear, $currYear);
+  my $fromMonth  = getHtmlFormSelectNumerical('fromMonth',    1, 12, $mon+1);
+  my $fromDay    = getHtmlFormSelectNumerical('fromDay',      1, 31, $mday);
+  my $fromHour   = getHtmlFormSelectNumerical('fromHour',     0, 23, $hour);
+  my $fromMinute = getHtmlFormSelectNumerical('fromMinute',   0, 59, $min);
+
+  ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now);
+  $currYear = $year + 1900;
+  my $toYear   = getHtmlFormSelectNumerical('toYear',  2016, $currYear, $currYear);
+  my $toMonth  = getHtmlFormSelectNumerical('toMonth',    1, 12, $mon+1);
+  my $toDay    = getHtmlFormSelectNumerical('toDay',      1, 31, $mday);
+  my $toHour   = getHtmlFormSelectNumerical('toHour',     0, 23, $hour);
+  my $toMinute = getHtmlFormSelectNumerical('toMinute',   0, 59, $min);
+
+  my $t = <<"_FFCPGI_";
+
+<form action="?" method="post" accept-charset="utf-8">
+  <input type="hidden" name="actionId" value="$ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT"/>
+  <input type="hidden" name="type"     value="$type"/>
+  <input type="hidden" name="mo_ref"   value="$mo_ref"/>
+_FFCPGI_
+
+  $t .= <<"_FFCPGI2_";
+<table border="1">
+  <tr align="center">
+    <td>&nbsp;</td>
+    <td>Year</td>
+    <td>Month</td>
+    <td>Day</td>
+    <td>Hour</td>
+    <td>Minute</td>
+  </tr>
+
+  <tr>
+    <td valign="middle">From:</td>
+    <td>$fromYear</td>
+    <td>$fromMonth</td>
+    <td>$fromDay</td>
+    <td>$fromHour</td>
+    <td>$fromMinute</td>
+  </tr>
+
+  <tr>
+    <td valign="middle">To: 
+    <td>$toYear</td>
+    <td>$toMonth</td>
+    <td>$toDay</td>
+    <td>$toHour</td>
+    <td>$toMinute</td>
+  </tr>
+  <tr>
+  <td colspan=6 align="center">
+    <input type="submit" name="Get perf" value="Get perf" />
+  </td>
+  </tr>
+</table>
+</form>
+_FFCPGI2_
+
+  return $t;
+}
+
+#
 # Gets the string to show the contents for "Alerts"
 #
 # @return ref to hash with keys:
@@ -662,7 +780,7 @@ sub getContentsForEntity {
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsForLatestPerformance {
+sub getContentsForPerformance {
   my $cgiObject  = shift;
   die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
   my $args       = shift;
@@ -703,7 +821,9 @@ sub getContentsForLatestPerformance {
       goto _SHOW_ENTITIES_DISCONNECT_;
   }
 
-  $snippetRet = getContentsSnippetForLatestPerformance($cgiObject, { type => $type, mo_ref => $mo_ref, entity => $entity, oEntityName => $oEntityName });
+  $args->{entity}      = $entity;
+  $args->{oEntityName} = $oEntityName;
+  $snippetRet = getContentsSnippetForPerformance($cgiObject, $args);
   if(! $snippetRet->{retval}) {
     $output = "There were errors trying to get the performance for the $type: " . $snippetRet->{output};
     $retval = 0;
@@ -826,9 +946,18 @@ sub getContentsSnippetForFolder {
   return { retval => $retval, output => $output };
 }
 
+sub time2str {
+  my $Y = shift;
+  my $M = shift;
+  my $D = shift;
+  my $h = shift;
+  my $m = shift;
+  my $s = shift;
+  return sprintf("%04d/%02d/%02d %02d:%02d:%02d", $Y, $M, $D, $h, $m, $s);
+}
 
 #
-# Gets the string to show the snippet of contents for latest performance for an entity
+# Gets the string to show the snippet of contents for performance for an entity
 #
 # @arg cgiObject
 # @arg Reference to hash of arguments with keys:
@@ -840,7 +969,7 @@ sub getContentsSnippetForFolder {
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsSnippetForLatestPerformance {
+sub getContentsSnippetForPerformance {
   my $cgiObject  = shift;
   die "Must get a CGI object param"   if(ref($cgiObject) ne 'CGI');
   my $args       = shift;
@@ -875,8 +1004,22 @@ sub getContentsSnippetForLatestPerformance {
     return { retval => 0, output => "Missing $type arg." };
   }
 
+  my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour}, $args->{fromDay}, $args->{fromMonth}, $args->{fromYear});
+  my $toEpoch   = timelocal(0, $args->{toMinute}, $args->{toHour}, $args->{toDay}, $args->{toMonth}, $args->{toYear});
+  my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
+  my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
+
+  my $perfGraph = OPerformance::getPathToPerfGraphFile($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch);
+
   $output = <<"_PERFORMANCE_CONTENTS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>
+<h3>Description</h3>
+<p>$oEntityName with mo_ref='<b><em>$mo_ref</em></b>'</p>
+<p style="font-family:Courier New;">Interval:<br/>
+from&nbsp;Y/M/D H:M:S $fromStr ($fromEpoch in epoch)<br/>
+to&nbsp;&nbsp;&nbsp;Y/M/D H:M:S $toStr ($toEpoch in epoch) </p>
+
+<p>result: perfGraph=$perfGraph</p>
 _PERFORMANCE_CONTENTS_
   $retval = 1;
 
@@ -935,7 +1078,8 @@ sub getContentsSnippetForVirtualMachine {
       return { retval => $retval, output => $output };
   }
 
-  my $link = getLinkToLatestPerformanceGraphs($type, $mo_ref);
+  my $latestPerfLink       = getLinkToLatestPerformanceGraphs($type, $mo_ref);
+  my $custIntervalPerfForm = getFormForCustomPerfGraphsInterval($type, $mo_ref);
   $retval = 1;
   $output = <<"_ENTITY_CONTENTS_";
 <h2>$oEntityName: $entity->{name}</h2>
@@ -944,7 +1088,9 @@ sub getContentsSnippetForVirtualMachine {
 <h3>Related entities</h3>
 <p>Still in development.</p>
 <h3>Performance</h3>
-<p>$link.</p>
+<p>Get $latestPerfLink.</p>
+<p>Or get it on a custom interval:</p>
+<p>$custIntervalPerfForm</p>
 _ENTITY_CONTENTS_
 
   return { retval => $retval, output => $output };
@@ -1016,16 +1162,44 @@ sub respondShowEntity {
 # Return an HTTP response showing the contents for an Entity
 # It prints full HTTP response body, not just a canvas.
 #
-sub respondShowLatestPerformance {
-  my $cgiObject = shift;
-  my $type      = shift;
-  my $mo_ref     = shift;
+sub respondShowPerformance {
+  my $cgiObject  = shift;
+  my $args       = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
-  die "Must get a type param"       if(! defined($type));
-  die "Must get a mo_ref param"     if(! defined($mo_ref));
+  die "Must get args param"         if(!defined($args) || ref($args) ne 'HASH');
+
+  foreach my $key ( ( "type", "mo_ref" ) ) {
+    if(!defined($args->{$key})) {
+      die "Missing arg key $key";
+    }
+  }
+  if(!defined($args->{fromYear}) || $args->{fromYear} eq '') {
+    my $now = time;
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now-3600);
+    my $currYear = $year + 1900;
+    $args->{fromYear}   = $currYear;
+    $args->{fromMonth}  = $mon+1;
+    $args->{fromDay}    = $mday;
+    $args->{fromHour}   = $hour;
+    $args->{fromMinute} = $min;
+
+    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($now);
+    $currYear = $year + 1900;
+    $args->{toYear}   = $currYear;
+    $args->{toMonth}  = $mon+1;
+    $args->{toDay}    = $mday;
+    $args->{toHour}   = $hour;
+    $args->{toMinute} = $min;
+  }
+
+  my $type   = $args->{type};
+  my $mo_ref = $args->{mo_ref};
+  die "empty type param"   if($type   eq '');
+  die "empty mo_ref param" if($mo_ref eq '');
+
   my $menuCanvasRet     = "menu per type $type <br/> i mo_ref $mo_ref";
   my $contentsCanvasRet
-     = getContentsForLatestPerformance($cgiObject, { type => $type, mo_ref => $mo_ref });
+     = getContentsForPerformance($cgiObject, $args);
 
   if(! $contentsCanvasRet->{retval}) {
     triggerError($cgiObject, "Errors getting the performance of the entity: "

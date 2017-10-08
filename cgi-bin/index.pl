@@ -35,21 +35,32 @@ elsif($session->is_empty) {
 }
 else {
   $session->expire($OInventory::configuration{'web.session.timeoutSecs'});
-  my $actionId = $cgiObject->url_param('actionId');
+  my $actionId = $cgiObject->param('actionId');
   if(! defined($actionId) || $actionId eq ''
             || $actionId == $OWwwLibs::ACTION_ID_MENU_ENTRY) {
-    my $menuEntryId = $cgiObject->url_param('menuEntryId');
+    my $menuEntryId = $cgiObject->param('menuEntryId');
     OWwwLibs::respondShowNavEntry($cgiObject, $menuEntryId);
   }
   elsif($actionId == $OWwwLibs::ACTION_ID_ON_MANAGED_OBJECT) {
-    my $type   = $cgiObject->url_param('type');
-    my $mo_ref = $cgiObject->url_param('mo_ref');
+    my $type   = $cgiObject->param('type');
+    my $mo_ref = $cgiObject->param('mo_ref');
     OWwwLibs::respondShowEntity($cgiObject, $type, $mo_ref);
   }
   elsif($actionId == $OWwwLibs::ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT) {
-    my $type   = $cgiObject->url_param('type');
-    my $mo_ref = $cgiObject->url_param('mo_ref');
-    OWwwLibs::respondShowLatestPerformance($cgiObject, $type, $mo_ref);
+    my %args;
+    $args{'type'}       = $cgiObject->param('type');
+    $args{'mo_ref'}     = $cgiObject->param('mo_ref');
+    $args{'fromYear'}   = $cgiObject->param('fromYear');
+    $args{'fromMonth'}  = $cgiObject->param('fromMonth');
+    $args{'fromDay'}    = $cgiObject->param('fromDay');
+    $args{'fromHour'}   = $cgiObject->param('fromHour');
+    $args{'fromMinute'} = $cgiObject->param('fromMinute');
+    $args{'toYear'}     = $cgiObject->param('toYear');
+    $args{'toMonth'}    = $cgiObject->param('toMonth');
+    $args{'toDay'}      = $cgiObject->param('toDay');
+    $args{'toHour'}     = $cgiObject->param('toHour');
+    $args{'toMinute'}   = $cgiObject->param('toMinute');
+    OWwwLibs::respondShowPerformance($cgiObject, \%args);
   }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");
