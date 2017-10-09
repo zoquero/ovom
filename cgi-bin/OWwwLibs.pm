@@ -821,16 +821,34 @@ sub getContentsForPerformance {
       goto _SHOW_ENTITIES_DISCONNECT_;
   }
 
+  #
+  # Let's load the PerfMetricIds from our inventory DB
+  #
   my $perfMetricIds = OvomDao::loadPerfMetricIdsForEntity($mo_ref);
   if(!defined($perfMetricIds)) {
     $output = "Could not get PerfMetricIds for $mo_ref";
     $retval = 0;
     goto _SHOW_ENTITIES_DISCONNECT_;
   }
+  #
+  # Let's load the OPerfCounterInfo from our inventory DB
+  #
+  my %perfCounterInfos;
+  foreach my $aPMI (@$perfMetricIds) {
+    my $aPCI     = OvomDao::loadEntity($aPMI->counterId, 'PerfCounterInfo');
+    if (! defined($aPCI)) {
+        $output = "Can't get the PerfCounterInfo for the PerfMetric with id "
+                 . $aPMI->counterId . " in the Inventory DB. ";
+        $retval = 0;
+        goto _SHOW_ENTITIES_DISCONNECT_;
+    }
+    $perfCounterInfos{$aPMI->counterId} = $aPCI;
+  }
 
-  $args->{entity}        = $entity;
-  $args->{oEntityName}   = $oEntityName;
-  $args->{perfMetricIds} = $perfMetricIds;
+  $args->{entity}           = $entity;
+  $args->{oEntityName}      = $oEntityName;
+  $args->{perfMetricIds}    = $perfMetricIds;
+  $args->{perfCounterInfos} = \%perfCounterInfos;
   $snippetRet = getContentsSnippetForPerformance($cgiObject, $args);
   if(! $snippetRet->{retval}) {
     $output = "There were errors trying to get the performance for the $type: " . $snippetRet->{output};
@@ -991,15 +1009,17 @@ sub getContentsSnippetForPerformance {
      || !defined($args->{'mo_ref'})
      || !defined($args->{'entity'})
      || !defined($args->{'oEntityName'})
-     || !defined($args->{'perfMetricIds'})) {
+     || !defined($args->{'perfMetricIds'})
+     || !defined($args->{'perfCounterInfos'})) {
     return { retval => 0, output => "Some keys are missing in hash arg" };
   }
 
-  my $type          = $args->{'type'};
-  my $mo_ref        = $args->{'mo_ref'};
-  my $entity        = $args->{'entity'};
-  my $oEntityName   = $args->{'oEntityName'};
-  my $perfMetricIds = $args->{'perfMetricIds'};
+  my $type             = $args->{'type'};
+  my $mo_ref           = $args->{'mo_ref'};
+  my $entity           = $args->{'entity'};
+  my $oEntityName      = $args->{'oEntityName'};
+  my $perfMetricIds    = $args->{'perfMetricIds'};
+  my $perfCounterInfos = $args->{'perfCounterInfos'};
 
   if (! defined($type) || $type eq '') {
     return { retval => 0, output => "Missing type arg." };
@@ -1016,13 +1036,16 @@ sub getContentsSnippetForPerformance {
   if (! defined($perfMetricIds)) {
     return { retval => 0, output => "Missing perfMetricIds arg." };
   }
+  if (! defined($perfCounterInfos)) {
+    return { retval => 0, output => "Missing perfCounterInfos arg." };
+  }
 
   my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour}, $args->{fromDay}, $args->{fromMonth}, $args->{fromYear});
   my $toEpoch   = timelocal(0, $args->{toMinute}, $args->{toHour}, $args->{toDay}, $args->{toMonth}, $args->{toYear});
   my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
   my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
 
-  my $perfGraph = OPerformance::getPathToPerfGraphFiles($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds);
+  my $perfGraph = OPerformance::getPathToPerfGraphFiles($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds, $perfCounterInfos);
 
   $output = <<"_PERFORMANCE_CONTENTS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>

@@ -2119,11 +2119,12 @@ sub getLatestPerformance {
 # @return path (if ok), undef (if errors)
 #
 sub getPathToPerfGraphFiles {
-  my $type          = shift;
-  my $mo_ref        = shift;
-  my $fromEpoch     = shift;
-  my $toEpoch       = shift;
-  my $perfMetricIds = shift;
+  my $type             = shift;
+  my $mo_ref           = shift;
+  my $fromEpoch        = shift;
+  my $toEpoch          = shift;
+  my $perfMetricIds    = shift;
+  my $perfCounterInfos = shift;
   my $r = '';
   my $entityName = OvomDao::oClassName2EntityName($type);
   my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
@@ -2148,7 +2149,7 @@ sub getPathToPerfGraphFiles {
     return undef;
   }
 
-  my $r = "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder<br/>";
+  my $r = "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder<br/><br/>";
   foreach my $pmi (@$perfMetricIds) {
 #   $r .= "pmi = " . $pmi . "<br/>";
     my $prefix = $mo_ref . $basenameSeparator . $pmi->counterId . $basenameSeparator . $pmi->instance;
@@ -2161,8 +2162,9 @@ sub getPathToPerfGraphFiles {
     if (! defined($resultingCsvFile)) {
       return undef;
     }
-    my $g = csv2Graph($fromEpoch, $toEpoch, $mo_ref, $pmi->counterId, $pmi->instance, $resultingCsvFile);
-    $r .= "resultingCsvFile for mo_ref=$mo_ref, counterId=" . $pmi->counterId . ", instance= " . $pmi->instance . " csv = $resultingCsvFile , graph = $g <br/>\n";
+    my $pCI = $perfCounterInfos->{$pmi->counterId};
+    my $g = csv2Graph($fromEpoch, $toEpoch, $mo_ref, $pmi->counterId, $pmi->instance, $resultingCsvFile, $pCI);
+    $r .= "resultingCsvFile for counterId=" . $pmi->counterId . " ($pCI), instance= " . $pmi->instance . " csv = $resultingCsvFile , graph = $g <br/><br/>\n";
 
   }
 
@@ -2173,12 +2175,13 @@ sub getPathToPerfGraphFiles {
 # Generate a PNG graph from a CSV file
 #
 sub csv2Graph {
-  my $fromEpoch  = shift;
-  my $toEpoch    = shift;
-  my $mo_ref     = shift;
-  my $counterId  = shift;
-  my $instance   = shift;
-  my $csv        = shift;
+  my $fromEpoch        = shift;
+  my $toEpoch          = shift;
+  my $mo_ref           = shift;
+  my $counterId        = shift;
+  my $instance         = shift;
+  my $csv              = shift;
+  my $perfCounterInfos = shift;
   my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
   my $prefix = $mo_ref . $basenameSeparator . $counterId . $basenameSeparator . $instance;
   my $output = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.png";
