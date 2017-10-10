@@ -1045,7 +1045,12 @@ sub getContentsSnippetForPerformance {
   my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
   my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
 
+die "there's an error in months, --. Fix pending";
+
   my $perfGraph = OPerformance::getPathToPerfGraphFiles($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds, $perfCounterInfos);
+  if(!defined($perfGraph)) {
+    return { retval => 0, output => "Errors generating graphs" };
+  }
 
   $output = <<"_PERFORMANCE_CONTENTS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>

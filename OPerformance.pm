@@ -2158,13 +2158,22 @@ sub getPathToPerfGraphFiles {
 #     $r .= "a sd = " . $aSD->{name} . ": $filename<br/>\n";
       push @filenames, $filename;
     }
+    OInventory::log(0, "Calling getOneCsvFromAllStages to generate a graph "
+                     . "from $fromEpoch to $toEpoch with prefix $prefix");
     my $resultingCsvFile = getOneCsvFromAllStages($fromEpoch, $toEpoch, $prefix, \@filenames);
     if (! defined($resultingCsvFile)) {
+      OInventory::log(3, "getOneCsvFromAllStages ended with errors");
       return undef;
     }
     my $pCI = $perfCounterInfos->{$pmi->counterId};
     my $description = getGraphDescription($type, $entityName, $mo_ref, $pCI);
     my $g = csv2graph($fromEpoch, $toEpoch, $resultingCsvFile);
+
+    if (! defined($g)) {
+      OInventory::log(3, "Could not generate graphs");
+      return undef;
+    }
+
     my $gu = graphPath2uriPath($g);
     $r .= "resultingCsvFile for counterId=" . $pmi->counterId . " ($pCI), instance= " . $pmi->instance . " csv = $resultingCsvFile , graphPath = $g , graphUri = $gu <br/><br/>\n";
     $r .= "<p><img src=\"$gu\" alt=\"$description\" border='1'/></p>\n";
@@ -2201,15 +2210,25 @@ sub getGraphDescription {
 #
 # Generate a PNG graph from a CSV file
 #
+# @arg min epoch
+# @arg max epoch
+# @arg path to csv file with data
+# @return the generated png graph of undef if errors
+#
 sub csv2graph {
   my $fromEpoch        = shift;
   my $toEpoch          = shift;
   my $csv              = shift;
+  my $chart;
+  my $dataSet;
 
   return undef if(! defined($fromEpoch) || $fromEpoch eq '');
   return undef if(! defined($toEpoch)   || $toEpoch eq '');
   return undef if(! defined($csv));
-  die "$csv doesn't exist" if(! -f $csv);
+  if(! -f $csv) {
+    OInventory::log(3, "csv2graph: $csv doesn't exist");
+    return undef;
+  }
 
   my $output = "$csv.png";
 
@@ -2219,25 +2238,29 @@ sub csv2graph {
 
   my ($timestamps, $values) = getPerfDataFromFile($csv);
 
-  # Create chart object and specify the properties of the chart
-  my $chart = Chart::Gnuplot->new(
-      output => $output,
-      title  => "Title pending",
-      xlabel => "x-axis label pending",
-      ylabel => "y-axis label pending",
-  );
-
-  # Create dataset object and specify the properties of the dataset
-  my $dataSet = Chart::Gnuplot::DataSet->new(
-    xdata => $timestamps,
-    ydata => $values,
-    title => "Plot title pending",
-    style => "linespoints",
-  );
-  
-  # Plot the data set on the chart
-  $chart->plot2d($dataSet);
-  
+  eval {
+    # Create chart object and specify the properties of the chart
+    $chart = Chart::Gnuplot->new(
+        output => $output,
+        title  => "Title pending",
+        xlabel => "x-axis label pending",
+        ylabel => "y-axis label pending",
+    );
+    # Create dataset object and specify the properties of the dataset
+    $dataSet = Chart::Gnuplot::DataSet->new(
+      xdata => $timestamps,
+      ydata => $values,
+      title => "Plot title pending",
+      style => "linespoints",
+    );
+    # Plot the data set on the chart
+    $chart->plot2d($dataSet);
+  };
+  if($@) {
+    OInventory::log(3, "csv2graph: Errors generating graphs for $csv: $@");
+    return undef;
+  }
+ 
   return $output;
 }
 
@@ -2259,6 +2282,7 @@ sub getOneCsvFromAllStages {
   my $filenamesRef = shift;
   my $outputHandler;
   my $inputHandler;
+  my $linesPrinted = 0;
 
   my @linesToSave;
 
@@ -2323,10 +2347,16 @@ sub getOneCsvFromAllStages {
   #
   foreach my $aLine (sort @linesToSave) {
     print $outputHandler "$aLine\n";
+    $linesPrinted++;
   }
 
   if( ! close($outputHandler) ) {
     OInventory::log(3, "Could not close CSV output file '$csv': $!");
+    return undef;
+  }
+
+  if($linesPrinted == 0) {
+    OInventory::log(3, "Could not find points in that interval to print to '$csv'");
     return undef;
   }
   return $csv;

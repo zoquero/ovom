@@ -76,6 +76,10 @@ PENDING! we'll list here the folders to be created
 
 ```
 $ sudo setfacl -m user:www-data:rw- /var/log/ovom/
+$ # substitute /home/agalindo/workspace/ovom/www/graphs
+$ # for 'web.graphs.folder' param in conf
+$ sudo setfacl -m user:www-data:rwx /home/agalindo/workspace/ovom/www/graphs
+
 ```
 
 ## User
