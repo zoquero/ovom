@@ -287,20 +287,20 @@ sub initCounterInfo {
     #
     # Save perfCounterInfo objects in CSV files
     #
-    my $s = $pCI->{statsType}->{val}     . $csvSep
-          . $pCI->{perDeviceLevel}       . $csvSep
-          . $pCI->{nameInfo}->{key}      . $csvSep
-          . $pCI->{nameInfo}->{label}    . $csvSep
-          . $pCI->{nameInfo}->{summary}  . $csvSep
-          . $pCI->{groupInfo}->{key}     . $csvSep
-          . $pCI->{groupInfo}->{label}   . $csvSep
-          . $pCI->{groupInfo}->{summary} . $csvSep
-          . $pCI->{key}                  . $csvSep
-          . $pCI->{level}                . $csvSep
-          . $pCI->{rollupType}->{val}    . $csvSep
-          . $pCI->{unitInfo}->{key}      . $csvSep
-          . $pCI->{unitInfo}->{label}    . $csvSep
-          . $pCI->{unitInfo}->{summary};
+    my $s = $pCI->statsType->val     . $csvSep
+          . $pCI->perDeviceLevel     . $csvSep
+          . $pCI->nameInfo->key      . $csvSep
+          . $pCI->nameInfo->label    . $csvSep
+          . $pCI->nameInfo->summary  . $csvSep
+          . $pCI->groupInfo->key     . $csvSep
+          . $pCI->groupInfo->label   . $csvSep
+          . $pCI->groupInfo->summary . $csvSep
+          . $pCI->key                . $csvSep
+          . $pCI->level              . $csvSep
+          . $pCI->rollupType->val    . $csvSep
+          . $pCI->unitInfo->key      . $csvSep
+          . $pCI->unitInfo->label    . $csvSep
+          . $pCI->unitInfo->summary;
     print $csvHandler "$s\n";
   }
 
@@ -2320,7 +2320,11 @@ sub getOneCsvFromAllStages {
         OInventory::log(3, "Unknown timestamp in line '$line' from '$aPath'");
         return undef;
       }
-      if($v ne '' && ! looks_like_number($v)) {
+      if($v eq '' ) {
+        # Timestamp without value (missing data, network problem vCenter<=>ESXi ...)
+        next;
+      }
+      if(! looks_like_number($v)) {
         # We'll not stop parsing
         # Must we log Error or Warning ... ?
         OInventory::log(2, "Unknown value in line '$line' from '$aPath'");

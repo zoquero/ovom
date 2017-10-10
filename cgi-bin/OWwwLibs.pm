@@ -1040,12 +1040,16 @@ sub getContentsSnippetForPerformance {
     return { retval => 0, output => "Missing perfCounterInfos arg." };
   }
 
-  my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour}, $args->{fromDay}, $args->{fromMonth}, $args->{fromYear});
-  my $toEpoch   = timelocal(0, $args->{toMinute}, $args->{toHour}, $args->{toDay}, $args->{toMonth}, $args->{toYear});
+  #
+  # Month conversion:
+  # * $args->{fromMonth} comes from webUI and belongs to [1..12]
+  # * 5th parameter ("month") in Time::Loca::timelocal and belongs to [0..11]
+  #
+  my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour}, $args->{fromDay}, $args->{fromMonth} - 1, $args->{fromYear});
+  my $toEpoch   = timelocal(0, $args->{toMinute}, $args->{toHour}, $args->{toDay}, $args->{toMonth} - 1, $args->{toYear});
   my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
   my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
 
-die "there's an error in months, --. Fix pending";
 
   my $perfGraph = OPerformance::getPathToPerfGraphFiles($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds, $perfCounterInfos);
   if(!defined($perfGraph)) {

@@ -4,6 +4,7 @@ use warnings;
 use Carp;
 use overload
     '""' => 'stringify';
+use Data::Dumper;
 
 sub new {
   my ($class, $args) = @_;

@@ -171,7 +171,8 @@ sub QueryAvailablePerfMetric {
       return undef;
     }
 
-    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(\@parts);
+    my @np = ($entityView->{mo_ref}->{value}, $parts[0], $parts[1]);
+    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(\@np);
     if ( ! defined($aPerfMetricId) ) {
       OInventory::log(3, "Errors loading a mocking perf metric id object");
       return undef;

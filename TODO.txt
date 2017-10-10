@@ -1,5 +1,30 @@
 Some things to be done:
 
+* Alerts :
+** Thresholds: Store in confFile or DB?
+** Custom thresholds per each entity 
+** Save 'latest data'  in the PerfMetricId object and at BD
+** Create a new AlertHistory table and push there the alerts
+
+* Show alerts in webUI:
+** 'current alerts'
+** Alerts history
+
+* Show in each entity in WebUI:
+** Current overall state (colour)
+** Current alerts list
+** History of alerts
+
+* NRPE check:
+** For a concrete counterId & instance (by mo-ref | by type&name)
+*** thresholds
+*** optional if increasing (default) or decreasing
+** General: Is there any alert for any indicator of this entity? (any of those indicators that has thresholds)
+
+* Alert hook for:
+** Nagios Passive checks
+** SNMP trap
+
 * Flag files to trigger actions like: 1) pause inventory gathering 2) restart inventory gathering 3) launch new inventory gathering
 * Dao: pending testing update sqlPerfCounterInfoUpdate
 * aggressively cache retrieved objects at OPerformance::getLatestPerformance()

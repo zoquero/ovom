@@ -13,8 +13,8 @@ sub new {
     return undef;
   }
 
-  if($#$args < 1) {
-    Carp::croak("Array with few many values received in constructor");
+  if($#$args < 2) {
+    Carp::croak("Array with few many values received in OMockPerfMetricId constructor");
     return undef;
   }
 

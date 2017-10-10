@@ -674,13 +674,28 @@ sub updateOvomInventoryDatabaseFromVcenter {
 # @param string specifying the type.
 #               It can be: Datacenter | VirtualMachine
 #                        | HostSystem | ClusterComputeResource | Folder
-# @return none
+# @return 1 (ok) or 0 (errors)
 #
 sub pushToInventory {
   my $entityViews = shift;
   my $type        = shift;
   foreach my $aEntityView (@$entityViews) {
     my $aEntity;
+
+    if(!defined($aEntityView)) {
+      OInventory::log(3, "pushToInventory got an undefined entityView param");
+    }
+    if(!defined($aEntityView->{'name'})) {
+      OInventory::log(3, "pushToInventory got an entityView param "
+                       . "with undefined {name} field");
+      return 0;
+    }
+    if(!defined($aEntityView->{'mo_ref'})) {
+      OInventory::log(3, "pushToInventory got an entityView param "
+                       . "with undefined {mo_ref} field");
+      return 0;
+    }
+
     if($type eq 'Datacenter') {
       #
       # The parent for the base folders for hosts, networks, VMs
@@ -749,10 +764,12 @@ sub pushToInventory {
     }
     else {
       OInventory::log(3, "Unexpected type '$type' in pushToInventory");
+      return 0;
     }
 
     push @{$inventory{$type}}, $aEntity;
   }
+  return 1;
 }
 
 
@@ -956,7 +973,12 @@ sub updateInventory {
   
     # load the entity object and push it to $inventory{$aEntityType}
     @{$inventory{$aEntityType}} = (); # Let's clean it before
-    pushToInventory($entityViews, $aEntityType);
+    my $r = pushToInventory($entityViews, $aEntityType);
+    if(!$r) {
+      OInventory::log(3, "Errors pushing to inventory on memory. "
+                       . "Probably there were errors connecting to vCenter.");
+      return 0;
+    }
   }
 
   ###############################
