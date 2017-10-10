@@ -40,7 +40,12 @@ https://code.vmware.com/web/sdk/65/vsphere-perl
 
 ## Packages for ovom core
 
-A **basic perl installation** (perl perl-base perl-modules). Just as an example, here's the list of packages to which belong all the files that were open by a run of picker.pl, as shown by strace:
+A **basic perl installation**, plus some perl libs: CGI, mysql splines, gnuplot
+```
+$ sudo apt-get install perl libdbd-mysql-perl libwww-perl libhttp-cookies-perl libmath-spline-perl libchart-gnuplot-perl
+```
+
+Just to complement it: here's the list of packages to which belong all the files that were open by a run of picker.pl, as shown by *strace*:
 ```
 $ sudo apt-get install base-files language-pack-es-base libc6:amd64 libdbd-mysql-perl \
        libdbi-perl libgcc1:amd64 libhttp-cookies-perl libhttp-date-perl libhttp-message-perl \
@@ -52,6 +57,7 @@ $ sudo apt-get install base-files language-pack-es-base libc6:amd64 libdbd-mysql
 ```
 
 ## Packages for ovom web interface
+
 ```
 $ sudo apt-get install apache2 libcgi-session-perl
 ```

@@ -12,6 +12,7 @@ use POSIX;               ## floor
 use Scalar::Util qw(looks_like_number);
 use Math::Spline;        ## for RRDB interpolation
 use File::Copy qw(move); ## move perfData file
+use Chart::Gnuplot;
 
 use OInventory;
 use OvomDao;
@@ -2125,7 +2126,6 @@ sub getPathToPerfGraphFiles {
   my $toEpoch          = shift;
   my $perfMetricIds    = shift;
   my $perfCounterInfos = shift;
-  my $r = '';
   my $entityName = OvomDao::oClassName2EntityName($type);
   my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
   my @filenames;
@@ -2163,31 +2163,81 @@ sub getPathToPerfGraphFiles {
       return undef;
     }
     my $pCI = $perfCounterInfos->{$pmi->counterId};
-    my $g = csv2Graph($fromEpoch, $toEpoch, $mo_ref, $pmi->counterId, $pmi->instance, $resultingCsvFile, $pCI);
-    $r .= "resultingCsvFile for counterId=" . $pmi->counterId . " ($pCI), instance= " . $pmi->instance . " csv = $resultingCsvFile , graph = $g <br/><br/>\n";
-
+    my $description = getGraphDescription($type, $entityName, $mo_ref, $pCI);
+    my $g = csv2graph($fromEpoch, $toEpoch, $resultingCsvFile);
+    my $gu = graphPath2uriPath($g);
+    $r .= "resultingCsvFile for counterId=" . $pmi->counterId . " ($pCI), instance= " . $pmi->instance . " csv = $resultingCsvFile , graphPath = $g , graphUri = $gu <br/><br/>\n";
+    $r .= "<p><img src=\"$gu\" alt=\"$description\" border='1'/></p>\n";
   }
-
   return $r;
+}
+
+sub graphPath2uriPath {
+  my $p = shift;
+  return undef if (!defined($p));
+
+  my $graphFolderUrl = $OInventory::configuration{'web.graphs.folder'};
+  my $uriPath = $OInventory::configuration{'web.graphs.uri_path'};
+
+  substr($p, 0, length($graphFolderUrl), $uriPath);
+  return $p;
+}
+
+sub getGraphDescription {
+  my $type       = shift;
+  my $entityName = shift;
+  my $mo_ref     = shift;
+  my $pCI = shift;
+
+  return undef if(!defined $type || $type eq '');
+  return undef if(!defined $entityName || $entityName eq '');
+  return undef if(!defined $mo_ref || $mo_ref eq '');
+  return undef if(!defined $pCI);
+  return undef if(ref($pCI) eq 'OPerfCounterInfo');
+
+  return "$type $entityName ($mo_ref): $pCI";
 }
 
 #
 # Generate a PNG graph from a CSV file
 #
-sub csv2Graph {
+sub csv2graph {
   my $fromEpoch        = shift;
   my $toEpoch          = shift;
-  my $mo_ref           = shift;
-  my $counterId        = shift;
-  my $instance         = shift;
   my $csv              = shift;
-  my $perfCounterInfos = shift;
-  my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
-  my $prefix = $mo_ref . $basenameSeparator . $counterId . $basenameSeparator . $instance;
-  my $output = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.png";
 
-  # Let's continue here !!!
+  return undef if(! defined($fromEpoch) || $fromEpoch eq '');
+  return undef if(! defined($toEpoch)   || $toEpoch eq '');
+  return undef if(! defined($csv));
+  die "$csv doesn't exist" if(! -f $csv);
 
+  my $output = "$csv.png";
+
+# my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+# my $prefix = $mo_ref . $basenameSeparator . $counterId . $basenameSeparator . $instance;
+# my $output = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.png";
+
+  my ($timestamps, $values) = getPerfDataFromFile($csv);
+
+  # Create chart object and specify the properties of the chart
+  my $chart = Chart::Gnuplot->new(
+      output => $output,
+      title  => "Title pending",
+      xlabel => "x-axis label pending",
+      ylabel => "y-axis label pending",
+  );
+
+  # Create dataset object and specify the properties of the dataset
+  my $dataSet = Chart::Gnuplot::DataSet->new(
+    xdata => $timestamps,
+    ydata => $values,
+    title => "Plot title pending",
+    style => "linespoints",
+  );
+  
+  # Plot the data set on the chart
+  $chart->plot2d($dataSet);
+  
   return $output;
 }
 
