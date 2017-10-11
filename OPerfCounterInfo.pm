@@ -116,7 +116,7 @@ sub compare {
 
 sub getShortDescription {
   my ($self) = @_;
-  return $self->{_nameInfo}->{_summary} . " (" . $self->{_unitInfo}->{_summary} . ")";
+  return $self->{_nameInfo}->{_label} . " (" . $self->{_unitInfo}->{_label} . ")";
 }
 
 sub stringify {

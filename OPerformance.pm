@@ -2188,31 +2188,31 @@ sub getPathToPerfGraphFiles {
   return $r;
 }
 
-sub graphPath2uriPath {
-  my $p = shift;
-  return undef if (!defined($p));
+# sub graphPath2uriPath {
+#   my $p = shift;
+#   return undef if (!defined($p));
+# 
+#   my $graphFolderUrl = $OInventory::configuration{'web.graphs.folder'};
+#   my $uriPath = $OInventory::configuration{'web.graphs.uri_path'};
+# 
+#   substr($p, 0, length($graphFolderUrl), $uriPath);
+#   return $p;
+# }
 
-  my $graphFolderUrl = $OInventory::configuration{'web.graphs.folder'};
-  my $uriPath = $OInventory::configuration{'web.graphs.uri_path'};
-
-  substr($p, 0, length($graphFolderUrl), $uriPath);
-  return $p;
-}
-
-sub getGraphDescription {
-  my $type       = shift;
-  my $entityName = shift;
-  my $mo_ref     = shift;
-  my $pCI = shift;
-
-  return undef if(!defined $type || $type eq '');
-  return undef if(!defined $entityName || $entityName eq '');
-  return undef if(!defined $mo_ref || $mo_ref eq '');
-  return undef if(!defined $pCI);
-  return undef if(ref($pCI) eq 'OPerfCounterInfo');
-
-  return "$type $entityName ($mo_ref): $pCI";
-}
+# sub getGraphDescription {
+#   my $type       = shift;
+#   my $entityName = shift;
+#   my $mo_ref     = shift;
+#   my $pCI = shift;
+# 
+#   return undef if(!defined $type || $type eq '');
+#   return undef if(!defined $entityName || $entityName eq '');
+#   return undef if(!defined $mo_ref || $mo_ref eq '');
+#   return undef if(!defined $pCI);
+#   return undef if(ref($pCI) eq 'OPerfCounterInfo');
+# 
+#   return "$type $entityName ($mo_ref): $pCI";
+# }
 
 #
 # Generate a PNG graph from a CSV file
