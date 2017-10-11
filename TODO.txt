@@ -27,8 +27,6 @@ Some things to be done:
 
 * refresh session in each hit
 
-* group graphs within "groupInfo". Maybe divide them in separate pages
-
 * improve menuCanvas in webUI to allow 'go to previous entity'
 
 * Flag files to trigger actions like: 1) pause inventory gathering 2) restart inventory gathering 3) launch new inventory gathering
