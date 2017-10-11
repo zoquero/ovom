@@ -2149,7 +2149,7 @@ sub getPathToPerfGraphFiles {
     return undef;
   }
 
-  my $r = "<br/>type=$type,<br/>mo_ref=$mo_ref,<br/>fromEpoch=$fromEpoch,<br/>toEpoch=$toEpoch,<br/>folder=$folder<br/><br/>";
+  my $r;
   foreach my $pmi (@$perfMetricIds) {
 #   $r .= "pmi = " . $pmi . "<br/>";
     my $prefix = $mo_ref . $basenameSeparator . $pmi->counterId . $basenameSeparator . $pmi->instance;
@@ -2175,8 +2175,15 @@ sub getPathToPerfGraphFiles {
     }
 
     my $gu = graphPath2uriPath($g);
-    $r .= "resultingCsvFile for counterId=" . $pmi->counterId . " ($pCI), instance= " . $pmi->instance . " csv = $resultingCsvFile , graphPath = $g , graphUri = $gu <br/><br/>\n";
-    $r .= "<p><img src=\"$gu\" alt=\"$description\" border='1'/></p>\n";
+    my $instanceStr;
+    if($pmi->instance eq '') {
+      $instanceStr = '';
+    }
+    else {
+      $instanceStr = ", instance '" . $pmi->instance . "'";
+    }
+    $r .= "<h4>" . $pCI->getShortDescription() . "$instanceStr</h4>\n";
+    $r .= "<p><img src=\"$gu\" alt=\"$description\" border='1'/></p><hr/>\n";
   }
   return $r;
 }

@@ -164,6 +164,35 @@ sub getLinkToMenuEntry {
   }
   return "<a href='?actionId=" . $ACTION_ID_MENU_ENTRY . "&menuEntryId=$menuEntryId'>" . $$navEntries{$menuEntryId}{'display'} . "</a>";
 }
+
+sub getNavMenuBody {
+  my $attributes = shift;
+  my $id         = shift;
+  my $menuBody;
+  my $siblings   = getSiblingNavEntries($id);
+
+  if($$attributes{'parent'} eq '') {
+    $menuBody .= "Choose an option, please<br/>";
+  }
+  else {
+    $menuBody .= "^ '" . getLinkToMenuEntry($$attributes{'parent'}) . "'<br/>";
+  }
+  if(defined($siblings) && $#$siblings > -1) {
+    $menuBody .= "<ul>\n";
+    foreach my $aSibling (sort @$siblings) {
+      $menuBody .= "<b>"  if($aSibling == $id);
+      $menuBody .= "<li>" . getLinkToMenuEntry($aSibling);
+      if($aSibling == $id) {
+        $menuBody .= "</b> &gt;</li>\n";
+      }
+      else {
+        $menuBody .= "</li>\n";
+      }
+    }
+    $menuBody .= "</ul>\n";
+  }
+
+}
  
 #
 # Shows a navigation entry.
@@ -188,28 +217,8 @@ sub respondShowNavEntry {
     return;
   }
   my $attributes = $$navEntries{$id};
-  my $siblings   = getSiblingNavEntries($id);
+  $menuBody = getNavMenuBody($attributes, $id);
 
-  if($$attributes{'parent'} eq '') {
-    $menuBody .= "Choose an option, please<br/>";
-  }
-  else {
-    $menuBody .= "^ '" . getLinkToMenuEntry($$attributes{'parent'}) . "'<br/>";
-  }
-  if(defined($siblings) && $#$siblings > -1) {
-    $menuBody .= "<ul>\n";
-    foreach my $aSibling (sort @$siblings) {
-      $menuBody .= "<b>"  if($aSibling == $id);
-      $menuBody .= "<li>" . getLinkToMenuEntry($aSibling);
-      if($aSibling == $id) {
-        $menuBody .= "</b> &gt;</li>\n";
-      }
-      else {
-        $menuBody .= "</li>\n";
-      }
-    }
-    $menuBody .= "</ul>\n";
-  }
   if(defined($$attributes{'method'})
      &&  ref($$attributes{'method'}) eq 'CODE') {
     my $r = $$attributes{'method'}->($cgiObject);
@@ -225,9 +234,9 @@ sub respondShowNavEntry {
   else {
     my $childIds = getChildNavEntries($id);
   
-    if($$attributes{'parent'} ne '') {
-      $contentsBody .= "up: '" . $$attributes{'parent'} . "'<br/>";
-    }
+#   if($$attributes{'parent'} ne '') {
+#     $contentsBody .= "up: '" . $$attributes{'parent'} . "'<br/>";
+#   }
     if(defined($childIds) && $#$childIds > -1) {
       $contentsBody .= "<ul>\n";
       foreach my $aChildId (@$childIds) {
@@ -1059,12 +1068,13 @@ sub getContentsSnippetForPerformance {
   $output = <<"_PERFORMANCE_CONTENTS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>
 <h3>Description</h3>
-<p>$oEntityName with mo_ref='<b><em>$mo_ref</em></b>'</p>
-<p style="font-family:Courier New;">Interval:<br/>
-from&nbsp;Y/M/D H:M:S $fromStr ($fromEpoch in <em>epoch</em>)<br/>
-to&nbsp;&nbsp;&nbsp;Y/M/D H:M:S $toStr ($toEpoch in <em>epoch</em>) </p>
+<p>$oEntityName with name <b><em>$entity->{name}</em></b> and mo_ref='<b><em>$mo_ref</em></b>'</p>
+<p style="font-family:Courier New;">Interval choosen for graphs:<br/>
+* from&nbsp;Y/M/D H:M:S $fromStr ($fromEpoch in <em>epoch</em>)<br/>
+* to&nbsp;&nbsp;&nbsp;Y/M/D H:M:S $toStr ($toEpoch in <em>epoch</em>) </p>
 
-<p>result: perfGraph=$perfGraph</p>
+<h3>Graphs</h3>
+$perfGraph
 _PERFORMANCE_CONTENTS_
   $retval = 1;
 
@@ -1172,6 +1182,30 @@ _ENTITY_CONTENTS_
   return { retval => $retval, output => $output };
 }
 
+sub getNavEntryIdForType {
+  my $type = shift;
+  my $id;
+  if($type    eq 'OFolder') {
+    $id = 4;
+  }
+  elsif($type eq 'ODatacenter') {
+    $id = 5;
+  }
+  elsif($type eq 'OVirtualMachine') {
+    $id = 6;
+  }
+  elsif($type eq 'OHost') {
+    $id = 7;
+  }
+  elsif($type eq 'OCluster') {
+    $id = 8;
+  }
+  else {
+    $id = 1;
+  }
+  return $id;
+}
+
 #
 # Return an HTTP response showing the contents for an Entity
 # It prints full HTTP response body, not just a canvas.
@@ -1179,11 +1213,18 @@ _ENTITY_CONTENTS_
 sub respondShowEntity {
   my $cgiObject = shift;
   my $type      = shift;
-  my $mo_ref     = shift;
+  my $mo_ref    = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   die "Must get a type param"       if(! defined($type));
   die "Must get a mo_ref param"     if(! defined($mo_ref));
-  my $menuCanvasRet     = "menu per type $type <br/> i mo_ref $mo_ref";
+
+  my $id = getNavEntryIdForType($type);
+  if (!defined $$navEntries{$id}) {
+    die "respondShowEntity: Can't find the navigation entry for $id";
+  }
+  my $attributes = $$navEntries{$id};
+  my $menuCanvasRet = getNavMenuBody($attributes, $id);
+
   my $contentsCanvasRet
      = getContentsForEntity($cgiObject, { type => $type, mo_ref => $mo_ref });
 
@@ -1242,7 +1283,14 @@ sub respondShowPerformance {
   die "empty type param"   if($type   eq '');
   die "empty mo_ref param" if($mo_ref eq '');
 
-  my $menuCanvasRet     = "menu per type $type <br/> i mo_ref $mo_ref";
+
+  my $id = getNavEntryIdForType($type);
+  if (!defined $$navEntries{$id}) {
+    die "respondShowPerformance: Can't find the navigation entry for $id";
+  }
+  my $attributes = $$navEntries{$id};
+  my $menuCanvasRet = getNavMenuBody($attributes, $id);
+
   my $contentsCanvasRet
      = getContentsForPerformance($cgiObject, $args);
 
