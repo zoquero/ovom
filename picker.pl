@@ -44,6 +44,7 @@ while(1) {
     last;
   }
   OInventory::log(1, "Log files successfully rotated");
+  OInventory::log(1, "Extraction iteration #" . $inventoryRefreshCount);
 
   #
   # Connect to Database if needed:
@@ -59,7 +60,6 @@ while(1) {
   #
   # Inventory update
   #
-  OInventory::log(1, "Extraction iteration #" . $inventoryRefreshCount);
   if($inventoryRefreshCount++
      % $OInventory::configuration{'inventory.refreshPeriod'} == 0) {
 

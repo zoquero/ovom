@@ -1,0 +1,20 @@
+<html>
+  <head>
+<tmpl_var name=HEAD>
+  </head>
+  <body>
+    <h1> <tmpl_var name=APP_TITLE> </h1>
+    <table align='center' border=1>
+      <tr>
+        <td>
+          <p> <tmpl_var name=NAVIGATION_CANVAS> </p>
+          <p><a href='login.pl?action=logout'>Logout</a></p>
+        </td>
+        <td>
+          <p> <tmpl_var name=CONTENTS_CANVAS> </p>
+        </td>
+      </tr>
+    </table>
+    <tmpl_var name=FOOTER>
+  </body>
+</html>

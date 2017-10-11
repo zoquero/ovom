@@ -12,6 +12,7 @@ use POSIX;               ## floor
 use Scalar::Util qw(looks_like_number);
 use Math::Spline;        ## for RRDB interpolation
 use File::Copy qw(move); ## move perfData file
+use Chart::Gnuplot;
 
 use OInventory;
 use OvomDao;
@@ -243,7 +244,7 @@ sub initCounterInfo {
   my $csvHandler;
   if( ! open($csvHandler, ">:utf8", $pciCsv) ) {
     OInventory::log(3, "Could not open CSV file '$pciCsv': $!");
-    return 1;
+    return 0;
   }
 
   my $l = "statsType${csvSep}perDeviceLevel${csvSep}nameInfoKey${csvSep}"
@@ -286,27 +287,21 @@ sub initCounterInfo {
     #
     # Save perfCounterInfo objects in CSV files
     #
-    my $s = $pCI->{statsType}->{val}     . $csvSep
-          . $pCI->{perDeviceLevel}       . $csvSep
-          . $pCI->{nameInfo}->{key}      . $csvSep
-          . $pCI->{nameInfo}->{label}    . $csvSep
-          . $pCI->{nameInfo}->{summary}  . $csvSep
-          . $pCI->{groupInfo}->{key}     . $csvSep
-          . $pCI->{groupInfo}->{label}   . $csvSep
-          . $pCI->{groupInfo}->{summary} . $csvSep
-          . $pCI->{key}                  . $csvSep
-          . $pCI->{level}                . $csvSep
-          . $pCI->{rollupType}->{val}    . $csvSep
-          . $pCI->{unitInfo}->{key}      . $csvSep
-          . $pCI->{unitInfo}->{label}    . $csvSep
-          . $pCI->{unitInfo}->{summary};
+    my $s = $pCI->statsType->val     . $csvSep
+          . $pCI->perDeviceLevel     . $csvSep
+          . $pCI->nameInfo->key      . $csvSep
+          . $pCI->nameInfo->label    . $csvSep
+          . $pCI->nameInfo->summary  . $csvSep
+          . $pCI->groupInfo->key     . $csvSep
+          . $pCI->groupInfo->label   . $csvSep
+          . $pCI->groupInfo->summary . $csvSep
+          . $pCI->key                . $csvSep
+          . $pCI->level              . $csvSep
+          . $pCI->rollupType->val    . $csvSep
+          . $pCI->unitInfo->key      . $csvSep
+          . $pCI->unitInfo->label    . $csvSep
+          . $pCI->unitInfo->summary;
     print $csvHandler "$s\n";
-
-#   if(! perfCounterInfos2Csv($pCI)) {
-#     OInventory::log(3, "Errors saving perfCounterInfo descriptors. "
-#                      . "We'll continue, anyway");
-#   }
-
   }
 
   #
@@ -314,7 +309,7 @@ sub initCounterInfo {
   #
   if( ! close($csvHandler) ) {
     OInventory::log(3, "Could not close the CSV file '$pciCsv': $!");
-    return 1;
+    return 0;
   }
 
   return 1;
@@ -562,7 +557,7 @@ sub registerPerfDataSaved {
   if( ! defined($lastRegister)) {
     OInventory::log(0, "No previous PerfMetricId like this, let's insert:");
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-                          [ $perfData->id->counterId, $perfData->id->instance ]
+                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
                         );
     if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
@@ -580,7 +575,7 @@ sub registerPerfDataSaved {
 
     OInventory::log(0, "Let's update previous PerfMetricId:");
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-                          [ $perfData->id->counterId, $perfData->id->instance ]
+                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
                         );
     # TO_DO : update unimplemented for PerfMetric , 2nd extra argument
     if( ! OvomDao::update($aPerfMetricId, $entity) ) {
@@ -2114,6 +2109,268 @@ sub getLatestPerformance {
                      . sprintf("%.3f", $eTimeB) . " s");
 
   return 1;
+}
+
+#
+# Gets last performance data from hosts and VMs.
+#
+# It creates a new PNG file with the graph and returns its full path.
+# Deleting that file is responsibility of the caller.
+#
+# @return path (if ok), undef (if errors)
+#
+sub getPathToPerfGraphFiles {
+  my $type             = shift;
+  my $mo_ref           = shift;
+  my $fromEpoch        = shift;
+  my $toEpoch          = shift;
+  my $perfMetricIds    = shift;
+  my $perfCounterInfos = shift;
+  my $entityName = OvomDao::oClassName2EntityName($type);
+  my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+  my @filenames;
+
+  #
+  # Folder for performance data
+  #
+  my $folder = $OInventory::configuration{'perfdata.root'}
+             . "/"
+             . $OInventory::configuration{'vCenter.fqdn'}
+             . "/"
+             . $entityName
+             . "/"
+             . $mo_ref;
+
+  #
+  # Let's load stage descriptors
+  #
+  my $sd = getStageDescriptors();
+  if( ! defined ($sd) ) {
+    return undef;
+  }
+
+  my $r;
+  foreach my $pmi (@$perfMetricIds) {
+#   $r .= "pmi = " . $pmi . "<br/>";
+    my $prefix = $mo_ref . $basenameSeparator . $pmi->counterId . $basenameSeparator . $pmi->instance;
+    foreach my $aSD (@$sd) {
+      my $filename = $folder . "/" . $prefix . "." . $aSD->{name} . ".csv";
+#     $r .= "a sd = " . $aSD->{name} . ": $filename<br/>\n";
+      push @filenames, $filename;
+    }
+    OInventory::log(0, "Calling getOneCsvFromAllStages to generate a graph "
+                     . "from $fromEpoch to $toEpoch with prefix $prefix");
+    my $resultingCsvFile = getOneCsvFromAllStages($fromEpoch, $toEpoch, $prefix, \@filenames);
+    if (! defined($resultingCsvFile)) {
+      OInventory::log(3, "getOneCsvFromAllStages ended with errors");
+      return undef;
+    }
+    my $pCI = $perfCounterInfos->{$pmi->counterId};
+    my $description = getGraphDescription($type, $entityName, $mo_ref, $pCI);
+    my $g = csv2graph($fromEpoch, $toEpoch, $resultingCsvFile);
+
+    if (! defined($g)) {
+      OInventory::log(3, "Could not generate graphs");
+      return undef;
+    }
+
+    my $gu = graphPath2uriPath($g);
+    my $instanceStr;
+    if($pmi->instance eq '') {
+      $instanceStr = '';
+    }
+    else {
+      $instanceStr = ", instance '" . $pmi->instance . "'";
+    }
+    $r .= "<h4>" . $pCI->getShortDescription() . "$instanceStr</h4>\n";
+    $r .= "<p><img src=\"$gu\" alt=\"$description\" border='1'/></p><hr/>\n";
+  }
+  return $r;
+}
+
+sub graphPath2uriPath {
+  my $p = shift;
+  return undef if (!defined($p));
+
+  my $graphFolderUrl = $OInventory::configuration{'web.graphs.folder'};
+  my $uriPath = $OInventory::configuration{'web.graphs.uri_path'};
+
+  substr($p, 0, length($graphFolderUrl), $uriPath);
+  return $p;
+}
+
+sub getGraphDescription {
+  my $type       = shift;
+  my $entityName = shift;
+  my $mo_ref     = shift;
+  my $pCI = shift;
+
+  return undef if(!defined $type || $type eq '');
+  return undef if(!defined $entityName || $entityName eq '');
+  return undef if(!defined $mo_ref || $mo_ref eq '');
+  return undef if(!defined $pCI);
+  return undef if(ref($pCI) eq 'OPerfCounterInfo');
+
+  return "$type $entityName ($mo_ref): $pCI";
+}
+
+#
+# Generate a PNG graph from a CSV file
+#
+# @arg min epoch
+# @arg max epoch
+# @arg path to csv file with data
+# @return the generated png graph of undef if errors
+#
+sub csv2graph {
+  my $fromEpoch        = shift;
+  my $toEpoch          = shift;
+  my $csv              = shift;
+  my $chart;
+  my $dataSet;
+
+  return undef if(! defined($fromEpoch) || $fromEpoch eq '');
+  return undef if(! defined($toEpoch)   || $toEpoch eq '');
+  return undef if(! defined($csv));
+  if(! -f $csv) {
+    OInventory::log(3, "csv2graph: $csv doesn't exist");
+    return undef;
+  }
+
+  my $output = "$csv.png";
+
+# my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+# my $prefix = $mo_ref . $basenameSeparator . $counterId . $basenameSeparator . $instance;
+# my $output = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.png";
+
+  my ($timestamps, $values) = getPerfDataFromFile($csv);
+
+  eval {
+    # Create chart object and specify the properties of the chart
+    $chart = Chart::Gnuplot->new(
+        output => $output,
+        title  => "Title pending",
+        xlabel => "x-axis label pending",
+        ylabel => "y-axis label pending",
+    );
+    # Create dataset object and specify the properties of the dataset
+    $dataSet = Chart::Gnuplot::DataSet->new(
+      xdata => $timestamps,
+      ydata => $values,
+      title => "Plot title pending",
+      style => "linespoints",
+    );
+    # Plot the data set on the chart
+    $chart->plot2d($dataSet);
+  };
+  if($@) {
+    OInventory::log(3, "csv2graph: Errors generating graphs for $csv: $@");
+    return undef;
+  }
+ 
+  return $output;
+}
+
+#
+# Creates a new temporary file and prints on it all
+# the points from the files between the two epoch instants
+#
+# @arg lower bound in epoch
+# @arg upper bound in epoch
+# @arg string to identify the object (ex.: mo_ref___PerfMetricId)
+# @arg reference to the array of filenames (paths)
+# @arg mo_ref of the object
+# @return the path of the new CSV (if ok) or undef (if errors)
+#
+sub getOneCsvFromAllStages {
+  my $fromEpoch    = shift;
+  my $toEpoch      = shift;
+  my $prefix       = shift;
+  my $filenamesRef = shift;
+  my $outputHandler;
+  my $inputHandler;
+  my $linesPrinted = 0;
+
+  my @linesToSave;
+
+  my $csv = $OInventory::configuration{'web.graphs.folder'} . "/$prefix.$fromEpoch-$toEpoch.csv";
+
+  if( ! open($outputHandler, ">:utf8", $csv) ) {
+    OInventory::log(3, "Could not open CSV output file '$csv': $!");
+    return undef;
+  }
+
+  foreach my $aPath (@$filenamesRef) {
+    if( ! open($inputHandler, "<:utf8", $aPath) ) {
+      OInventory::log(3, "Could not open CSV input file '$aPath': $!");
+      return undef;
+    }
+
+    #
+    # Let's read the file
+    #
+    while (my $line = <$inputHandler>) {
+      chomp $line;
+      next if $line =~ /^\s*$/; # empty
+      next if $line =~ /^\s*#/; # comment, somehow
+  
+      my ($t, $v) = split(/$csvSep/, $line, 2);
+      if (! defined($t) || ! defined($v)) {
+        OInventory::log(3, "Can't parse the line '$line' from '$aPath'");
+        return undef;
+      }
+      if ( $t eq '') {
+        OInventory::log(3, "Empty timestamp in line '$line' from '$aPath'");
+        return undef;
+      }
+      if( ! looks_like_number($t)) {
+        OInventory::log(3, "Unknown timestamp in line '$line' from '$aPath'");
+        return undef;
+      }
+      if($v eq '' ) {
+        # Timestamp without value (missing data, network problem vCenter<=>ESXi ...)
+        next;
+      }
+      if(! looks_like_number($v)) {
+        # We'll not stop parsing
+        # Must we log Error or Warning ... ?
+        OInventory::log(2, "Unknown value in line '$line' from '$aPath'");
+        next;
+      }
+
+      if($t >= $fromEpoch && $t <= $toEpoch) {
+        push @linesToSave, $line;
+      }
+    }
+
+    #
+    # Let's close this stage file
+    #
+    if( ! close($inputHandler) ) {
+      OInventory::log(3, "Could not close CSV input file '$aPath': $!");
+      return undef;
+    }
+
+  }
+
+  #
+  # Let's print the choosen lines in the output file
+  #
+  foreach my $aLine (sort @linesToSave) {
+    print $outputHandler "$aLine\n";
+    $linesPrinted++;
+  }
+
+  if( ! close($outputHandler) ) {
+    OInventory::log(3, "Could not close CSV output file '$csv': $!");
+    return undef;
+  }
+
+  if($linesPrinted == 0) {
+    OInventory::log(3, "Could not find points in that interval to print to '$csv'");
+    return undef;
+  }
+  return $csv;
 }
 
 1;

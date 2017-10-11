@@ -16,6 +16,10 @@ our $dbh;
 our $sqlFolderSelectAll       = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                               . 'FROM folder as a '
                               . 'inner join folder as b where a.parent = b.id';
+our $sqlFolderSelectAllChild  = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
+                              . 'FROM folder as a '
+                              . 'inner join folder as b where a.parent = b.id '
+                              . 'and b.mo_ref = ?';
 our $sqlFolderSelectByMoref   = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                               . 'FROM folder as a '
                               . 'inner join folder as b '
@@ -99,6 +103,10 @@ our $sqlClusterDelete = 'DELETE FROM cluster where mo_ref = ?';
 our $sqlVirtualMachineSelectAll = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                                 . 'FROM virtualmachine as a '
                                 . 'inner join folder as b where a.parent = b.id';
+our $sqlVirtualMachineSelectAllChild = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
+                                     . 'FROM virtualmachine as a '
+                                     . 'inner join folder as b where a.parent = b.id '
+                                     . 'and b.mo_ref = ?';
 our $sqlVirtualMachineSelectByMoref = 'SELECT a.id, a.name, a.mo_ref, b.mo_ref '
                                     . 'FROM virtualmachine as a '
                                     . 'inner join folder as b '
@@ -136,6 +144,9 @@ our $sqlPerfMetricSelectAll
 our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
+our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+                                  . 'FROM perf_metric as a '
+                                  . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert
                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
                               . 'VALUES (?, ?, ?)';
@@ -349,10 +360,125 @@ sub transactionRollback {
 
 
 #
-# Get all entities of a type from DB.
+# Get all entities of a type from DB that are son of an entity.
 #
+# @arg entityType (Folder | Datacenter | ClusterComputeResource
+#                         | HostSystem | VirtualMachine | PerfCounterInfo)
+# @arg mo_ref of the parent folder
 # @return undef (if errors),
 #         or a reference to array of references to entity objects (if ok)
+#         : objects OFolder | ODatacenter | OCluster | OHost
+#                           | OVirtualMachine | OPerfCounterInfo
+#
+sub getAllChildEntitiesOfType {
+  my $entityType = shift;
+  my $mo_ref     = shift;
+  my @r = ();
+  my @data;
+
+  if(!defined($mo_ref) || $mo_ref eq '') {
+    Carp::croak("OvomDao.getAllChildEntitiesOfType needs a mo_ref as 2nd arg");
+    return undef;
+  }
+
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $stmt;
+  my $sthRes;
+  OInventory::log(0, "Getting entities of type $entityType son of $mo_ref");
+
+  if($entityType eq 'Folder') {
+    $stmt = $sqlFolderSelectAllChild;
+  }
+# elsif($entityType eq 'Datacenter') {
+#   $stmt = $sqlDatacenterSelectAllChild;
+# }
+# elsif($entityType eq 'ClusterComputeResource') {
+#   $stmt = $sqlClusterSelectAllChild;
+# }
+# elsif($entityType eq 'HostSystem') {
+#   $stmt = $sqlHostSelectAllChild;
+# }
+  elsif($entityType eq 'VirtualMachine') {
+    $stmt = $sqlVirtualMachineSelectAllChild;
+  }
+# elsif($entityType eq 'PerfCounterInfo') {
+#   $stmt = $sqlPerfCounterInfoSelectAllChild;
+# }
+  else {
+    Carp::croak("Not implemented for $entityType "
+              . "in OvomDao.getAllChildEntitiesOfType");
+    return undef;
+  }
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement to get ${entityType}s: "
+                     . "son of $mo_ref: (" . $dbh->err . ") :" . $dbh->errstr;
+    $sthRes = $sth->execute($mo_ref);
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get ${entityType}s "
+                  . "son of $mo_ref");
+      $sth->finish();
+      return undef;
+    }
+
+    while (@data = $sth->fetchrow_array()) {
+      my $e;
+      if($entityType eq 'Folder') {
+        $e = OFolder->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'Datacenter') {
+        $e = ODatacenter->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'ClusterComputeResource') {
+        $e = OCluster->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'HostSystem') {
+        $e = OHost->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'VirtualMachine') {
+        $e = OVirtualMachine->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'PerfCounterInfo') {
+        $e = OPerfCounterInfo->new(\@data);
+        push @r, $e;
+      }
+      else {
+        Carp::croak("Not implemented for $entityType "
+                  . "in OvomDao.getAllChildEntitiesOfType");
+        return undef;
+      }
+    }
+  };
+  if($@) {
+    OInventory::log(3, "Errors getting ${entityType}s from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: select child ${entityType}s took "
+                        . sprintf("%.3f", $eTime) . " s "
+                        . "and returned " . ($#r + 1) . " entities");
+  return \@r;
+}
+
+
+#
+# Get all entities of a type from DB.
+#
+# @arg entityType (Folder | Datacenter | ClusterComputeResource
+#                         | HostSystem | VirtualMachine | PerfCounterInfo)
+# @return undef (if errors),
+#         or a reference to array of references to entity objects (if ok)
+#         : objects OFolder | ODatacenter | OCluster | OHost
+#                           | OVirtualMachine | OPerfCounterInfo
 #
 sub getAllEntitiesOfType {
   my $entityType = shift;
@@ -443,6 +569,42 @@ sub getAllEntitiesOfType {
                         . "and returned " . ($#r + 1) . " entities");
   return \@r;
 }
+
+#
+# Get the child entities of certain folder 
+#
+# @arg folder mo_ref
+# @return undef (if errors),
+#         or a reference to a hash of arrays
+#         of references to entity objects (if ok)
+#         hash keys: OFolder | ODatacenter | OCluster | OHost | OVirtualMachine
+#
+sub getChildEntitiesOfFolder {
+  my $folderMoRef = shift;
+  my $r = {};
+  my $p;
+
+  if(!defined($folderMoRef)) {
+    OInventory::log(3, "getChildEntitiesOfFolder needs a folder moRef");
+    return undef;
+  }
+
+  # @arg entityType (Folder | Datacenter | ClusterComputeResource
+  #                         | HostSystem | VirtualMachine | PerfCounterInfo)
+
+  for my $type (('Folder', 'VirtualMachine')) {
+    $p = getAllChildEntitiesOfType($type, $folderMoRef);
+    if(!defined($p)) {
+      OInventory::log(3, "getChildEntitiesOfFolder errors getting child $type");
+      return undef;
+    }
+    $r->{$type} = $p;
+  }
+
+  return $r;
+}
+
+
 
 #
 # Update an entity
@@ -770,6 +932,73 @@ sub delete {
 }
 
 #
+# Convert from VMware's entity name to ovom object name
+#
+# @arg entity name
+# @return undef (if errors), or the ovom's object name (if ok)
+#
+sub entityName2ObjectName {
+  my $entityName = shift;
+  return undef if(!defined($entityName));
+
+  if($entityName eq 'Folder') {
+    return 'OFolder';
+  }
+  elsif($entityName eq 'Datacenter') {
+    return 'ODatacenter';
+  }
+  elsif($entityName eq 'ClusterComputeResource') {
+    return 'OCluster';
+  }
+  elsif($entityName eq 'HostSystem') {
+    return 'OHost';
+  }
+  elsif($entityName eq 'VirtualMachine') {
+    return 'OVirtualMachine';
+  }
+  elsif($entityName eq 'PerfCounterInfo') {
+    return 'OPerfCounterInfo';
+  }
+  else {
+    return undef;
+  }
+}
+
+
+#
+# Convert from ovom object name to VMware's entity name
+#
+# @arg ovom's object name
+# @return undef (if errors), or the entity name (if ok)
+#
+sub oClassName2EntityName {
+  my $objectName = shift;
+  return undef if(!defined($objectName));
+
+  if($objectName eq 'OFolder') {
+    return 'Folder';
+  }
+  elsif($objectName eq 'ODatacenter') {
+    return 'Datacenter';
+  }
+  elsif($objectName eq 'OCluster') {
+    return 'ClusterComputeResource';
+  }
+  elsif($objectName eq 'OHost') {
+    return 'HostSystem';
+  }
+  elsif($objectName eq 'OVirtualMachine') {
+    return 'VirtualMachine';
+  }
+  elsif($objectName eq 'OPerfCounterInfo') {
+    return 'PerfCounterInfo';
+  }
+  else {
+    return undef;
+  }
+}
+
+#
 # Get an Entity from DB by mo_ref.
 #
 # @arg mo_ref
@@ -932,6 +1161,62 @@ sub loadEntity {
   OInventory::log(1, "Profiling: select a ${entityType} took "
                         . sprintf("%.3f", $eTime) . " s");
   return $r;
+}
+
+
+
+#
+# Get the Perf Metrics saved for an entity by its mo_ref.
+#
+# @arg mo_ref
+# @return undef (if errors), or a reference to an array of OMockView::OMockPerfMetricId objects (if ok)
+#
+sub loadPerfMetricIdsForEntity {
+  my $mo_ref = shift;
+  my $stmt;
+  my @r;
+  my @data;
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $pmiInstance;
+  my $pmiMor;
+
+  if (! defined ($mo_ref)) {
+    Carp::croak("Got an undefined mo_ref trying to load PerfMetricIds for $mo_ref");
+    return undef;
+  }
+  $stmt = $sqlPerfMetricSelectEntityPMs;
+  OInventory::log(0, "selecting from db the PerfMetrics for $mo_ref");
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement for PerfMetricIds of $mo_ref: "
+                     . "(" . $dbh->err . ") :" . $dbh->errstr;
+    my $sthRes;
+    $sthRes = $sth->execute($mo_ref);
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get "
+                . "the PerfMetricIds for ${mo_ref}");
+      $sth->finish();
+      return undef;
+    }
+
+    while (@data = $sth->fetchrow_array()) {
+      my $e = OMockView::OMockPerfMetricId->new(\@data);
+      push @r, $e;
+    }
+  };
+
+  if($@) {
+    OInventory::log(3, "Errors getting the PerfMetriIds of $mo_ref from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: select PerfMetricIds for $mo_ref took "
+                        . sprintf("%.3f", $eTime) . " s");
+  return \@r;
 }
 
 
