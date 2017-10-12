@@ -960,6 +960,7 @@ sub getConcreteStages {
 #
 # It allows to have a fixed size for the complete perf data files.
 #
+# @arg path to CSV file to be rrdb'ed
 # @return 1 ok, 0 errors
 #
 sub doRrdb {
@@ -2371,6 +2372,89 @@ sub getOneCsvFromAllStages {
     return undef;
   }
   return $csv;
+}
+
+#
+# Push custom ovom perfData
+#
+# @return 1 (if ok) | 0 (if errors)
+#
+sub pushOvomPerfData {
+  my $type  = shift;
+  my $value = shift;
+  my $filePrefix;
+  my $file;
+
+  if (!defined($type) || $type eq '' ) {
+    OInventory::log(3, "pushOvomPerfData: Missing type");
+    return 0;
+  }
+  if (!defined($value) || $value eq '' ) {
+    OInventory::log(3, "pushOvomPerfData: Missing value");
+    return 0;
+  }
+
+  $filePrefix = $OInventory::configuration{'perfdata.root'} . "/ovom/$type";
+  $file       = $filePrefix . ".latest.csv";
+
+  #
+  # First lets print the text at the end of the file
+  #
+  if( ! open(HANDLER, ">>:utf8", $file) ) {
+    OInventory::log(3, "Could not open CSV file '$file': $!");
+    return 0;
+  }
+  my $text = time() . "$csvSep$value";
+  print HANDLER "$text\n";
+  if( ! close(HANDLER) ) {
+    OInventory::log(3, "Could not close the CSV file '$file': $!");
+    return 0;
+  }
+
+  #
+  # Now let's read the whole file and keep just its tail lines
+  #
+  if( ! open(HANDLER, "<:utf8", $file) ) {
+    OInventory::log(3, "Could not open CSV file '$file': $!");
+    return 0;
+  }
+  my @lines = <HANDLER>;
+  if( ! close(HANDLER) ) {
+    OInventory::log(3, "Could not close the CSV file '$file': $!");
+    return 0;
+  }
+  my $firstLine; # from 0
+  my $maxNumLines = $OInventory::configuration{'perfdata.custom.maxLines'};
+  if($#lines >= $maxNumLines - 1) {
+    $firstLine = $#lines + 1 - $maxNumLines;
+  }
+  else {
+    $firstLine = 0;
+  }
+
+  #
+  # Now let's read save just its last lines
+  #
+  if( ! open(HANDLER, ">:utf8", $file) ) {
+    OInventory::log(3, "Could not open CSV file '$file': $!");
+    return 0;
+  }
+  for(my $i = $firstLine; $i <= $#lines; $i++) {
+    print HANDLER $lines[$i];
+  }
+  if( ! close(HANDLER) ) {
+    OInventory::log(3, "Could not close the CSV file '$file': $!");
+    return 0;
+  }
+ 
+  #
+  # RRDB this file
+  #
+  if(! doRrdb($filePrefix)) {
+    OInventory::log(3, "Could not run rrdb on custom perf data file $file");
+    return 0;
+  }
+  return 1;
 }
 
 1;

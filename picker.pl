@@ -89,6 +89,11 @@ while(1) {
 
       OInventory::log(1, "Profiling: Retrieving inventory and updating DB took "
                          . sprintf("%.3f", $eTime) . " s");
+
+      if(!OPerformance::pushOvomPerfData("inventory_vc2db", sprintf("%.3f", $eTime))) {
+        OInventory::log(3, "Can't save profiling for "
+                         . "retrieving inventory and updating DB");
+      }
     }
     else {
       OInventory::log(3, "Can't update inventory. Rolling back. Iteration ends");
@@ -138,6 +143,9 @@ while(1) {
 
     OInventory::log(1, "Profiling: getting the whole performance took "
                        . sprintf("%.3f", $eTime) . " s");
+    if(!OPerformance::pushOvomPerfData("perf", sprintf("%.3f", $eTime))) {
+      OInventory::log(3, "Can't save profiling for getting whole performance");
+    }
   }
   else {
     OInventory::log(3, "Can't get performance data. Rolling back. Iteration ends");
