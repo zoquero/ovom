@@ -1,4 +1,60 @@
-Some things to be done:
+Things to be done:
+
+* OPerformance::doRrdb:
+** RRDB is not working fine or wrong configuration: there's just data until "day" stage, no data in week, month nor year stages
+** We must calculate cubic spline interpolation just for 4 surrounding points. Calculating with more points just enlarges the calculus duration without adding substantial accuracy
+
+* OPerformance::getLatestPerf:
+** After 2 days running picker.pl we realized that there's a linear increment in duration to getLatestPerf of 1.6% per iteration. After stoping and starting again picker.pl having the same RRDB files the duration of the whole getLatestperformance task got back to its original duration. There's no substantial increment in picker mem size (just 1.5% after two days).
+*** Running RRDB on stage 'day'   decreased from an average of 0.0132 to 0.0129 s
+*** Running RRDB on stage 'eh'    decreased from an average of 0.0202 to 0.0134 s
+*** Running RRDB on stage 'month' increased from an average of 0.0110 to 0.0114 s
+*** Running RRDB on stage 'week'  increased from an average of 0.0081 to 0.0105 s
+*** Running RRDB on stage 'year'  decreased from an average of 0.0132 to 0.0114 s
+*** Saving performance for OVirtualMachine increaded (very small increase !!) from 0.9100 to 0.9170
+*** Update inventory on mem from vCenter didn't changed substantially
+
+
+Notes regarding it:
+Already Verified:
+
+Profiling: ClusterComputeResource list
+Profiling: Datacenter list
+Profiling: Disconnecting from vCenter
+Profiling: Folder list
+Profiling: Get inventory from BD
+Profiling: Getting latest performance for OVirtualMachine:
+Profiling: Getting perfManager
+Profiling: getting the whole performance
+Profiling: HostSystem list
+Profiling: Initiating counter info
+Profiling: Retrieving inventory and updating DB
+Profiling: Running RRDB on stage 'day'
+Profiling: Running RRDB on stage 'eh'
+Profiling: Running RRDB on stage 'month'
+Profiling: Running RRDB on stage 'week'
+Profiling: Running RRDB on stage 'year'
+Profiling: Saving performance for OVirtualMachine:
+Profiling: select all ClusterComputeResources
+Profiling: select all Datacenters
+Profiling: select all Folders
+Profiling: select all HostSystems
+Profiling: select all VirtualMachines
+Profiling: select a PerfCounterInfo
+Profiling: select a PerfMetric
+Profiling: update inventory DB contents
+Profiling: Update inventory on mem from vCenter
+Profiling: updating 1 OMockView::OMockPerfMetricId
+Profiling: VirtualMachine list
+
+Still not verified:
+Profiling: Calling QueryAvailablePerfMetric 
+Profiling: Calling getPerfQuerySpec 
+
+
+
+
+** We may cache available perfMetricIds for entities
 
 * Alerts :
 ** Thresholds: Store in confFile or DB?
