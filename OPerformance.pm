@@ -263,7 +263,26 @@ sub initCounterInfo {
     #
     my $key = $pCI->key;
     $allCounters{$key} = $pCI;
-    push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+    #
+    # Bug! We were always pushing the PerfCounter,
+    # a small memory leak that affected in performance
+    #
+    # push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+    my $perfCounterWasPushed = 0;
+    foreach my $aPCI ( @{$allCountersByGIKey{$pCI->groupInfo->key}} ) {
+      if ( $aPCI->key eq $pCI->key ) {
+        $perfCounterWasPushed = 1;
+        last;
+      }
+    }
+    if(! $perfCounterWasPushed ) {
+      OInventory::log(0, "Let's push the perfCounter with key=" . $pCI->key);
+      push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+    }
+    else {
+      OInventory::log(0, "The perfCounter with key=" . $pCI->key 
+                       . " was already pushed");
+    }
 
     #
     # Store it on DataBase
@@ -319,8 +338,9 @@ sub initCounterInfo {
 # Return just the desired perfMetricIds
 #
 # @arg ref to the array of groupInfo key strings
+#        with the desired groupInfo for this entity
 #        (ex.: "["cpu", "mem", "network"])
-# @arg ref to and array of perfMetricIds objects
+# @arg ref to the array of perfMetricIds availables for this entity
 #        (fields: counterId, instance)
 #        Typically they are the available ones for a entity.
 # @param
@@ -329,36 +349,63 @@ sub filterPerfMetricIds {
   my ($groupInfoArray, $perfMetricIds) = @_;
   my @r;
 
-  #
-  # First let's verify that allCountersByGIKey
-  # hash has all the groupInfoArray elements as keys
-  #
-  foreach my $aGroupInfo (@$groupInfoArray) {
-    if(!defined($allCountersByGIKey{$aGroupInfo})) {
-      my $keys = join ", ", keys(%allCountersByGIKey);
-      OInventory::log(2, "Looking for perfCounters of groupInfo '$aGroupInfo' "
-                       . "but this group is not found in the perfCounterInfo "
-                       . "array got from perfManagerView->perfCounter ($keys). "
-                       . "It's probably a typo in configuration");
-      next;
-    }
+  OUTER: foreach my $aPMI (@$perfMetricIds) {
+    MIDDLE: foreach my $aGroupInfo (@$groupInfoArray) {
+      #
+      # Sanity check
+      #
+      if(!defined($allCountersByGIKey{$aGroupInfo})) {
+        my $keys = join ", ", keys(%allCountersByGIKey);
+        OInventory::log(2, "Looking for perfCounters of groupInfo '$aGroupInfo' "
+                         . "but this group is not found in the perfCounterInfo "
+                         . "array got from perfManagerView->perfCounter ($keys). "
+                         . "It's probably a typo in configuration");
+        next;
+      }
 
-    foreach my $aPMI (@$perfMetricIds) {
-
-       foreach my $aC (@{$allCountersByGIKey{$aGroupInfo}}) {
-         if($aC->key eq $aPMI->counterId) {
+      INNER: foreach my $aC (@{$allCountersByGIKey{$aGroupInfo}}) {
+        if($aC->key eq $aPMI->counterId) {
 #
 # TO_DO: Here we could save the whole counter
 #        instead of just the small counterId object
 #
-           push @r, $aPMI;
-           last;
-         }
-       }
+          push @r, $aPMI;
+          last MIDDLE;
+        }
+      }
     }
   }
 
   return \@r;
+
+##   #
+##   # First let's verify that allCountersByGIKey
+##   # hash has all the groupInfoArray elements as keys
+##   #
+##   foreach my $aGroupInfo (@$groupInfoArray) {
+##     if(!defined($allCountersByGIKey{$aGroupInfo})) {
+##       my $keys = join ", ", keys(%allCountersByGIKey);
+##       OInventory::log(2, "Looking for perfCounters of groupInfo '$aGroupInfo' "
+##                        . "but this group is not found in the perfCounterInfo "
+##                        . "array got from perfManagerView->perfCounter ($keys). "
+##                        . "It's probably a typo in configuration");
+##       next;
+##     }
+## 
+##     foreach my $aPMI (@$perfMetricIds) {
+## 
+##        foreach my $aC (@{$allCountersByGIKey{$aGroupInfo}}) {
+##          if($aC->key eq $aPMI->counterId) {
+## #
+## # TO_DO: Here we could save the whole counter
+## #        instead of just the small counterId object
+## #
+##            push @r, $aPMI;
+##            last;
+##          }
+##        }
+##     }
+##   }
 }
 
 #
@@ -761,12 +808,16 @@ sub savePerfData {
       #
       # RRDB this file
       #
+
+      my ($timeBefore,  $eTime);
+      $timeBefore=Time::HiRes::time;
       if(! doRrdb($csvPath)) {
         OInventory::log(3, "Could not run rrdb on perf data file $csvPathLatest");
         return 0;
       }
- 
-
+      $eTime=Time::HiRes::time - $timeBefore;
+      OInventory::log(0, "Profiling: Doing RRDB for a PerfData "
+                         . "took " . sprintf("%.3f", $eTime) . " s");
       #
       # Let's register on Database that this perfData has been saved
       #
@@ -1980,15 +2031,20 @@ sub getLatestPerformance {
     # TO_DO : code cleanup: move it to a getAvailablePerfMetric function
 
 
+    OInventory::log(0, "Let's queryAvailablePerfMetric");
     eval {
       local $SIG{ALRM} = sub { die "Timeout calling QueryAvailablePerfMetric" };
       my $maxSecs = $OInventory::configuration{'api.timeout'};
       OInventory::log(0, "Calling QueryAvailablePerfMetric, "
                        . "with a timeout of $maxSecs seconds");
       alarm $maxSecs;
+      $timeBefore=Time::HiRes::time;
       $availablePerfMetricIds =
         $perfManager->QueryAvailablePerfMetric(entity => $aEntity->{view});
+      $eTime=Time::HiRes::time - $timeBefore;
       alarm 0;
+      OInventory::log(1, "Profiling: Calling QueryAvailablePerfMetric took "
+                         . sprintf("%.3f", $eTime) . " s");
     };
     if ($@) {
       alarm 0;
@@ -2026,8 +2082,13 @@ sub getLatestPerformance {
                      . "groupInfo of perfCounters configured "
                      . "for this entity: $txt");
 
+    $timeBefore=Time::HiRes::time;
     $filteredPerfMetricIds = filterPerfMetricIds($desiredGroupInfo,
                                                  $availablePerfMetricIds);
+    $eTime=Time::HiRes::time - $timeBefore;
+    OInventory::log(1, "Profiling: Filtering PerfMetricIds took "
+                       . sprintf("%.3f", $eTime) . " s");
+
     if(!defined($filteredPerfMetricIds) || $#$filteredPerfMetricIds == -1) {
       OInventory::log(2, "Once filtered, none of the " 
                        . ($#$availablePerfMetricIds + 1) . " available perf "
@@ -2050,10 +2111,16 @@ sub getLatestPerformance {
     #
     # Let's get the perf query spec to later retrieve perf data:
     #
+    OInventory::log(0, "Profiling: Let's call getPerfQuerySpec");
+    $timeBefore=Time::HiRes::time;
     my $perfQuerySpec = getPerfQuerySpec(entity     => $aEntity->{view},
                                          metricId   => $filteredPerfMetricIds,
                                          format     => 'csv',
                                          intervalId => 20); # 20s hardcoded
+    $eTime=Time::HiRes::time - $timeBefore;
+    alarm 0;
+    OInventory::log(1, "Profiling: Calling getPerfQuerySpec took "
+                       . sprintf("%.3f", $eTime) . " s");
     if(! defined($perfQuerySpec)) {
       OInventory::log(3, "Could not get QuerySpec for entity");
       next;
@@ -2065,6 +2132,7 @@ sub getLatestPerformance {
     # PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
     $timeBefore=Time::HiRes::time;
     my $perfData = getPerfData($perfQuerySpec);
+    $eTime=Time::HiRes::time - $timeBefore;
     if(! defined($perfData)) {
       OInventory::log(3, "Could not get perfData for entity");
       next;
@@ -2076,7 +2144,6 @@ sub getLatestPerformance {
                        . " instead of array of PerfEntityMetricCSV for entity");
       next;
     }
-    $eTime=Time::HiRes::time - $timeBefore;
     OInventory::log(1, "Profiling: Getting latest performance for "
                      . ref($aEntity) . ": "
                      . "{name='" . $aEntity->{name} . "',mo_ref='"
