@@ -581,19 +581,42 @@ sub getPerfData {
 #
 # @arg perfData
 # @arg entityView
+# @arg ref to timetamps. The caller asserted that has equal size than @$values
+# @arg ref to values   . The caller asserted that has equal size than @$timestamps
 # @return 1 ok, 0 errors
 #
 sub registerPerfDataSaved {
   # Take a look at the subroutine comments to find a sample of received objects
-  my $perfData = shift;
-  my $entity   = shift;
+  my $perfData   = shift;
+  my $entity     = shift;
+  my $timestamps = shift;
+  my $values     = shift;
 
   OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId
                    . ",instance=" . $perfData->id->instance
                    . " has been saved for the " . $entity->type
                    . " with mo_ref=" . $entity->value);
 
-  # 
+  #
+  # Let's look for the latest value non-empty
+  #
+  my $lastValue     = undef;
+  my $lastTimestamp = undef;
+  for (my $i = $#$values; $i >= 0; $i--) {
+    if(defined($$values[$i]) && $$values[$i] ne '') {
+      $lastValue     = $$values[$i];
+      $lastTimestamp = $$timestamps[$i];
+    }
+  }
+  if(! defined($lastValue)) {
+    OInventory::log(2,
+      "Could not find any valid value in the latest perfdata of the counterId="
+      . $perfData->id->counterId . ",instance=" . $perfData->id->instance
+      . " of the " . $entity->type . " with mo_ref=" . $entity->value);
+  }
+
+warn "We'll continue here";
+
   my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
                                          $perfData->id->instance, $entity);
 # * counterId of PerfMetricId object ($pMI->->counterId)
@@ -808,7 +831,6 @@ sub savePerfData {
       #
       # RRDB this file
       #
-
       my ($timeBefore,  $eTime);
       $timeBefore=Time::HiRes::time;
       if(! doRrdb($csvPath)) {
@@ -821,7 +843,7 @@ sub savePerfData {
       #
       # Let's register on Database that this perfData has been saved
       #
-      if(! registerPerfDataSaved($p, $entityView)) {
+      if(! registerPerfDataSaved($p, $entityView, $timestamps, \@values)) {
         OInventory::log(3, "Errors registering that perfData was taken from " . ref($entityView)
                          . " with mo_ref '" . $entityView->value . "'");
         return 0;
@@ -2031,6 +2053,9 @@ sub getLatestPerformance {
     # TO_DO : code cleanup: move it to a getAvailablePerfMetric function
 
 
+    #
+    # Query available PerfMetrics
+    #
     OInventory::log(0, "Let's queryAvailablePerfMetric");
     eval {
       local $SIG{ALRM} = sub { die "Timeout calling QueryAvailablePerfMetric" };
@@ -2071,6 +2096,9 @@ sub getLatestPerformance {
                        . "instance='"  . $pMI->instance  . "'}");
     }
 
+    #
+    # Get the desired group info for that entity (groups of PerfMetrics)
+    #
     $desiredGroupInfo = getDesiredGroupInfoForEntity($aEntity);
     if(!defined($desiredGroupInfo) || $#$desiredGroupInfo == -1) {
       OInventory::log(2, "There are not desired groupInfo of perfCounters "
@@ -2082,6 +2110,9 @@ sub getLatestPerformance {
                      . "groupInfo of perfCounters configured "
                      . "for this entity: $txt");
 
+    #
+    # Get the subset of available PerfMetrics that are configured as 'desired'
+    #
     $timeBefore=Time::HiRes::time;
     $filteredPerfMetricIds = filterPerfMetricIds($desiredGroupInfo,
                                                  $availablePerfMetricIds);
@@ -2127,9 +2158,10 @@ sub getLatestPerformance {
     }
 
     #
-    # Let's get perfData
+    # Finally let's get perfData
     #
     # PerfEntityMetricCSV || OMockView::OMockPerfEntityMetricCSV
+    #
     $timeBefore=Time::HiRes::time;
     my $perfData = getPerfData($perfQuerySpec);
     $eTime=Time::HiRes::time - $timeBefore;
@@ -2152,6 +2184,10 @@ sub getLatestPerformance {
 
     $timeBefore=Time::HiRes::time;
 
+    #
+    # Let's save perfData (here comes RRDB)
+    # and compare with thresholds to launch alarms
+    #
     if(! savePerfData($perfData)) {
       OInventory::log(3, "Errors getting latest performance from "
                        . ref($aEntity) . " with mo_ref '"
