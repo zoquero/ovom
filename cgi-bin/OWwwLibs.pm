@@ -1048,24 +1048,102 @@ sub getContentsSnippetForPerformance {
   if (! defined($perfCounterInfos)) {
     return { retval => 0, output => "Missing perfCounterInfos arg." };
   }
+  if ($#$perfMetricIds < 0) {
+    return { retval => 0, output => "There are no perfMetricIds for $oEntityName " . $entity->{name} };
+  }
 
   #
   # Month conversion:
   # * $args->{fromMonth} comes from webUI and belongs to [1..12]
   # * 5th parameter ("month") in Time::Loca::timelocal and belongs to [0..11]
   #
-  my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour}, $args->{fromDay}, $args->{fromMonth} - 1, $args->{fromYear});
-  my $toEpoch   = timelocal(0, $args->{toMinute}, $args->{toHour}, $args->{toDay}, $args->{toMonth} - 1, $args->{toYear});
-  my $fromStr = time2str($args->{fromYear}, $args->{fromMonth}, $args->{fromDay}, $args->{fromHour}, $args->{fromMinute}, 0);
-  my $toStr   = time2str($args->{toYear}, $args->{toMonth}, $args->{toDay}, $args->{toHour}, $args->{toMinute}, 0);
+  my $fromEpoch = timelocal(0, $args->{fromMinute}, $args->{fromHour},  $args->{fromDay}, $args->{fromMonth} - 1, $args->{fromYear});
+  my $toEpoch   = timelocal(0, $args->{toMinute},   $args->{toHour},    $args->{toDay},   $args->{toMonth} - 1,   $args->{toYear});
+  my $fromStr   = time2str(    $args->{fromYear},   $args->{fromMonth}, $args->{fromDay}, $args->{fromHour},      $args->{fromMinute}, 0);
+  my $toStr     = time2str(    $args->{toYear},     $args->{toMonth},   $args->{toDay},   $args->{toHour},        $args->{toMinute},   0);
 
 
-  my $perfGraph = OPerformance::getPathToPerfGraphFiles($args->{'type'}, $args->{'mo_ref'}, $fromEpoch, $toEpoch, $perfMetricIds, $perfCounterInfos);
-  if(!defined($perfGraph)) {
-    return { retval => 0, output => "Errors generating graphs" };
+
+  my $entityName = OvomDao::oClassName2EntityName($type);
+  my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
+
+  #
+  # Folder for performance data
+  #
+  my $folder = $OInventory::configuration{'perfdata.root'}
+             . "/"
+             . $OInventory::configuration{'vCenter.fqdn'}
+             . "/"
+             . $entityName
+             . "/"
+             . $mo_ref;
+
+  #
+  # Let's load stage descriptors
+  #
+  my $sd = OPerformance::getStageDescriptors();
+  if( ! defined ($sd) ) {
+    OInventory::log(3, "Calling OPerformance::getStageDescriptors "
+      . " from getContentsSnippetForPerformance returned errors");
+    return { retval => 0, output => "Can't get the stage descriptors" };
   }
 
-  $output = <<"_PERFORMANCE_CONTENTS_";
+  my %countersByGroupId;
+  foreach my $aPMI (@$perfMetricIds) {
+    if(! defined($perfCounterInfos->{$aPMI->counterId})) {
+      die "PerfCounterInfo not found for counterId=" . $aPMI->counterId;
+    }
+    my $pCI = $perfCounterInfos->{$aPMI->counterId};
+    push @{$countersByGroupId{$pCI->groupInfo->key}}, $aPMI;
+  }
+
+  my $perfGraphs = '';
+  my $contentsIndex  = "<p>Index of graphs:</p>\n";
+  $contentsIndex .= "<ul>\n";
+  foreach my $aGroupInfoKey (sort keys %countersByGroupId) {
+    $perfGraphs    .= "<h4><a id=\"gik_$aGroupInfoKey\">$aGroupInfoKey group</a></h4>\n";
+    $contentsIndex .= "<li><a href=\"#gik_$aGroupInfoKey\">$aGroupInfoKey</a></li>\n";
+    $contentsIndex .= "<ul>\n";
+    foreach my $pmi (@{$countersByGroupId{$aGroupInfoKey}}) {
+      my $prefix = $args->{'mo_ref'} . $basenameSeparator . $pmi->counterId . $basenameSeparator . $pmi->instance;
+      my @filenames;
+      foreach my $aSD (@$sd) {
+        my $filename = $folder . "/" . $prefix . "." . $aSD->{name} . ".csv";
+        push @filenames, $filename;
+      }
+      OInventory::log(0, "Calling getOneCsvFromAllStages to generate a graph "
+                       . "from $fromEpoch to $toEpoch with prefix $prefix");
+      my $resultingCsvFile = OPerformance::getOneCsvFromAllStages($fromEpoch, $toEpoch, $prefix, \@filenames);
+      if (! defined($resultingCsvFile)) {
+        OInventory::log(3, "getOneCsvFromAllStages returned with errors");
+        return { retval => 0, output => "Can't get the single csv for all stages" };
+      }
+      my $pCI = $perfCounterInfos->{$pmi->counterId};
+      my $description = getGraphDescription($type, $entityName, $mo_ref, $pCI);
+      my $g = OPerformance::csv2graph($fromEpoch, $toEpoch, $resultingCsvFile);
+      if (! defined($g)) {
+        OInventory::log(3, "Could not generate graphs");
+        return { retval => 0, output => "Can't generate the graphs" };
+      }
+
+      my $gu = graphPath2uriPath($g);
+      my $instanceStr;
+      if($pmi->instance eq '') {
+        $instanceStr = '';
+      }
+      else {
+        $instanceStr = ", instance '" . $pmi->instance . "'";
+      }
+      $perfGraphs .= "<h5><a id=\"pci_" . $pmi->counterId . "_" . $pmi->instance . "\">" . $pCI->getShortDescription() . "$instanceStr</a></h5>\n";
+      $perfGraphs .= "<p>" . $pCI->{_nameInfo}->{_summary} . "</p>\n";
+      $perfGraphs .= "<p><img src=\"$gu\" alt=\"$description\" border='1'/></p><hr/>\n";
+      $contentsIndex .= "<li><a href=\"#pci_" . $pmi->counterId . "_" . $pmi->instance . "\">" . $pCI->getShortDescription() . "$instanceStr</a></li>\n";
+    }
+    $contentsIndex .= "</ul>\n";
+  }
+  $contentsIndex .= "</ul>\n";
+
+  $output = <<"_PERFORMANCE_HEADERS_";
 <h2>Performance for $oEntityName $entity->{name}</h2>
 <h3>Description</h3>
 <p>$oEntityName with name <b><em>$entity->{name}</em></b> and mo_ref='<b><em>$mo_ref</em></b>'</p>
@@ -1074,11 +1152,41 @@ sub getContentsSnippetForPerformance {
 * to&nbsp;&nbsp;&nbsp;Y/M/D H:M:S $toStr ($toEpoch in <em>epoch</em>) </p>
 
 <h3>Graphs</h3>
-$perfGraph
-_PERFORMANCE_CONTENTS_
-  $retval = 1;
+$contentsIndex
+$perfGraphs
+_PERFORMANCE_HEADERS_
 
+
+
+
+  $retval = 1;
   return { retval => $retval, output => $output };
+}
+
+sub graphPath2uriPath {
+  my $p = shift;
+  return undef if (!defined($p));
+
+  my $graphFolderUrl = $OInventory::configuration{'web.graphs.folder'};
+  my $uriPath        = $OInventory::configuration{'web.graphs.uri_path'};
+
+  substr($p, 0, length($graphFolderUrl), $uriPath);
+  return $p;
+}
+
+sub getGraphDescription {
+  my $type       = shift;
+  my $entityName = shift;
+  my $mo_ref     = shift;
+  my $pCI = shift;
+
+  return undef if(!defined $type || $type eq '');
+  return undef if(!defined $entityName || $entityName eq '');
+  return undef if(!defined $mo_ref || $mo_ref eq '');
+  return undef if(!defined $pCI);
+  return undef if(ref($pCI) eq 'OPerfCounterInfo');
+
+  return "$type $entityName ($mo_ref): $pCI";
 }
 
 #
@@ -1295,8 +1403,9 @@ sub respondShowPerformance {
      = getContentsForPerformance($cgiObject, $args);
 
   if(! $contentsCanvasRet->{retval}) {
-    triggerError($cgiObject, "Errors getting the performance of the entity: "
-                           . $contentsCanvasRet->{output});
+    triggerError($cgiObject, "Errors getting the performance of the entity:<br/>\n"
+                           . "<b>" . $contentsCanvasRet->{output} . "</b>\n"
+                           . ".<br/>You'll find more information in the logs.");
     return;
   }
 

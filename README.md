@@ -21,7 +21,7 @@ It's in an initial development stage but its goals are:
     * (done! **v0.2**) Store them on plain CSV files
     * (done! **v0.3** & **v0.4**) Housekeep them in a **RRDB** style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
 * Show performance graphics:
-    * (done! **v0.5**) Offer a simple Web UI to allow have graphs for custom intervals on-demand.
+    * (done! **v0.5** & **v0.6**) Offer a simple Web UI to allow have graphs for custom intervals on-demand.
 * Report alarms based on thresholds
 * Suggest changes (initially just sugggest, later would be nice to allow to apply):
     * vMotion

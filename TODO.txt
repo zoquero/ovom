@@ -1,4 +1,14 @@
-Some things to be done:
+Things to be done:
+
+* Housekeepings to be called by cron:
+** remove old graph files (csv and png)
+** compress &| remove rotated log files
+
+* OPerformance::doRrdb:
+** RRDB is not working fine or wrong configuration: there's just data until "day" stage, no data in week, month nor year stages
+** We must calculate cubic spline interpolation just for 4 surrounding points. Calculating with more points just enlarges the calculus duration without adding substantial accuracy
+
+** We may cache available perfMetricIds for entities
 
 * Alerts :
 ** Thresholds: Store in confFile or DB?
@@ -26,8 +36,6 @@ Some things to be done:
 ** SNMP trap
 
 * refresh session in each hit
-
-* group graphs within "groupInfo". Maybe divide them in separate pages
 
 * improve menuCanvas in webUI to allow 'go to previous entity'
 

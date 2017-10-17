@@ -1018,7 +1018,7 @@ sub printInventoryForDebug {
 # @return 1 (ok) | 0 (errors)
 #
 sub createFoldersIfNeeded {
-  my ($folder, $vCenterFolder);
+  my ($folder, $vCenterFolder, $ovomFolder);
 
   ##############################
   # Folders for performance data
@@ -1028,6 +1028,14 @@ sub createFoldersIfNeeded {
     OInventory::log(1, "Creating perfdata.root folder $folder");
     if(! mkdir $folder) {
       warn "Failed to create $folder: $!";
+      return 0;
+    }
+  }
+  $ovomFolder = "$folder/ovom";
+  if(! -d $ovomFolder) {
+    OInventory::log(1, "Creating perfdata.root folder for ovom $ovomFolder");
+    if(! mkdir $ovomFolder) {
+      warn "Failed to create $ovomFolder: $!";
       return 0;
     }
   }
