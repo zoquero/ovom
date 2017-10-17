@@ -1066,7 +1066,6 @@ sub getContentsSnippetForPerformance {
 
   my $entityName = OvomDao::oClassName2EntityName($type);
   my $basenameSeparator = $OInventory::configuration{'perfpicker.basenameSep'};
-  my @filenames;
 
   #
   # Folder for performance data
@@ -1086,7 +1085,7 @@ sub getContentsSnippetForPerformance {
   if( ! defined ($sd) ) {
     OInventory::log(3, "Calling OPerformance::getStageDescriptors "
       . " from getContentsSnippetForPerformance returned errors");
-    return undef;
+    return { retval => 0, output => "Can't get the stage descriptors" };
   }
 
   my %countersByGroupId;
@@ -1107,6 +1106,7 @@ sub getContentsSnippetForPerformance {
     $contentsIndex .= "<ul>\n";
     foreach my $pmi (@{$countersByGroupId{$aGroupInfoKey}}) {
       my $prefix = $args->{'mo_ref'} . $basenameSeparator . $pmi->counterId . $basenameSeparator . $pmi->instance;
+      my @filenames;
       foreach my $aSD (@$sd) {
         my $filename = $folder . "/" . $prefix . "." . $aSD->{name} . ".csv";
         push @filenames, $filename;
@@ -1116,14 +1116,14 @@ sub getContentsSnippetForPerformance {
       my $resultingCsvFile = OPerformance::getOneCsvFromAllStages($fromEpoch, $toEpoch, $prefix, \@filenames);
       if (! defined($resultingCsvFile)) {
         OInventory::log(3, "getOneCsvFromAllStages returned with errors");
-        return undef;
+        return { retval => 0, output => "Can't get the single csv for all stages" };
       }
       my $pCI = $perfCounterInfos->{$pmi->counterId};
       my $description = getGraphDescription($type, $entityName, $mo_ref, $pCI);
       my $g = OPerformance::csv2graph($fromEpoch, $toEpoch, $resultingCsvFile);
       if (! defined($g)) {
         OInventory::log(3, "Could not generate graphs");
-        return undef;
+        return { retval => 0, output => "Can't generate the graphs" };
       }
 
       my $gu = graphPath2uriPath($g);
@@ -1403,8 +1403,9 @@ sub respondShowPerformance {
      = getContentsForPerformance($cgiObject, $args);
 
   if(! $contentsCanvasRet->{retval}) {
-    triggerError($cgiObject, "Errors getting the performance of the entity: "
-                           . $contentsCanvasRet->{output});
+    triggerError($cgiObject, "Errors getting the performance of the entity:<br/>\n"
+                           . "<b>" . $contentsCanvasRet->{output} . "</b>\n"
+                           . ".<br/>You'll find more information in the logs.");
     return;
   }
 

@@ -2377,6 +2377,7 @@ sub getOneCsvFromAllStages {
     #
     # Let's read the file
     #
+    OInventory::log(0, "getOneCsvFromAllStages is reading $aPath");
     while (my $line = <$inputHandler>) {
       chomp $line;
       next if $line =~ /^\s*$/; # empty
