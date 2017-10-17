@@ -615,7 +615,7 @@ sub registerPerfDataSaved {
       . " of the " . $entity->type . " with mo_ref=" . $entity->value);
   }
 
-warn "We'll continue here";
+# TODO: We'll continue here;
 
   my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
                                          $perfData->id->instance, $entity);

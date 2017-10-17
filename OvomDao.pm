@@ -138,13 +138,14 @@ our $sqlPerfCounterInfoDelete
 ####################################
 # SQL Statements for PerfMetric
 ####################################
+# a.crit_threshold, a.warn_threshold, a.last_value
 our $sqlPerfMetricSelectAll 
-                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a';
-our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
-our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                                   . 'FROM perf_metric as a '
                                   . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert

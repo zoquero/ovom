@@ -18,10 +18,22 @@ sub new {
     return undef;
   }
 
+  my $__entity_mo_ref   = shift @$args;
+  my $__counterId       = shift @$args;
+  my $__instance        = shift @$args;
+  my $__crit_threshold  = $#$args > -1 ? shift @$args : undef;
+  my $__warn_threshold  = $#$args > -1 ? shift @$args : undef;
+  my $__last_value      = $#$args > -1 ? shift @$args : undef;
+  my $__last_collection = $#$args > -1 ? shift @$args : undef;
+
   my $self = bless {
-    _entity_mo_ref => shift @$args,
-    _counterId     => shift @$args,
-    _instance      => shift @$args,
+    _entity_mo_ref => $__entity_mo_ref,
+    _counterId     => $__counterId,
+    _instance      => $__instance,
+    _crit_threshold  => $__crit_threshold,
+    _warn_threshold  => $__warn_threshold,
+    _last_value      => $__last_value,
+    _last_collection => $__last_collection,
   }, $class;
   return $self;
 }
@@ -39,6 +51,26 @@ sub instance {
 sub counterId {
   my ($self) = @_;
   return $self->{_counterId};
+}
+
+sub warnThreshold {
+  my ($self) = @_;
+  return $self->{_warnThreshold};
+}
+
+sub critThreshold {
+  my ($self) = @_;
+  return $self->{_critThreshold};
+}
+
+sub lastValue {
+  my ($self) = @_;
+  return $self->{_lastValue};
+}
+
+sub lastCollection {
+  my ($self) = @_;
+  return $self->{_lastCollection};
 }
 
 sub stringify {
