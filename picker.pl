@@ -146,6 +146,9 @@ while(1) {
     if(!OPerformance::pushOvomPerfData("perf", sprintf("%.3f", $eTime))) {
       OInventory::log(3, "Can't save profiling for getting whole performance");
     }
+    else {
+      OInventory::log(1, "Saved profiling for getting whole performance");
+    }
   }
   else {
     OInventory::log(3, "Can't get performance data. Rolling back. Iteration ends");

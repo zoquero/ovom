@@ -16,15 +16,36 @@ sub new {
     Carp::croak("Array with few many values for OPerfCounterInfo");
   }
 
+#  my $__entity_mo_ref   = shift @$args;
+#  my $__counterId       = shift @$args;
+#  my $__instance        = shift @$args;
+#  my $__crit_threshold  = $#$args > -1 ? shift @$args : undef;
+#  my $__warn_threshold  = $#$args > -1 ? shift @$args : undef;
+#  my $__last_value      = $#$args > -1 ? shift @$args : undef;
+#  my $__last_collection = $#$args > -1 ? shift @$args : undef;
+
+  my $__statsType      = OMockView::OMockStatsType->new(shift @$args),
+  my $__perDeviceLevel = shift @$args,
+  my $__nameInfo       = OMockView::OMockNameInfo->new([shift @$args,  shift @$args, shift @$args]),
+  my $__groupInfo      = OMockView::OMockGroupInfo->new([shift @$args, shift @$args, shift @$args]),
+  my $__key            = shift @$args,
+  my $__level          = shift @$args,
+  my $__rollupType     = OMockView::OMockRollupType->new(shift @$args),
+  my $__unitInfo       = OMockView::OMockUnitInfo->new([shift @$args, shift @$args, shift @$args]),
+  my $__critThreshold  = $#$args > -1 ? shift @$args : undef;
+  my $__warnThreshold  = $#$args > -1 ? shift @$args : undef;
+
   my $self = bless {
-    _statsType        => OMockView::OMockStatsType->new($$args[0]),
-    _perDeviceLevel   => $$args[1],
-    _nameInfo         => OMockView::OMockNameInfo->new([$$args[2],  $$args[3], $$args[4]]),
-    _groupInfo        => OMockView::OMockGroupInfo->new([$$args[5], $$args[6], $$args[7]]),
-    _key              => $$args[8],
-    _level            => $$args[9],
-    _rollupType       => OMockView::OMockRollupType->new($$args[10]),
-    _unitInfo         => OMockView::OMockUnitInfo->new([$$args[11], $$args[12], $$args[13]]),
+    _statsType      => $__statsType,
+    _perDeviceLevel => $__perDeviceLevel,
+    _nameInfo       => $__nameInfo,
+    _groupInfo      => $__groupInfo,
+    _key            => $__key,
+    _level          => $__level,
+    _rollupType     => $__rollupType,
+    _unitInfo       => $__unitInfo,
+    _critThreshold => $__critThreshold,
+    _warnThreshold => $__warnThreshold,
   }, $class;
   return $self;
 }
@@ -69,8 +90,21 @@ sub unitInfo {
   return $self->{_unitInfo};
 }
 
+sub warnThreshold {
+  my ($self) = @_;
+  return $self->{_warnThreshold};
+}
+
+sub critThreshold {
+  my ($self) = @_;
+  return $self->{_critThreshold};
+}
+
 #
-# Compare this object with other object of the same type
+# Compare this object with other object of the same type.
+#
+# Be careful! We don't compare warnThreshold or critThreshold,
+# we are just comparing the attributes specified by vCenter.
 #
 # @arg reference to the other object of the same type
 # @return  1 (if equal),

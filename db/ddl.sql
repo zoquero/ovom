@@ -108,8 +108,8 @@ CREATE TABLE `perf_counter_info` (
   `stats_type` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
   `pci_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
   `per_device_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
-  `warn_threshold` float NULL DEFAULT NULL,
-  `crit_threshold` float NULL DEFAULT NULL
+  `crit_threshold` float NULL DEFAULT NULL,
+  `warn_threshold` float NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci COMMENT='To store PerfCounterInfo objects';
 
 --
@@ -121,8 +121,8 @@ CREATE TABLE `perf_metric` (
   `mo_ref` varchar(255) COLLATE utf8_spanish_ci NOT NULL  COMMENT 'No FK because we want to allow for hosts and VMs to be temporarily out of inventory and it would break integrity. More over, we do not designed a single base entity table to have a single index controlling the unicity of mo_ref. It does not introduce any problem.',
   `counter_id` int(10) UNSIGNED NOT NULL COMMENT 'fk perf_counter_info.pci_key',
   `instance` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
-  `warn_threshold` float NULL DEFAULT NULL,
   `crit_threshold` float NULL DEFAULT NULL,
+  `warn_threshold` float NULL DEFAULT NULL,
   `last_value` float NULL DEFAULT NULL,
   `last_collection` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
