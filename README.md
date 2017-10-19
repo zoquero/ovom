@@ -16,7 +16,7 @@ vCenter is a great software but lacks some features. Some of them can be found i
 
 * vCenter capability for setting thresholds and launching alarms based upon performance data is limited
 * vCenter can't trigger methods based upon alerts
-* vCenter graphs use a static configuration for RoundRobin Performance Intervals (day == '86400 points with a sample period of 300s', week == '604800 points with a sample period of 1800s', ...)
+* vCenter graphs use a static configuration for RoundRobin Performance Intervals (day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...)
 * vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
 * vCenter API to ask for performance is heavyweight to be polled by your preferred monitoring tool
 
