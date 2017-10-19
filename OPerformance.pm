@@ -13,6 +13,9 @@ use Scalar::Util qw(looks_like_number);
 use Math::Spline;        ## for RRDB interpolation
 use File::Copy qw(move); ## move perfData file
 use Chart::Gnuplot;
+use Cwd 'abs_path';
+use File::Basename;
+
 
 use OInventory;
 use OvomDao;
@@ -44,9 +47,10 @@ our $csvSep = ";";
 #
 our $minPoints = 4;
 our $perfManagerView = undef;
-our %allCounters        = ();
-our %allCountersByGIKey = ();
-our $stageDescriptors   = undef;
+our %allCounters            = ();
+our %allCountersByGIKey     = ();
+our $stageDescriptors       = undef;
+our $perfMetricIdThresholds = undef;
 
 #
 # Gets and caches perfManager
@@ -108,13 +112,17 @@ sub getPerfManager {
 #
 # Update a perfCounterInfo if needed
 #
+# @arg the object to be inserted of updated
+# @arg the object previously loaded
+#
 # @return  2 (if updated),
 #          1 (if inserted),
 #          0 (if it doesn't need to be update),
 #         -1 (if errors)
 #
 sub updatePciIfNeeded {
-  my $pCI = shift;
+  my $pCI       = shift;
+  my $loadedPci = shift;
   my $ret = -2;
 
   # Pre-conditions
@@ -145,9 +153,8 @@ sub updatePciIfNeeded {
                    . "unitInfoLabel='"    . $pCI->unitInfo->label    . "',"
                    . "unitInfoSummary='"  . $pCI->unitInfo->summary  . "'");
 
-  my $loadedPci = OvomDao::loadEntity($pCI->key, 'PerfCounterInfo');
   if( ! defined($loadedPci)) {
-    OInventory::log(0, "Can't find any perfCounterInfo with key="
+    OInventory::log(0, "Couldn't find any perfCounterInfo with key="
                      . $pCI->key . " on DB. Let's insert it");
     if( ! OvomDao::insert($pCI) ) {
       OInventory::log(3, "Can't insert the PerfCounterInfo "
@@ -247,7 +254,7 @@ sub initCounterInfo {
     return 0;
   }
 
-  my $l = "statsType${csvSep}perDeviceLevel${csvSep}nameInfoKey${csvSep}"
+  my $l = "#statsType${csvSep}perDeviceLevel${csvSep}nameInfoKey${csvSep}"
         . "nameInfoLabel${csvSep}nameInfoSummary${csvSep}groupInfoKey${csvSep}"
         . "groupInfoLabel${csvSep}groupInfoSummary${csvSep}key${csvSep}level"
         . "${csvSep}rollupTypeVal${csvSep}unitInfoKey${csvSep}unitInfoLabel"
@@ -261,65 +268,91 @@ sub initCounterInfo {
     #
     # Reference it from allCounters and allCountersByGIKey vars
     #
-    my $key = $pCI->key;
-    $allCounters{$key} = $pCI;
+
+    my $oPCI = OPerfCounterInfo->newFromPerfCounterInfo($pCI);
+    my $key = $oPCI->key;
+
+    my $loadedPci = OvomDao::loadEntity($key, 'PerfCounterInfo');
+
+    if( ! defined($loadedPci) || ! defined($loadedPci->{_critThreshold})) {
+      #
+      # we'll load from CSV files the thresholds at least once per execution
+      # if they don't exist or if they lack of thresholds
+      #
+      OInventory::log(0,
+        "Let's get its specific threshold from the configuration files");
+  
+#     my ($pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv);
+      my ($pcCritThresholdFromCsv,  $pcWarnThresholdFromCsv);
+      my $thresholds
+        = getPerfMetricIdThresholds(undef, $key, undef);
+      $pcCritThresholdFromCsv  = ${$$thresholds[0]}[0];
+      $pcWarnThresholdFromCsv  = ${$$thresholds[0]}[1];
+#     $pmiCritThresholdFromCsv = ${$$thresholds[1]}[0];
+#     $pmiWarnThresholdFromCsv = ${$$thresholds[1]}[1];
+  
+      $oPCI->{_critThreshold} = $pcCritThresholdFromCsv;
+      $oPCI->{_warnThreshold} = $pcWarnThresholdFromCsv;
+    }
+
+    $allCounters{$key} = $oPCI;
     #
     # Bug! We were always pushing the PerfCounter,
     # a small memory leak that affected in performance
     #
-    # push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+    # push @{$allCountersByGIKey{$oPCI->groupInfo->key}}, $oPCI;
     my $perfCounterWasPushed = 0;
-    foreach my $aPCI ( @{$allCountersByGIKey{$pCI->groupInfo->key}} ) {
-      if ( $aPCI->key eq $pCI->key ) {
+    foreach my $aPCI ( @{$allCountersByGIKey{$oPCI->groupInfo->key}} ) {
+      if ( $aPCI->key eq $oPCI->key ) {
         $perfCounterWasPushed = 1;
         last;
       }
     }
     if(! $perfCounterWasPushed ) {
-      OInventory::log(0, "Let's push the perfCounter with key=" . $pCI->key);
-      push @{$allCountersByGIKey{$pCI->groupInfo->key}}, $pCI;
+      OInventory::log(0, "Let's push the perfCounter with key=" . $oPCI->key);
+      push @{$allCountersByGIKey{$oPCI->groupInfo->key}}, $oPCI;
     }
     else {
-      OInventory::log(0, "The perfCounter with key=" . $pCI->key 
+      OInventory::log(0, "The perfCounter with key=" . $oPCI->key 
                        . " was already pushed");
     }
 
     #
     # Store it on DataBase
     #
-    my $r = updatePciIfNeeded($pCI);
+    my $r = updatePciIfNeeded($oPCI, $loadedPci);
     if( $r == 2 ) {
-      OInventory::log(2, "The perfCounter key=" . $pCI->key . " changed on DB");
+      OInventory::log(2, "The perfCounter key=" . $oPCI->key . " changed on DB");
     }
     elsif( $r == 1 ) {
-      OInventory::log(2, "New perfCounter key=" . $pCI->key . " inserted on DB");
+      OInventory::log(2, "New perfCounter key=" . $oPCI->key . " inserted on DB");
     }
     elsif( $r == 0 ) {
-      OInventory::log(0, "The perfCounter key=" . $pCI->key
+      OInventory::log(0, "The perfCounter key=" . $oPCI->key
                        . " was already on DB with same values");
     }
     else {
       OInventory::log(3, "Could not update the perfCounter key="
-                       . $pCI->key . " on DB");
+                       . $oPCI->key . " on DB");
     }
 
     #
     # Save perfCounterInfo objects in CSV files
     #
-    my $s = $pCI->statsType->val     . $csvSep
-          . $pCI->perDeviceLevel     . $csvSep
-          . $pCI->nameInfo->key      . $csvSep
-          . $pCI->nameInfo->label    . $csvSep
-          . $pCI->nameInfo->summary  . $csvSep
-          . $pCI->groupInfo->key     . $csvSep
-          . $pCI->groupInfo->label   . $csvSep
-          . $pCI->groupInfo->summary . $csvSep
-          . $pCI->key                . $csvSep
-          . $pCI->level              . $csvSep
-          . $pCI->rollupType->val    . $csvSep
-          . $pCI->unitInfo->key      . $csvSep
-          . $pCI->unitInfo->label    . $csvSep
-          . $pCI->unitInfo->summary;
+    my $s = $oPCI->statsType->val     . $csvSep
+          . $oPCI->perDeviceLevel     . $csvSep
+          . $oPCI->nameInfo->key      . $csvSep
+          . $oPCI->nameInfo->label    . $csvSep
+          . $oPCI->nameInfo->summary  . $csvSep
+          . $oPCI->groupInfo->key     . $csvSep
+          . $oPCI->groupInfo->label   . $csvSep
+          . $oPCI->groupInfo->summary . $csvSep
+          . $oPCI->key                . $csvSep
+          . $oPCI->level              . $csvSep
+          . $oPCI->rollupType->val    . $csvSep
+          . $oPCI->unitInfo->key      . $csvSep
+          . $oPCI->unitInfo->label    . $csvSep
+          . $oPCI->unitInfo->summary;
     print $csvHandler "$s\n";
   }
 
@@ -559,6 +592,88 @@ sub getPerfData {
   return $r;
 }
 
+#
+# Get the perfMetricIdThresholds
+#
+# @arg a ManagedObjectReference
+#      (with 'value' (mo-ref) and 'type' (VirtualMachine ...) fields)
+# @arg counterId
+# @arg instance
+# @return reference to array containing critical and warning thresholds
+#           for that PerfCounterInfo and critical and warning thresholds
+#           for that concrete PerfMetricId
+#
+sub getPerfMetricIdThresholds {
+  my $entity    = shift;
+  my $counterId = shift;
+  my $instance  = shift;
+
+  my $allPerfMetricIdThresholds = getAllPerfMetricIdThresholds();
+  if(! defined($allPerfMetricIdThresholds) ) {
+    OInventory::log(3, "Can't get all PerfMetricId thesholds");
+  }
+  # print "all thresholds = " . Dumper($allPerfMetricIdThresholds);
+  if(defined($entity)) {
+    return [
+             $$allPerfMetricIdThresholds{''}{$counterId}{''} ,
+             $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}
+           ] ;
+  }
+  else {
+    return [
+             $$allPerfMetricIdThresholds{''}{$counterId}{''} ,
+             undef
+           ] ;
+  }
+}
+
+#
+# Get all configured PerfMetricId thresholds.
+# It will be aggressively cached.
+#
+# If moref is empty then it's a threshold for PerfCounter,
+# that's for all the instances on all the ManagedEntities.
+#
+# @return reference to hash{moref}{counterid}{instance} = ref to array [crit, warn]
+#         or undef if errors
+#
+sub getAllPerfMetricIdThresholds {
+ 
+  my $handler;
+  my $filename = dirname(abs_path(__FILE__)) . "/thresholds/PerfMetricId.thresholds.csv";
+
+  if(!defined($perfMetricIdThresholds)) {
+    %$perfMetricIdThresholds = ();
+    OInventory::log(1, "Opening PerfMetricId thresholds file '$filename'");
+    if( ! open($handler, "<encoding(UTF-8)", $filename) ) {
+      OInventory::log(3, "Can't open PerfMetricId thresholds file '$filename': $!");
+      return undef;
+    }
+  
+    while (my $line = <$handler>) {
+      chomp $line;
+      next if $line =~ /^\s*$/;
+      next if $line =~ /^#/;
+      my @parts = split /$csvSep/, $line;
+      if ($#parts < 4) {
+        OInventory::log(3, "Can't parse this line '$line' on file '$filename': $!");
+        if( ! close($handler) ) {
+          OInventory::log(3, "Could not close file '$filename': $!");
+        }
+        return undef;
+      }
+      #moref;counterId;instance;critThreshold;warnThreshold
+      $$perfMetricIdThresholds{$parts[0]}{$parts[1]}{$parts[2]}
+        = [$parts[3], $parts[4]];
+    }
+  
+    if(!close($handler)) {
+      OInventory::log(3, "Can't close PerfMetricId thresholds file '$filename': $!");
+      return 0;
+    }
+  }
+  return $perfMetricIdThresholds;
+}
 
 #
 # Register on DataBase that a perfData for an entity has been saved on a file
@@ -606,6 +721,7 @@ sub registerPerfDataSaved {
     if(defined($$values[$i]) && $$values[$i] ne '') {
       $lastValue     = $$values[$i];
       $lastTimestamp = $$timestamps[$i];
+      last;
     }
   }
   if(! defined($lastValue)) {
@@ -617,18 +733,39 @@ sub registerPerfDataSaved {
 
 # TODO: We'll continue here;
 
-  my $lastRegister = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
+  my $loadedPerfMetricId = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
                                          $perfData->id->instance, $entity);
-# * counterId of PerfMetricId object ($pMI->->counterId)
-# * className (regular 2nd parameter)
-# * instance of PerfMetricId object ($pMI->instance)
-# * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
-#                           $managedObjectReference->value (it's mo_ref))
-  if( ! defined($lastRegister)) {
-    OInventory::log(0, "No previous PerfMetricId like this, let's insert:");
+
+
+  #
+  # Let's insert or update its entry in table for PerfMetric ('perf_metric')
+  #
+  if( ! defined($loadedPerfMetricId)) {
+    #
+    # It just should happen in first run of OVOM and in its first run after
+    # adding new features to vSphere that publish new PerfCounters
+    #
+    OInventory::log(0, "Before inserting the new PerfMetricId, let's get the "
+                     . "specific threshold for it PerfMetricId from the "
+                     . "configuration files");
+
+    my ($pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv);
+#   my ($pcCritThresholdFromCsv,  $pcWarnThresholdFromCsv);
+    my $pmiThresholds
+      = getPerfMetricIdThresholds($entity, $perfData->id->counterId,
+                                  $perfData->id->instance);
+#   $pcCritThresholdFromCsv  = ${$$pmiThresholds[0]}[0];
+#   $pcWarnThresholdFromCsv  = ${$$pmiThresholds[0]}[1];
+    $pmiCritThresholdFromCsv = ${$$pmiThresholds[1]}[0];
+    $pmiWarnThresholdFromCsv = ${$$pmiThresholds[1]}[1];
+  
+    # die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " pmiThresholds = " . Dumper($pmiThresholds) . "\n, that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv , pcC=$pcCritThresholdFromCsv , pcW=$pcWarnThresholdFromCsv";
+
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
+                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
                         );
+
+    OInventory::log(0, "Now let's insert the PerfMetricId");
     if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
 # * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),

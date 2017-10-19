@@ -16,14 +16,6 @@ sub new {
     Carp::croak("Array with few many values for OPerfCounterInfo");
   }
 
-#  my $__entity_mo_ref   = shift @$args;
-#  my $__counterId       = shift @$args;
-#  my $__instance        = shift @$args;
-#  my $__crit_threshold  = $#$args > -1 ? shift @$args : undef;
-#  my $__warn_threshold  = $#$args > -1 ? shift @$args : undef;
-#  my $__last_value      = $#$args > -1 ? shift @$args : undef;
-#  my $__last_collection = $#$args > -1 ? shift @$args : undef;
-
   my $__statsType      = OMockView::OMockStatsType->new(shift @$args),
   my $__perDeviceLevel = shift @$args,
   my $__nameInfo       = OMockView::OMockNameInfo->new([shift @$args,  shift @$args, shift @$args]),
@@ -46,6 +38,44 @@ sub new {
     _unitInfo       => $__unitInfo,
     _critThreshold => $__critThreshold,
     _warnThreshold => $__warnThreshold,
+  }, $class;
+  return $self;
+}
+
+#
+# A kind of clone from PerfCounterInfo or OPerfCounterInfo
+#
+sub newFromPerfCounterInfo {
+  my ($class, $pci) = @_;
+
+  if(! defined ($pci) || (ref($pci) ne 'PerfCounterInfo' && ref($pci) ne 'OPerfCounterInfo')) {
+    Carp::croak("OPerfCounterInfo needs a PerfCounterInfo or OPerfCounterInfo and got a " . ref($pci));
+  }
+
+  my $__statsType      = $pci->{statsType};
+  my $__perDeviceLevel = $pci->{perDeviceLevel};
+  my $__nameInfo       = $pci->{nameInfo};
+  my $__groupInfo      = $pci->{groupInfo};
+  my $__key            = $pci->{key};
+  my $__level          = $pci->{level};
+  my $__rollupType     = $pci->{rollupType};
+  my $__unitInfo       = $pci->{unitInfo};
+  my $__critThreshold  = defined($pci->{critThreshold}) ?
+                                 $pci->{critThreshold} : undef;
+  my $__warnThreshold  = defined($pci->{warnThreshold}) ?
+                                 $pci->{warnThreshold} : undef;
+
+  my $self = bless {
+    _statsType      => $__statsType,
+    _perDeviceLevel => $__perDeviceLevel,
+    _nameInfo       => $__nameInfo,
+    _groupInfo      => $__groupInfo,
+    _key            => $__key,
+    _level          => $__level,
+    _rollupType     => $__rollupType,
+    _unitInfo       => $__unitInfo,
+    _critThreshold  => $__critThreshold,
+    _warnThreshold  => $__warnThreshold,
   }, $class;
   return $self;
 }

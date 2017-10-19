@@ -149,8 +149,8 @@ our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, 
                                   . 'FROM perf_metric as a '
                                   . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert
-                              = 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
-                              . 'VALUES (?, ?, ?)';
+                              = 'INSERT INTO perf_metric (mo_ref, counter_id, instance, crit_threshold, warn_threshold) '
+                              . 'VALUES (?, ?, ?, ?, ?)';
                              # Nop update just to update timestamp
 our $sqlPerfMetricUpdate
                              = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
@@ -1293,6 +1293,14 @@ sub insert {
     $insertType = 3;
     $desc  = "$oClassName with counterId='" . $entity->counterId
            . "',instanceId='" . $entity->instance . "'";
+
+    if(defined($entity->{_crit_threshold})) {
+      $desc .= ",critThreshold='" . $entity->{_crit_threshold} . "'";
+      $desc .= ",warnThreshold='" . $entity->{_warn_threshold} . "'";
+    }
+    else {
+      $desc .= ", no specific thresholds";
+    }
   }
   else {
     Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
@@ -1319,11 +1327,7 @@ sub insert {
       Carp::croak("Trying to insert a $desc without related mo_ref");
       return 0;
     }
-    $desc  = "$oClassName with counterId='" . $entity->counterId
-           . "',instanceId='" . $entity->instance
-           . "' for entity with mo_ref='" . $mor->value . "'";
   }
- 
 
   OInventory::log(1, "Inserting into db the $desc");
 
@@ -1414,7 +1418,9 @@ sub insert {
       $sthRes = $sth->execute(
                                $mor->value,
                                $entity->counterId ,
-                               $entity->instance
+                               $entity->instance,
+                               $entity->critThreshold,
+                               $entity->warnThreshold
                              );
     }
     elsif($insertType == 0) {

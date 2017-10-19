@@ -1116,7 +1116,7 @@ sub getContentsSnippetForPerformance {
       my $resultingCsvFile = OPerformance::getOneCsvFromAllStages($fromEpoch, $toEpoch, $prefix, \@filenames);
       if (! defined($resultingCsvFile)) {
         OInventory::log(3, "getOneCsvFromAllStages returned with errors");
-        return { retval => 0, output => "Can't get the single csv for all stages" };
+        return { retval => 0, output => "Can't get the single csv for all stages. Is there data in that interval?" };
       }
       my $pCI = $perfCounterInfos->{$pmi->counterId};
       my $description = getGraphDescription($type, $entityName, $mo_ref, $pCI);
