@@ -11,9 +11,18 @@ Angel Galindo Muñoz , zoquero _at_ gmail.com
 
 July the 16th of 2017
 
+# Motivation
+vCenter is a great software but lacks some features. Some of them can be found in vRealize Operations & Automation https://www.vmware.com/products/vrealize-suite.html or in other softwares like Turbonomic http://turbonomic.com/ :
+
+* vCenter capability for setting thresholds and launching alarms based upon performance data is limited
+* vCenter can't trigger methods based upon alerts
+* vCenter graphs use a static configuration for RoundRobin Performance Intervals (day == '86400 points with a sample period of 300s', week == '604800 points with a sample period of 1800s', ...)
+* vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
+* vCenter API to ask for performance is heavyweight to be polled by your preferred monitoring tool
+
 # Features
 
-It's in an initial development stage but its goals are:
+It's still in development but its goals are:
 
 * (done! *v0.1*) Maintain its own **Inventory** on a local database, but it also exports entities to CSV files to ease external access
 * Extract **performance metrics**:
