@@ -1,5 +1,9 @@
 Things to be done:
 
+* Set that if perfpicker.groupInfo.* are empty it means that you want all PerfMetrics. OPerformance::getDesiredGroupInfoForEntity() and OPerformance::filterPerfMetricIds()
+
+* Move all the conf files (ovom.conf  secrets.conf  thresholds/PerfMetricId.thresholds.csv) to a new ./conf directory
+
 * Housekeepings to be called by cron:
 ** remove old graph files (csv and png)
 ** compress &| remove rotated log files

@@ -49,6 +49,7 @@ our $minPoints = 4;
 our $perfManagerView = undef;
 our %allCounters            = ();
 our %allCountersByGIKey     = ();
+our %allPerfMetricIds       = (); # ${moref}{perfCounterId}{instance}
 our $stageDescriptors       = undef;
 our $perfMetricIdThresholds = undef;
 
@@ -370,6 +371,7 @@ sub initCounterInfo {
 #
 # Return just the desired perfMetricIds
 #
+# @arg entity's moref
 # @arg ref to the array of groupInfo key strings
 #        with the desired groupInfo for this entity
 #        (ex.: "["cpu", "mem", "network"])
@@ -379,8 +381,15 @@ sub initCounterInfo {
 # @param
 #
 sub filterPerfMetricIds {
-  my ($groupInfoArray, $perfMetricIds) = @_;
+  my ($moref, $groupInfoArray, $perfMetricIds) = @_;
   my @r;
+
+
+  #
+  # We'll cache it in %allPerfMetricIds, so let's empty it to refill it later:
+  # %allPerfMetricIds : ${moref}{perfCounterId}{instance}
+  #
+  $allPerfMetricIds{$moref} = ();
 
   OUTER: foreach my $aPMI (@$perfMetricIds) {
     MIDDLE: foreach my $aGroupInfo (@$groupInfoArray) {
@@ -403,42 +412,19 @@ sub filterPerfMetricIds {
 #        instead of just the small counterId object
 #
           push @r, $aPMI;
+
+          #
+          # Let's cache it in %allPerfMetricIds !
+          # %allPerfMetricIds : ${moref}{perfCounterId}{instance}
+          #
+          $allPerfMetricIds{$moref}{$aPMI->counterId}{$aPMI->instance}
+            = $aPMI;
           last MIDDLE;
         }
       }
     }
   }
-
   return \@r;
-
-##   #
-##   # First let's verify that allCountersByGIKey
-##   # hash has all the groupInfoArray elements as keys
-##   #
-##   foreach my $aGroupInfo (@$groupInfoArray) {
-##     if(!defined($allCountersByGIKey{$aGroupInfo})) {
-##       my $keys = join ", ", keys(%allCountersByGIKey);
-##       OInventory::log(2, "Looking for perfCounters of groupInfo '$aGroupInfo' "
-##                        . "but this group is not found in the perfCounterInfo "
-##                        . "array got from perfManagerView->perfCounter ($keys). "
-##                        . "It's probably a typo in configuration");
-##       next;
-##     }
-## 
-##     foreach my $aPMI (@$perfMetricIds) {
-## 
-##        foreach my $aC (@{$allCountersByGIKey{$aGroupInfo}}) {
-##          if($aC->key eq $aPMI->counterId) {
-## #
-## # TO_DO: Here we could save the whole counter
-## #        instead of just the small counterId object
-## #
-##            push @r, $aPMI;
-##            last;
-##          }
-##        }
-##     }
-##   }
 }
 
 #
@@ -2251,8 +2237,11 @@ sub getLatestPerformance {
     # Get the subset of available PerfMetrics that are configured as 'desired'
     #
     $timeBefore=Time::HiRes::time;
-    $filteredPerfMetricIds = filterPerfMetricIds($desiredGroupInfo,
+    $filteredPerfMetricIds = filterPerfMetricIds($aEntity->{mo_ref}, $desiredGroupInfo,
                                                  $availablePerfMetricIds);
+
+warn "Now we must substitute the usage of the returned filteredPerfMetricIds in favour of %allPerfMetricIds : {moref}{perfCounterId}{instance}";
+
     $eTime=Time::HiRes::time - $timeBefore;
     OInventory::log(1, "Profiling: Filtering PerfMetricIds took "
                        . sprintf("%.3f", $eTime) . " s");

@@ -12,19 +12,20 @@ Angel Galindo Muñoz , zoquero _at_ gmail.com
 July the 16th of 2017
 
 # Motivation
-vCenter is a great software but lacks some features. Some of them can be found in vRealize Operations & Automation https://www.vmware.com/products/vrealize-suite.html or in other softwares like Turbonomic http://turbonomic.com/ :
+vCenter is a great software but lacks some features. Some of them can be found in *VMware vRealize Operations & Automation* https://www.vmware.com/products/vrealize-suite.html or in other softwares like *Turbonomic* http://turbonomic.com/ and a few (DRS) in *VMware vSphere Enterprise Plus*. These are the missing features or weaknesses:
 
-* vCenter capability for setting thresholds and launching alarms based upon performance data is limited
-* vCenter can't trigger methods based upon alerts
-* vCenter graphs use a static configuration for RoundRobin Performance Intervals (day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...)
-* vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
-* vCenter can't generate performance reports of your entities
-* vCenter doesn't tell you which are the top consumers of your resources
-* vCenter API to ask for performance is heavyweight to be polled by your preferred monitoring tool
+* Effective alarms: custom and manageable thresholds and alarms with hooks
+* Custom RoundRobin configuration for Performance Intervals
+** vSphere's static configuration sets that day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...
+** vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
+* Reporting:
+** Full performance report generation on custom intervals for your entities
+** Which are the top consumers of your resources and which are suffering the worst latencies?
+* vCenter API to ask for performance is too much heavy to be used by your preferred monitoring tool to poll your assets at scale
 
 # Features
 
-It's still in development but its goals are:
+It's still in development but its **goals** are:
 
 * (done! *v0.1*) Maintain its own **Inventory** on a local database, but it also exports entities to CSV files to ease external access
 * Extract **performance metrics**:
@@ -34,10 +35,12 @@ It's still in development but its goals are:
 * Show performance graphics:
     * (done! **v0.5** & **v0.6**) Offer a simple Web UI to allow have graphs for custom intervals on-demand.
 * Report alarms based on thresholds
+* Extend the inventory and performance data collection to more *managed entities* (Datastore, LUN, vDisk) 
+* Model the hierarchy to reflex the dependencies between the *managed entites* so that it can correlate, for examples, latencies in LUNs with latencies in VMs.
 * Suggest changes (initially just sugggest, later would be nice to allow to apply):
     * vMotion
     * Storage vMotion
-    * Hardware scale (more or less hosts for clusters)
+    * Hardware scale (more or less hosts for clusters, move VM to new Datastore)
     * vHardware scale (more or less vCPUs for VMs)
 
 # Some API links
