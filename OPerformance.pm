@@ -273,13 +273,18 @@ sub initCounterInfo {
     my $oPCI = OPerfCounterInfo->newFromPerfCounterInfo($pCI);
     my $key = $oPCI->key;
 
+    #
+    # Let's load the PCI from database ... if it was already saved
+    #
     my $loadedPci = OvomDao::loadEntity($key, 'PerfCounterInfo');
 
-    if( ! defined($loadedPci) || ! defined($loadedPci->{_critThreshold})) {
-      #
-      # we'll load from CSV files the thresholds at least once per execution
-      # if they don't exist or if they lack of thresholds
-      #
+    #
+    # We'll load from CSV files the thresholds at least once per execution
+    # if they don't exist or if they lack of thresholds
+    #
+    if(    ! defined($loadedPci)
+        || ! defined($loadedPci->{_critThreshold})
+        || ! defined($loadedPci->{_warnThreshold})) {
       OInventory::log(0,
         "Let's get its specific threshold from the configuration files");
   
@@ -292,8 +297,12 @@ sub initCounterInfo {
 #     $pmiCritThresholdFromCsv = ${$$thresholds[1]}[0];
 #     $pmiWarnThresholdFromCsv = ${$$thresholds[1]}[1];
   
-      $oPCI->{_critThreshold} = $pcCritThresholdFromCsv;
-      $oPCI->{_warnThreshold} = $pcWarnThresholdFromCsv;
+      if(! defined($loadedPci) || !defined($oPCI->{_critThreshold})) {
+        $oPCI->{_critThreshold} = $pcCritThresholdFromCsv;
+      }
+      if(! defined($loadedPci) || !defined($oPCI->{_warnThreshold})) {
+        $oPCI->{_warnThreshold} = $pcWarnThresholdFromCsv;
+      }
     }
 
     $allCounters{$key} = $oPCI;
@@ -692,6 +701,7 @@ sub registerPerfDataSaved {
   my $entity     = shift;
   my $timestamps = shift;
   my $values     = shift;
+  my $pmi        = undef;
 
   OInventory::log(0, "Registering that counterId=" . $perfData->id->counterId
                    . ",instance=" . $perfData->id->instance
@@ -717,19 +727,23 @@ sub registerPerfDataSaved {
       . " of the " . $entity->type . " with mo_ref=" . $entity->value);
   }
 
-# TODO: We'll continue here;
-
-  my $loadedPerfMetricId = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
-                                         $perfData->id->instance, $entity);
-
+  #
+  # Let's look for the PerfMetric in DB to insert/update it
+  # Remember that %allPerfMetricIds is just a cache
+  # in memory before inserting/updating the PMI in DB.
+  #
+  $pmi = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
+                             $perfData->id->instance,  $entity);
 
   #
   # Let's insert or update its entry in table for PerfMetric ('perf_metric')
   #
-  if( ! defined($loadedPerfMetricId)) {
+  if( ! defined($pmi)) {
     #
     # It just should happen in first run of OVOM and in its first run after
     # adding new features to vSphere that publish new PerfCounters
+    #
+    # After that you will have to set/modify the thresholds in DB via WebUI
     #
     OInventory::log(0, "Before inserting the new PerfMetricId, let's get the "
                      . "specific threshold for it PerfMetricId from the "
@@ -747,12 +761,17 @@ sub registerPerfDataSaved {
   
     # die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " pmiThresholds = " . Dumper($pmiThresholds) . "\n, that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv , pcC=$pcCritThresholdFromCsv , pcW=$pcWarnThresholdFromCsv";
 
-    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
+    $pmi = OMockView::OMockPerfMetricId->new(
                           [ $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
                         );
 
+    #
+    # update the cached %allPerfMetricIds : {moref}{perfCounterId}{instance}
+    #
+    $allPerfMetricIds{$entity->value}{$perfData->id->counterId}{$perfData->id->instance} = $pmi ;
+
     OInventory::log(0, "Now let's insert the PerfMetricId");
-    if( ! OvomDao::insert($aPerfMetricId, $entity) ) {
+    if( ! OvomDao::insert($pmi, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
 # * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
 #                           $managedObjectReference->value (it's mo_ref))
@@ -767,11 +786,17 @@ sub registerPerfDataSaved {
     # update
 
     OInventory::log(0, "Let's update previous PerfMetricId:");
-    my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
-                        );
+    # my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
+    #                       [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
+    #                     );
+
+    #
+    # update the cached %allPerfMetricIds : {moref}{perfCounterId}{instance}
+    #
+    $allPerfMetricIds{$entity->value}{$perfData->id->counterId}{$perfData->id->instance} = $pmi ;
+
     # TO_DO : update unimplemented for PerfMetric , 2nd extra argument
-    if( ! OvomDao::update($aPerfMetricId, $entity) ) {
+    if( ! OvomDao::update($pmi, $entity) ) {
 # * the PerfMetricId object (regular 1st parameter)
 # * managedObjectReference ($managedObjectReference->type (VirtualMachine, ...),
 #                           $managedObjectReference->value (it's mo_ref))
@@ -782,9 +807,49 @@ sub registerPerfDataSaved {
       return 0;
     }
 
-
   }
 
+  #
+  # If PerfMetricId has thresholds
+  #   then we're use them
+  # else If PerfCounterInfo has thresholds
+  #   then we're use them
+  #      else If PerfCounterInfo has thresholds
+  #        then we're use them
+  #
+  my $pci = $allCounters{$perfData->id->counterId};
+  my $critThreshold = undef;
+  my $warnThreshold = undef;
+
+  # Crit threshold
+  if(defined($pmi->{_critThreshold})) {
+    $critThreshold = $pmi->{_critThreshold};
+  }
+  else {
+    if(defined($pci->{_critThreshold})) {
+      $critThreshold = $pci->{_critThreshold};
+    }
+  }
+  # Warn threshold
+  if(defined($pmi->{_warnThreshold})) {
+    $warnThreshold = $pmi->{_warnThreshold};
+  }
+  else {
+    if(defined($pci->{_warnThreshold})) {
+      $warnThreshold = $pci->{_warnThreshold};
+    }
+  }
+
+  if(defined($critThreshold) && defined($lastValue) && $lastValue >= $critThreshold) {
+    # Let's trigger a critical alarm
+warn "DEBUG: Let's trigger a critical alarm for moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ". Effective crit=$critThreshold, warn=$warnThreshold\n";
+  }
+  elsif(defined($warnThreshold) && defined($lastValue) && $lastValue >= $warnThreshold) {
+    # Let's trigger a warning alarm
+warn "DEBUG: Let's trigger a warning alarm for moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ". Effective crit=$critThreshold, warn=$warnThreshold\n";
+  }
+
+# We still must model 'Alarm' and we'll have to load previous state for this PerfMetricId because we'll have to add a hook for 'recovery'
 
   return 1;
 }
@@ -963,6 +1028,7 @@ sub savePerfData {
       $eTime=Time::HiRes::time - $timeBefore;
       OInventory::log(0, "Profiling: Doing RRDB for a PerfData "
                          . "took " . sprintf("%.3f", $eTime) . " s");
+
       #
       # Let's register on Database that this perfData has been saved
       #
@@ -971,6 +1037,45 @@ sub savePerfData {
                          . " with mo_ref '" . $entityView->value . "'");
         return 0;
       }
+
+      #
+      # Let's compare last value with tresholds to trigger alarms:
+      #
+
+      #
+      # Let's use the 2 caches:
+      #
+      # cached %allPerfMetricIds : {moref}{perfCounterId}{instance}
+      # $entityView->value $p->id->counterId $p->id->instance
+      #
+      # cached %allCounters: {$perfCounterId}
+      # $p->id->counterId
+      #
+
+      my $perfCounter      = $allCounters{$p->id->counterId};
+      my $pcCritThreshold  = $perfCounter->{_critThreshold};
+      my $pcWarnThreshold  = $perfCounter->{_warnThreshold};
+
+      my $pmi = $allPerfMetricIds{$entityView->value}{perfCounterId}{instance};
+      my $pmiCritThreshold = $pmi->{_critThreshold};
+      my $pmiWarnThreshold = $pmi->{_warnThreshold};
+
+my $t = "entity: " . $entityView->value . " counter " .  $p->id->counterId . " and instance " . $p->id->instance;
+# print "perfCounter = \n" . Dumper($perfCounter) . "\npmi = " . Dumper($pmi) . "\n";
+
+if(defined($pcCritThreshold)) {
+  $t .= " pcCritThreshold = $pcCritThreshold";
+}
+if(defined($pcWarnThreshold)) {
+  $t .= " pcWarnThreshold = $pcWarnThreshold";
+}
+if(defined($pmiCritThreshold)) {
+  $t .= " pmiCritThreshold = $pmiCritThreshold";
+}
+if(defined($pmiWarnThreshold)) {
+  $t .= " pmiWarnThreshold = $pmiWarnThreshold";
+}
+# print "$t\n";
     }
   }
 
@@ -2239,8 +2344,6 @@ sub getLatestPerformance {
     $timeBefore=Time::HiRes::time;
     $filteredPerfMetricIds = filterPerfMetricIds($aEntity->{mo_ref}, $desiredGroupInfo,
                                                  $availablePerfMetricIds);
-
-warn "Now we must substitute the usage of the returned filteredPerfMetricIds in favour of %allPerfMetricIds : {moref}{perfCounterId}{instance}";
 
     $eTime=Time::HiRes::time - $timeBefore;
     OInventory::log(1, "Profiling: Filtering PerfMetricIds took "

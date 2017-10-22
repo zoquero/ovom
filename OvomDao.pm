@@ -1294,9 +1294,9 @@ sub insert {
     $desc  = "$oClassName with counterId='" . $entity->counterId
            . "',instanceId='" . $entity->instance . "'";
 
-    if(defined($entity->{_crit_threshold})) {
-      $desc .= ",critThreshold='" . $entity->{_crit_threshold} . "'";
-      $desc .= ",warnThreshold='" . $entity->{_warn_threshold} . "'";
+    if(defined($entity->{_critThreshold})) {
+      $desc .= ",critThreshold='" . $entity->{_critThreshold} . "'";
+      $desc .= ",warnThreshold='" . $entity->{_warnThreshold} . "'";
     }
     else {
       $desc .= ", no specific thresholds";

@@ -18,6 +18,20 @@ sub new {
   }, $class;
   return $self;
 } 
+
+sub newFromPerfSummaryType {
+  my ($class, $p) = @_;
+
+  if(! defined ($p) || ref($p) ne 'PerfSummaryType') {
+    Carp::croak("The constructor needs a RollupType and got a " . ref($p));
+    return undef;
+  }
+
+  my $self = bless {
+    _val => $p->{val},
+  }, $class;
+  return $self;
+}
     
 sub val {    
   my ($self) = @_;

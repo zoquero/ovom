@@ -21,8 +21,8 @@ sub new {
   my $__entity_mo_ref   = shift @$args;
   my $__counterId       = shift @$args;
   my $__instance        = shift @$args;
-  my $__crit_threshold  = $#$args > -1 ? shift @$args : undef;
-  my $__warn_threshold  = $#$args > -1 ? shift @$args : undef;
+  my $__critThreshold  = $#$args > -1 ? shift @$args : undef;
+  my $__warnThreshold  = $#$args > -1 ? shift @$args : undef;
   my $__last_value      = $#$args > -1 ? shift @$args : undef;
   my $__last_collection = $#$args > -1 ? shift @$args : undef;
 
@@ -30,8 +30,8 @@ sub new {
     _entity_mo_ref => $__entity_mo_ref,
     _counterId     => $__counterId,
     _instance      => $__instance,
-    _crit_threshold  => $__crit_threshold,
-    _warn_threshold  => $__warn_threshold,
+    _critThreshold  => $__critThreshold,
+    _warnThreshold  => $__warnThreshold,
     _last_value      => $__last_value,
     _last_collection => $__last_collection,
   }, $class;
@@ -50,8 +50,8 @@ sub newFromPerfMetricId {
   my $__entity_mo_ref   = $pmi->{entity_mo_ref};
   my $__counterId       = $pmi->{counterId};
   my $__instance        = $pmi->{instance};
-  my $__crit_threshold  = undef;
-  my $__warn_threshold  = undef;
+  my $__critThreshold  = undef;
+  my $__warnThreshold  = undef;
   my $__last_value      = undef;
   my $__last_collection = undef;
 
@@ -59,8 +59,8 @@ sub newFromPerfMetricId {
     _entity_mo_ref => $__entity_mo_ref,
     _counterId     => $__counterId,
     _instance      => $__instance,
-    _crit_threshold  => $__crit_threshold,
-    _warn_threshold  => $__warn_threshold,
+    _critThreshold  => $__critThreshold,
+    _warnThreshold  => $__warnThreshold,
     _last_value      => $__last_value,
     _last_collection => $__last_collection,
   }, $class;
@@ -105,11 +105,17 @@ sub lastCollection {
 sub stringify {
   my ($self) = @_;
   my $s = '';
-  if(defined($self->{_crit_threshold})) {
-    $s .= ",critThreshold='" . $self->{_crit_threshold} . "'";
+  if(defined($self->{_critThreshold})) {
+    $s .= ",critThreshold='" . $self->{_critThreshold} . "'";
   }
-  if(defined($self->{_warn_threshold})) {
-    $s .= ",warnThreshold='" . $self->{_warn_threshold} . "'";
+  else {
+    $s .= ",no critThreshold";
+  }
+  if(defined($self->{_warnThreshold})) {
+    $s .= ",warnThreshold='" . $self->{_warnThreshold} . "'";
+  }
+  else {
+    $s .= ",no warnThreshold";
   }
   return sprintf "'%s': {entity_mo_ref='%s',counterId='%s',instance='%s'%s}", ref($self), $self->{_entity_mo_ref}, $self->{_counterId}, $self->{_instance}, $s;
 }

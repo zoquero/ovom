@@ -2,6 +2,7 @@ package OMockView::OMockNameInfo;
 use strict;
 use warnings;
 use Carp;
+use Data::Dumper;
 use overload
     '""' => 'stringify';
 
@@ -21,6 +22,23 @@ sub new {
     _key      => shift @$args,
     _label    => shift @$args,
     _summary  => shift @$args,
+  }, $class;
+  return $self;
+}
+
+sub newFromElementDescription {
+  my ($class, $p) = @_;
+
+  if(! defined ($p) || ref($p) ne 'ElementDescription') {
+    Carp::croak("The constructor needs a ElementDescription and got a "
+                . ref($p));
+    return undef;
+  }
+
+  my $self = bless {
+    _key     => $p->{key},
+    _label   => $p->{label},
+    _summary => $p->{summary},
   }, $class;
   return $self;
 }

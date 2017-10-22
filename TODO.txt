@@ -1,5 +1,7 @@
 Things to be done:
 
+* Improve performance: log: "Perf data saved" and just next: "Reading perfData from file". At the least the "latest" file can be cached and one file read can be save per entity
+
 * Set that if perfpicker.groupInfo.* are empty it means that you want all PerfMetrics. OPerformance::getDesiredGroupInfoForEntity() and OPerformance::filterPerfMetricIds()
 
 * Move all the conf files (ovom.conf  secrets.conf  thresholds/PerfMetricId.thresholds.csv) to a new ./conf directory

@@ -612,7 +612,7 @@ sub updateOvomInventoryDatabaseFromVcenter {
                      . sprintf("%.3f", $eTime) . " s");
 
   if($r > 0) {
-    OInventory::log(2, "The inventory has been updated on mem from vCenter");
+    OInventory::log(1, "The inventory has been updated on mem from vCenter");
   }
   elsif($r == 0) {
     OInventory::log(2, "The inventory has been revised "
@@ -637,7 +637,7 @@ sub updateOvomInventoryDatabaseFromVcenter {
     return 0;
   }
   else {
-    OInventory::log(2, "The inventory database contents have been loaded");
+    OInventory::log(1, "The inventory database contents have been loaded");
   }
   
 # print "\nDEBUG: Let's print inventory contents:\n";
