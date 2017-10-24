@@ -292,10 +292,10 @@ sub initCounterInfo {
       my ($pcCritThresholdFromCsv,  $pcWarnThresholdFromCsv);
       my $thresholds
         = getPerfMetricIdThresholds(undef, $key, undef);
-      $pcCritThresholdFromCsv  = ${$$thresholds[0]}[0];
-      $pcWarnThresholdFromCsv  = ${$$thresholds[0]}[1];
-#     $pmiCritThresholdFromCsv = ${$$thresholds[1]}[0];
-#     $pmiWarnThresholdFromCsv = ${$$thresholds[1]}[1];
+      $pcWarnThresholdFromCsv  = ${$$thresholds[0]}[0];
+      $pcCritThresholdFromCsv  = ${$$thresholds[0]}[1];
+#     $pmiWarnThresholdFromCsv = ${$$thresholds[1]}[0];
+#     $pmiCritThresholdFromCsv = ${$$thresholds[1]}[1];
   
       if(! defined($loadedPci) || !defined($oPCI->{_critThreshold})) {
         $oPCI->{_critThreshold} = $pcCritThresholdFromCsv;
@@ -305,20 +305,28 @@ sub initCounterInfo {
       }
     }
 
+    #
+    # Let's cache all PerfCounterInfo to accelerate posterior access:
+    #
     $allCounters{$key} = $oPCI;
+
     #
     # Bug! We were always pushing the PerfCounter,
     # a small memory leak that affected in performance
     #
     # push @{$allCountersByGIKey{$oPCI->groupInfo->key}}, $oPCI;
-    my $perfCounterWasPushed = 0;
+    my $perfCounterWasAlreadyPushed = 0;
     foreach my $aPCI ( @{$allCountersByGIKey{$oPCI->groupInfo->key}} ) {
       if ( $aPCI->key eq $oPCI->key ) {
-        $perfCounterWasPushed = 1;
-        last;
+        $perfCounterWasAlreadyPushed = 1;
+
+        #
+        # Let's overwrite the ref just in case thresholds have changed
+        #
+        $aPCI = $oPCI;
       }
     }
-    if(! $perfCounterWasPushed ) {
+    if(! $perfCounterWasAlreadyPushed ) {
       OInventory::log(0, "Let's push the perfCounter with key=" . $oPCI->key);
       push @{$allCountersByGIKey{$oPCI->groupInfo->key}}, $oPCI;
     }
@@ -754,12 +762,12 @@ sub registerPerfDataSaved {
     my $pmiThresholds
       = getPerfMetricIdThresholds($entity, $perfData->id->counterId,
                                   $perfData->id->instance);
-#   $pcCritThresholdFromCsv  = ${$$pmiThresholds[0]}[0];
-#   $pcWarnThresholdFromCsv  = ${$$pmiThresholds[0]}[1];
-    $pmiCritThresholdFromCsv = ${$$pmiThresholds[1]}[0];
-    $pmiWarnThresholdFromCsv = ${$$pmiThresholds[1]}[1];
+#   $pcWarnThresholdFromCsv  = ${$$pmiThresholds[0]}[0];
+#   $pcCritThresholdFromCsv  = ${$$pmiThresholds[0]}[1];
+    $pmiWarnThresholdFromCsv = ${$$pmiThresholds[1]}[0];
+    $pmiCritThresholdFromCsv = ${$$pmiThresholds[1]}[1];
   
-    # die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " pmiThresholds = " . Dumper($pmiThresholds) . "\n, that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv , pcC=$pcCritThresholdFromCsv , pcW=$pcWarnThresholdFromCsv";
+# die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " pmiThresholds = " . Dumper($pmiThresholds) . "\n, that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv , pcC=$pcCritThresholdFromCsv , pcW=$pcWarnThresholdFromCsv";
 
     $pmi = OMockView::OMockPerfMetricId->new(
                           [ $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
@@ -822,34 +830,71 @@ sub registerPerfDataSaved {
   my $warnThreshold = undef;
 
   # Crit threshold
+  my $critThresholdOrigin = '';
+  my $warnThresholdOrigin = '';
   if(defined($pmi->{_critThreshold})) {
     $critThreshold = $pmi->{_critThreshold};
+    $critThresholdOrigin .= 'pmi';
   }
   else {
     if(defined($pci->{_critThreshold})) {
       $critThreshold = $pci->{_critThreshold};
+      $critThresholdOrigin .= 'pci';
     }
   }
   # Warn threshold
   if(defined($pmi->{_warnThreshold})) {
     $warnThreshold = $pmi->{_warnThreshold};
+    $warnThresholdOrigin .= 'pmi';
   }
   else {
     if(defined($pci->{_warnThreshold})) {
       $warnThreshold = $pci->{_warnThreshold};
+      $warnThresholdOrigin .= 'pci';
     }
+  }
+
+# if($entity->value eq 'vm-10068' && $perfData->id->counterId == 2) {
+# print "Pillat 10068: pci = \n" . Dumper($pci) . "\n$pci \n\npmi = \n" . Dumper($pmi) . "\n$pmi\n";
+# }
+# 
+# if($perfData->id->counterId == 85) {
+# print "Pillat 85  : pci = \n" . Dumper($pci) . "\n$pci \n\npmi = \n" . Dumper($pmi) . "\n$pmi\n";
+# }
+# 
+# if($perfData->id->counterId == 125) {
+# print "Pillat 125  : pci = \n" . Dumper($pci) . "\n$pci \n\npmi = \n" . Dumper($pmi) . "\n$pmi\n";
+# }
+
+
+  my $pds = "moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ",lastValue=$lastValue";
+  if(defined($critThreshold)) {
+    $pds .= ", critThreshold=$critThreshold ($critThresholdOrigin)";
+  }
+  else {
+    $pds .= ", no critThreshold";
+  }
+  if(defined($warnThreshold)) {
+    $pds .= ", warnThreshold=$warnThreshold ($warnThresholdOrigin)";
+  }
+  else {
+    $pds .= ", no warnThreshold";
   }
 
   if(defined($critThreshold) && defined($lastValue) && $lastValue >= $critThreshold) {
     # Let's trigger a critical alarm
 warn "DEBUG: Let's trigger a critical alarm for moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ". Effective crit=$critThreshold, warn=$warnThreshold\n";
+    $pds .= ", crit alarm triggered ";
   }
   elsif(defined($warnThreshold) && defined($lastValue) && $lastValue >= $warnThreshold) {
     # Let's trigger a warning alarm
 warn "DEBUG: Let's trigger a warning alarm for moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ". Effective crit=$critThreshold, warn=$warnThreshold\n";
+    $pds .= ", warn alarm triggered ";
   }
 
 # We still must model 'Alarm' and we'll have to load previous state for this PerfMetricId because we'll have to add a hook for 'recovery'
+
+  OInventory::log(0, "Saved perf data: $pds");
 
   return 1;
 }
@@ -1038,44 +1083,44 @@ sub savePerfData {
         return 0;
       }
 
-      #
-      # Let's compare last value with tresholds to trigger alarms:
-      #
+#     #
+#     # Let's compare last value with tresholds to trigger alarms:
+#     #
 
-      #
-      # Let's use the 2 caches:
-      #
-      # cached %allPerfMetricIds : {moref}{perfCounterId}{instance}
-      # $entityView->value $p->id->counterId $p->id->instance
-      #
-      # cached %allCounters: {$perfCounterId}
-      # $p->id->counterId
-      #
+#     #
+#     # Let's use the 2 caches:
+#     #
+#     # cached %allPerfMetricIds : {moref}{perfCounterId}{instance}
+#     # $entityView->value $p->id->counterId $p->id->instance
+#     #
+#     # cached %allCounters: {$perfCounterId}
+#     # $p->id->counterId
+#     #
 
-      my $perfCounter      = $allCounters{$p->id->counterId};
-      my $pcCritThreshold  = $perfCounter->{_critThreshold};
-      my $pcWarnThreshold  = $perfCounter->{_warnThreshold};
+#     my $perfCounter      = $allCounters{$p->id->counterId};
+#     my $pcCritThreshold  = $perfCounter->{_critThreshold};
+#     my $pcWarnThreshold  = $perfCounter->{_warnThreshold};
 
-      my $pmi = $allPerfMetricIds{$entityView->value}{perfCounterId}{instance};
-      my $pmiCritThreshold = $pmi->{_critThreshold};
-      my $pmiWarnThreshold = $pmi->{_warnThreshold};
+#     my $pmi = $allPerfMetricIds{$entityView->value}{perfCounterId}{instance};
+#     my $pmiCritThreshold = $pmi->{_critThreshold};
+#     my $pmiWarnThreshold = $pmi->{_warnThreshold};
 
-my $t = "entity: " . $entityView->value . " counter " .  $p->id->counterId . " and instance " . $p->id->instance;
-# print "perfCounter = \n" . Dumper($perfCounter) . "\npmi = " . Dumper($pmi) . "\n";
-
-if(defined($pcCritThreshold)) {
-  $t .= " pcCritThreshold = $pcCritThreshold";
-}
-if(defined($pcWarnThreshold)) {
-  $t .= " pcWarnThreshold = $pcWarnThreshold";
-}
-if(defined($pmiCritThreshold)) {
-  $t .= " pmiCritThreshold = $pmiCritThreshold";
-}
-if(defined($pmiWarnThreshold)) {
-  $t .= " pmiWarnThreshold = $pmiWarnThreshold";
-}
-# print "$t\n";
+# my $t = "entity: " . $entityView->value . " counter " .  $p->id->counterId . " and instance " . $p->id->instance;
+# # print "perfCounter = \n" . Dumper($perfCounter) . "\npmi = " . Dumper($pmi) . "\n";
+# 
+# if(defined($pcCritThreshold)) {
+#   $t .= " pcCritThreshold = $pcCritThreshold";
+# }
+# if(defined($pcWarnThreshold)) {
+#   $t .= " pcWarnThreshold = $pcWarnThreshold";
+# }
+# if(defined($pmiCritThreshold)) {
+#   $t .= " pmiCritThreshold = $pmiCritThreshold";
+# }
+# if(defined($pmiWarnThreshold)) {
+#   $t .= " pmiWarnThreshold = $pmiWarnThreshold";
+# }
+# # print "$t\n";
     }
   }
 

@@ -1,5 +1,8 @@
 Things to be done:
 
+* $allCountersByGIKey{$aGroupInfo} = $aPci (hash from groupInfo to array of PerfCounterInfo)
+  maybe should be moved to $allCountersByGIKey{$aGroupInfo}{$aPciKey} = $aPci  (hash (keys=groupInfo) of hashes ($aPciKey => $aPci)
+
 * Improve performance: log: "Perf data saved" and just next: "Reading perfData from file". At the least the "latest" file can be cached and one file read can be save per entity
 
 * Set that if perfpicker.groupInfo.* are empty it means that you want all PerfMetrics. OPerformance::getDesiredGroupInfoForEntity() and OPerformance::filterPerfMetricIds()
