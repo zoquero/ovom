@@ -550,6 +550,7 @@ sub getAllEntitiesOfType {
       }
       elsif($entityType eq 'PerfCounterInfo') {
         $e = OPerfCounterInfo->new(\@data);
+print "DEBUG: Dao: loaded PerfCounterInfo=$e\n";
         push @r, $e;
       }
       else {
@@ -661,8 +662,12 @@ sub update {
     $updateType = 1;
     $desc = $oClassName . ": " . $entity->toCsvRow();
   }
-  elsif($oClassName eq 'PerfCounterInfo'
-     || $oClassName eq 'OPerfCounterInfo') {
+  elsif($oClassName eq 'PerfCounterInfo') {
+    Carp::croak("DAO just should update OPerfCounterInfo, not VMware's "
+              . "PerfCounterInfo objects, we must update also thresholds");
+    return 0;
+  }
+  elsif($oClassName eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoUpdate;
     $updateType = 2;
     $desc = $oClassName . ": key=" . $entity->key;

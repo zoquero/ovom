@@ -1,5 +1,16 @@
 Things to be done:
 
+* Were troubleshooting that there's no perfData for some entities ("No PerfEntityMetricCSV for " entries on logs)
+
+* BUG:
+$ time ./picker.pl 
+Use of uninitialized value in multiplication (*) at /usr/share/perl5/Math/Derivative.pm line 123.
+Use of uninitialized value in multiplication (*) at /usr/share/perl5/Math/Derivative.pm line 123.
+Use of uninitialized value in subtraction (-) at /usr/share/perl5/Math/Spline.pm line 32.
+Use of uninitialized value in subtraction (-) at /usr/share/perl5/Math/Spline.pm line 32.
+Zero interval in spline data.
+ at /home/agalindo/workspace/ovom/OPerformance.pm line 1701.
+
 * $allCountersByGIKey{$aGroupInfo} = $aPci (hash from groupInfo to array of PerfCounterInfo)
   maybe should be moved to $allCountersByGIKey{$aGroupInfo}{$aPciKey} = $aPci  (hash (keys=groupInfo) of hashes ($aPciKey => $aPci)
 

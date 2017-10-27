@@ -277,25 +277,28 @@ sub initCounterInfo {
     # Let's load the PCI from database ... if it was already saved
     #
     my $loadedPci = OvomDao::loadEntity($key, 'PerfCounterInfo');
+#print "DEBUG: key=$key\n";
 
     #
-    # We'll load from CSV files the thresholds at least once per execution
-    # if they don't exist or if they lack of thresholds
+    # We'll load from CSV files the thresholds when they appear
+    # for the first time (on first run and probably
+    # after installing new features in vSphere)
     #
-    if(    ! defined($loadedPci)
-        || ! defined($loadedPci->{_critThreshold})
-        || ! defined($loadedPci->{_warnThreshold})) {
+    if(! defined($loadedPci)) {
       OInventory::log(0,
         "Let's get its specific threshold from the configuration files");
   
-#     my ($pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv);
       my ($pcCritThresholdFromCsv,  $pcWarnThresholdFromCsv);
-      my $thresholds
-        = getPerfMetricIdThresholds(undef, $key, undef);
-      $pcWarnThresholdFromCsv  = ${$$thresholds[0]}[0];
-      $pcCritThresholdFromCsv  = ${$$thresholds[0]}[1];
-#     $pmiWarnThresholdFromCsv = ${$$thresholds[1]}[0];
-#     $pmiCritThresholdFromCsv = ${$$thresholds[1]}[1];
+      $pcWarnThresholdFromCsv = getPerfMetricIdThreshold(undef, $key, undef, 'warn');
+      $pcCritThresholdFromCsv = getPerfMetricIdThreshold(undef, $key, undef, 'crit');
+
+# print "DEBUG: newPCI for key=$key it's set oPCI->{_critThreshold} = ";
+# if(defined($pcCritThresholdFromCsv)) {
+# print "$pcCritThresholdFromCsv\n";
+# }
+# else {
+# print "undef\n";
+# }
   
       if(! defined($loadedPci) || !defined($oPCI->{_critThreshold})) {
         $oPCI->{_critThreshold} = $pcCritThresholdFromCsv;
@@ -304,6 +307,40 @@ sub initCounterInfo {
         $oPCI->{_warnThreshold} = $pcWarnThresholdFromCsv;
       }
     }
+    else {
+      #
+      # We save the thresholds with the other attributes of PerfCounterInfo.
+      # So, if the object exists in DB we must load the thresholds for oPCI.
+      #
+      $oPCI->{_critThreshold} = $loadedPci->{_critThreshold};
+      $oPCI->{_warnThreshold} = $loadedPci->{_warnThreshold};
+    }
+#     else {
+# 
+# print "DEBUG: oldPCI for key=$key it's set loadedPci->critThreshold = ";
+# if(defined($loadedPci->{_critThreshold})) {
+# print $loadedPci->{_critThreshold} . "\n";
+# }
+# else {
+# print "undef\n";
+# print "DEBUG: Dumper: " . Dumper($loadedPci) . "\n";
+# }
+#   
+#     }
+
+# 
+# print "DEBUG: oldPCI for key=$key it's set loadedPci->{_critThreshold} = ";
+# if(defined($oPCI->{_critThreshold})) {
+# print $oPCI->{_critThreshold} . "\n";
+# }
+# else {
+# print "undef\n";
+# print "DEBUG: Dumper de oPCI       : " . Dumper($oPCI) . "\n";
+# print "DEBUG: Dumper de loadedPci  : " . Dumper($loadedPci) . "\n";
+# }
+# print "DEBUG:\n";
+# 
+
 
     #
     # Let's cache all PerfCounterInfo to accelerate posterior access:
@@ -565,6 +602,10 @@ sub getPerfData {
     OInventory::log(3, "getPerfData argument must be a PerfQuerySpec");
     return undef;
   }
+  if ( $#{$perfQuerySpec->{metricId}} == -1 ) {
+    OInventory::log(2, "getPerfData: perfQuerySpec got no metricIds");
+    return undef;
+  }
 
   my $perfManager=getPerfManager();
   if(! $perfManager) {
@@ -592,41 +633,65 @@ sub getPerfData {
     }
   }
 
+  if (! defined ($r)) {
+    OInventory::log(3, "perfManager->QueryPerf returned undef");
+    return undef;
+  }
+
+  if ($#$r == -1) {
+    OInventory::log(3, "perfManager->QueryPerf returned "
+                     . "an empty array of PerfEntityMetricCSV");
+    return undef;
+  }
+
   return $r;
 }
 
 #
-# Get the perfMetricIdThresholds
+# Get the perfMetricIdThreshold
 #
 # @arg a ManagedObjectReference
 #      (with 'value' (mo-ref) and 'type' (VirtualMachine ...) fields)
 # @arg counterId
 # @arg instance
-# @return reference to array containing critical and warning thresholds
-#           for that PerfCounterInfo and critical and warning thresholds
-#           for that concrete PerfMetricId
+# @arg crit | warn
+# @return The critical or warning thresholds
+#           for that PerfCounterInfo or concrete PerfMetricId
+#           or undef if errors
 #
-sub getPerfMetricIdThresholds {
-  my $entity    = shift;
-  my $counterId = shift;
-  my $instance  = shift;
+sub getPerfMetricIdThreshold {
+  my $entity     = shift;
+  my $counterId  = shift;
+  my $instance   = shift;
+  my $thresType  = shift;
 
   my $allPerfMetricIdThresholds = getAllPerfMetricIdThresholds();
   if(! defined($allPerfMetricIdThresholds) ) {
     OInventory::log(3, "Can't get all PerfMetricId thesholds");
+    return undef;
   }
-  # print "all thresholds = " . Dumper($allPerfMetricIdThresholds);
+  if($thresType ne 'crit' && $thresType ne 'warn') {
+    OInventory::log(3,
+      "3rd arg for getPerfMetricIdThreshold just can be (alert|warn)");
+    return undef;
+  }
+
+  # print "DEBUG: all thresholds = " . Dumper($allPerfMetricIdThresholds) ."\n";
   if(defined($entity)) {
-    return [
-             $$allPerfMetricIdThresholds{''}{$counterId}{''} ,
-             $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}
-           ] ;
+    if($thresType eq 'crit') {
+      return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[1];
+    }
+    else {
+      return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[0];
+    }
   }
   else {
-    return [
-             $$allPerfMetricIdThresholds{''}{$counterId}{''} ,
-             undef
-           ] ;
+    if($thresType eq 'crit') {
+      return $$allPerfMetricIdThresholds{''}{$counterId}{''}[1];
+    }
+    else {
+      return $$allPerfMetricIdThresholds{''}{$counterId}{''}[0];
+    }
   }
 }
 
@@ -758,16 +823,10 @@ sub registerPerfDataSaved {
                      . "configuration files");
 
     my ($pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv);
-#   my ($pcCritThresholdFromCsv,  $pcWarnThresholdFromCsv);
-    my $pmiThresholds
-      = getPerfMetricIdThresholds($entity, $perfData->id->counterId,
-                                  $perfData->id->instance);
-#   $pcWarnThresholdFromCsv  = ${$$pmiThresholds[0]}[0];
-#   $pcCritThresholdFromCsv  = ${$$pmiThresholds[0]}[1];
-    $pmiWarnThresholdFromCsv = ${$$pmiThresholds[1]}[0];
-    $pmiCritThresholdFromCsv = ${$$pmiThresholds[1]}[1];
+    $pmiWarnThresholdFromCsv = getPerfMetricIdThreshold($entity, $perfData->id->counterId, $perfData->id->instance, 'warn');
+    $pmiCritThresholdFromCsv = getPerfMetricIdThreshold($entity, $perfData->id->counterId, $perfData->id->instance, 'crit');
   
-# die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " pmiThresholds = " . Dumper($pmiThresholds) . "\n, that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv , pcC=$pcCritThresholdFromCsv , pcW=$pcWarnThresholdFromCsv";
+# die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " , that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv";
 
     $pmi = OMockView::OMockPerfMetricId->new(
                           [ $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
@@ -854,19 +913,6 @@ sub registerPerfDataSaved {
     }
   }
 
-# if($entity->value eq 'vm-10068' && $perfData->id->counterId == 2) {
-# print "Pillat 10068: pci = \n" . Dumper($pci) . "\n$pci \n\npmi = \n" . Dumper($pmi) . "\n$pmi\n";
-# }
-# 
-# if($perfData->id->counterId == 85) {
-# print "Pillat 85  : pci = \n" . Dumper($pci) . "\n$pci \n\npmi = \n" . Dumper($pmi) . "\n$pmi\n";
-# }
-# 
-# if($perfData->id->counterId == 125) {
-# print "Pillat 125  : pci = \n" . Dumper($pci) . "\n$pci \n\npmi = \n" . Dumper($pmi) . "\n$pmi\n";
-# }
-
-
   my $pds = "moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ",lastValue=$lastValue";
   if(defined($critThreshold)) {
     $pds .= ", critThreshold=$critThreshold ($critThresholdOrigin)";
@@ -918,6 +964,12 @@ sub savePerfData {
                      . "' instead of ARRAY of PerfEntityMetricCSV");
     return 0;
   }
+
+  if($#$perfDataArray == -1) {
+    OInventory::log(1, "savePerfData: No PerfEntityMetricCSV received.");
+    return 1;
+  }
+
 
   OInventory::log(0, "Saving perf data for " . ($#$perfDataArray + 1)
                    . " PerfEntityMetricCSVs");
@@ -2422,12 +2474,19 @@ sub getLatestPerformance {
                                          metricId   => $filteredPerfMetricIds,
                                          format     => 'csv',
                                          intervalId => 20); # 20s hardcoded
+# die ref($perfQuerySpec ) . "\n". Dumper($perfQuerySpec );
     $eTime=Time::HiRes::time - $timeBefore;
     alarm 0;
     OInventory::log(1, "Profiling: Calling getPerfQuerySpec took "
                        . sprintf("%.3f", $eTime) . " s");
+
     if(! defined($perfQuerySpec)) {
       OInventory::log(3, "Could not get QuerySpec for entity");
+      next;
+    }
+    if($#{$perfQuerySpec->{metricId}} == -1) {
+      OInventory::log(2, "QuerySpec contains no metricIds for a non-empty "
+                       . "array of filteredPerfMetricIds. Why?");
       next;
     }
 
@@ -2439,17 +2498,24 @@ sub getLatestPerformance {
     $timeBefore=Time::HiRes::time;
     my $perfData = getPerfData($perfQuerySpec);
     $eTime=Time::HiRes::time - $timeBefore;
+
     if(! defined($perfData)) {
       OInventory::log(3, "Could not get perfData for entity");
       next;
     }
-#   if( ref($perfData) ne 'PerfEntityMetricCSV'
-#    && ref($perfData) ne 'OMockView::OMockPerfEntityMetricCSV') 
     if( ref($perfData) ne 'ARRAY') {
       OInventory::log(3, "Got unexpected " . ref($perfData)
                        . " instead of array of PerfEntityMetricCSV for entity");
       next;
     }
+
+    if($#$perfData == -1) {
+      OInventory::log(1, "No PerfEntityMetricCSV for " . ref($aEntity) . ": "
+                       . "{name='" . $aEntity->{name} . "',mo_ref='"
+                       . $aEntity->{mo_ref} . "'}. Moving to next entity.");
+      next;
+    }
+
     OInventory::log(1, "Profiling: Getting latest performance for "
                      . ref($aEntity) . ": "
                      . "{name='" . $aEntity->{name} . "',mo_ref='"
