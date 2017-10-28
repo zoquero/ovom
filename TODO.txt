@@ -1,5 +1,25 @@
 Things to be done:
 
+* We're troubleshooting that there's no perfData for some entities ("No PerfEntityMetricCSV for " entries on logs)
+
+* BUG: When there are gaps in perfData files:
+$ time ./picker.pl 
+Use of uninitialized value in multiplication (*) at /usr/share/perl5/Math/Derivative.pm line 123.
+Use of uninitialized value in multiplication (*) at /usr/share/perl5/Math/Derivative.pm line 123.
+Use of uninitialized value in subtraction (-) at /usr/share/perl5/Math/Spline.pm line 32.
+Use of uninitialized value in subtraction (-) at /usr/share/perl5/Math/Spline.pm line 32.
+Zero interval in spline data.
+ at /home/agalindo/workspace/ovom/OPerformance.pm line 1701.
+
+* $allCountersByGIKey{$aGroupInfo} = $aPci (hash from groupInfo to array of PerfCounterInfo)
+  maybe should be moved to $allCountersByGIKey{$aGroupInfo}{$aPciKey} = $aPci  (hash (keys=groupInfo) of hashes ($aPciKey => $aPci)
+
+* Improve performance: log: "Perf data saved" and just next: "Reading perfData from file". At the least the "latest" file can be cached and one file read can be save per entity
+
+* Set that if perfpicker.groupInfo.* are empty it means that you want all PerfMetrics. OPerformance::getDesiredGroupInfoForEntity() and OPerformance::filterPerfMetricIds()
+
+* Move all the conf files (ovom.conf  secrets.conf  thresholds/PerfMetricId.thresholds.csv) to a new ./conf directory
+
 * Housekeepings to be called by cron:
 ** remove old graph files (csv and png)
 ** compress &| remove rotated log files

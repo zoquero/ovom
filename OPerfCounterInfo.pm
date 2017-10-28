@@ -16,15 +16,66 @@ sub new {
     Carp::croak("Array with few many values for OPerfCounterInfo");
   }
 
+  my $__statsType      = OMockView::OMockStatsType->new(shift @$args),
+  my $__perDeviceLevel = shift @$args,
+  my $__nameInfo       = OMockView::OMockNameInfo->new([shift @$args,  shift @$args, shift @$args]),
+  my $__groupInfo      = OMockView::OMockGroupInfo->new([shift @$args, shift @$args, shift @$args]),
+  my $__key            = shift @$args,
+  my $__level          = shift @$args,
+  my $__rollupType     = OMockView::OMockRollupType->new(shift @$args),
+  my $__unitInfo       = OMockView::OMockUnitInfo->new([shift @$args, shift @$args, shift @$args]),
+  my $__critThreshold  = $#$args > -1 ? shift @$args : undef;
+  my $__warnThreshold  = $#$args > -1 ? shift @$args : undef;
+
   my $self = bless {
-    _statsType        => OMockView::OMockStatsType->new($$args[0]),
-    _perDeviceLevel   => $$args[1],
-    _nameInfo         => OMockView::OMockNameInfo->new([$$args[2],  $$args[3], $$args[4]]),
-    _groupInfo        => OMockView::OMockGroupInfo->new([$$args[5], $$args[6], $$args[7]]),
-    _key              => $$args[8],
-    _level            => $$args[9],
-    _rollupType       => OMockView::OMockRollupType->new($$args[10]),
-    _unitInfo         => OMockView::OMockUnitInfo->new([$$args[11], $$args[12], $$args[13]]),
+    _statsType      => $__statsType,
+    _perDeviceLevel => $__perDeviceLevel,
+    _nameInfo       => $__nameInfo,
+    _groupInfo      => $__groupInfo,
+    _key            => $__key,
+    _level          => $__level,
+    _rollupType     => $__rollupType,
+    _unitInfo       => $__unitInfo,
+    _critThreshold => $__critThreshold,
+    _warnThreshold => $__warnThreshold,
+  }, $class;
+  return $self;
+}
+
+#
+# A kind of clone from VMware's PerfCounterInfo or from ovom's OPerfCounterInfo
+#
+sub newFromPerfCounterInfo {
+  my ($class, $pci) = @_;
+
+  if(! defined ($pci) || (ref($pci) ne 'PerfCounterInfo' && ref($pci) ne 'OPerfCounterInfo')) {
+    Carp::croak("OPerfCounterInfo needs a PerfCounterInfo or OPerfCounterInfo and got a " . ref($pci));
+  }
+
+  my $__statsType      = OMockView::OMockStatsType->newFromPerfStatsType($pci->statsType);
+  my $__perDeviceLevel = $pci->perDeviceLevel;
+  my $__nameInfo       = OMockView::OMockNameInfo->newFromElementDescription($pci->nameInfo);
+  my $__groupInfo      = OMockView::OMockGroupInfo->newFromElementDescription($pci->groupInfo);
+  my $__key            = $pci->key;
+  my $__level          = $pci->level;
+  my $__rollupType     = OMockView::OMockRollupType->newFromPerfSummaryType($pci->rollupType);
+  my $__unitInfo       = OMockView::OMockUnitInfo->newFromElementDescription($pci->unitInfo);
+  my $__critThreshold  = defined($pci->{_critThreshold}) ?
+                                 $pci->{_critThreshold} : undef;
+  my $__warnThreshold  = defined($pci->{_warnThreshold}) ?
+                                 $pci->{_warnThreshold} : undef;
+
+  my $self = bless {
+    _statsType      => $__statsType,
+    _perDeviceLevel => $__perDeviceLevel,
+    _nameInfo       => $__nameInfo,
+    _groupInfo      => $__groupInfo,
+    _key            => $__key,
+    _level          => $__level,
+    _rollupType     => $__rollupType,
+    _unitInfo       => $__unitInfo,
+    _critThreshold  => $__critThreshold,
+    _warnThreshold  => $__warnThreshold,
   }, $class;
   return $self;
 }
@@ -69,8 +120,21 @@ sub unitInfo {
   return $self->{_unitInfo};
 }
 
+sub warnThreshold {
+  my ($self) = @_;
+  return $self->{_warnThreshold};
+}
+
+sub critThreshold {
+  my ($self) = @_;
+  return $self->{_critThreshold};
+}
+
 #
-# Compare this object with other object of the same type
+# Compare this object with other object of the same type.
+#
+# Be careful! We don't compare warnThreshold or critThreshold,
+# we are just comparing the attributes specified by vCenter.
 #
 # @arg reference to the other object of the same type
 # @return  1 (if equal),
@@ -121,7 +185,22 @@ sub getShortDescription {
 
 sub stringify {
   my ($self) = @_;
-  return sprintf "'%s' with statsType='%s', perDeviceLevel='%s', nameInfoKey='%s', nameInfoLabel='%s', nameInfoSummary='%s', groupInfoKey='%s', groupInfoLabel='%s', groupInfoSummary='%s', key='%s', level='%s', rollupType='%s', unitInfoKey='%s', unitInfoLabel='%s', unitInfoSummary='%s'", ref($self), $self->{_statsType}->{_val}, $self->{_perDeviceLevel}, $self->{_nameInfo}->{_key}, $self->{_nameInfo}->{_label}, $self->{_nameInfo}->{_summary}, $self->{_groupInfo}->{_key}, $self->{_groupInfo}->{_label}, $self->{_groupInfo}->{_summary}, $self->{_key}, $self->{_level}, $self->{_rollupType}->{_val}, $self->{_unitInfo}->{_key}, $self->{_unitInfo}->{_label}, $self->{_unitInfo}->{_summary};
+
+  my $s = '';
+  if(defined($self->{_critThreshold})) {
+    $s .= ",critThreshold='" . $self->{_critThreshold} . "'";
+  }
+  else {
+    $s .= ",no critThreshold";
+  }
+  if(defined($self->{_warnThreshold})) {
+    $s .= ",warnThreshold='" . $self->{_warnThreshold} . "'";
+  }
+  else {
+    $s .= ",no warnThreshold";
+  }
+
+  return sprintf "'%s' with statsType='%s', perDeviceLevel='%s', nameInfoKey='%s', nameInfoLabel='%s', nameInfoSummary='%s', groupInfoKey='%s', groupInfoLabel='%s', groupInfoSummary='%s', key='%s', level='%s', rollupType='%s', unitInfoKey='%s', unitInfoLabel='%s', unitInfoSummary='%s' %s", ref($self), $self->{_statsType}->{_val}, $self->{_perDeviceLevel}, $self->{_nameInfo}->{_key}, $self->{_nameInfo}->{_label}, $self->{_nameInfo}->{_summary}, $self->{_groupInfo}->{_key}, $self->{_groupInfo}->{_label}, $self->{_groupInfo}->{_summary}, $self->{_key}, $self->{_level}, $self->{_rollupType}->{_val}, $self->{_unitInfo}->{_key}, $self->{_unitInfo}->{_label}, $self->{_unitInfo}->{_summary}, $s;
 }
 
 1;

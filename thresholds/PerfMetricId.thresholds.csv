@@ -1,0 +1,23 @@
+#moref;counterId;instance;critThreshold;warnThreshold
+#
+# Examples:
+#
+# For PerfCounters (independent of the concrete ManagedObjectReference and instance):
+# "CPU usage as a percentage during the interval" (for any instance of any object): 95% crit, 90% warn:
+#
+# ;2;;9500;9000
+#
+# For PerfMetrics (thresholds just applicables to a concrete instance of a concrete ManagedObjectReference):
+# "Average number of read commands issued per second" for instance "scsi1:0" of vm "vm-1234": 10000 crit , 5000 warn: 
+#
+# vm-1234;171;scsi1:0;10000;5000
+#
+vm-70;2;;9200;9800
+vm-70;125;;80000;100000
+vm-31654;2;;90;95
+;85;;1;10
+;86;;1;10
+;143;;10000;20000
+;1;;9000;9500
+;2;;9000;9500
+vm-10068;2;;8000;8500

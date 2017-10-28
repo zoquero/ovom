@@ -122,34 +122,35 @@ our $sqlVirtualMachineDelete = 'DELETE FROM virtualmachine where mo_ref = ?';
 # SQL Statements for PerfCounterInfo
 ####################################
 our $sqlPerfCounterInfoSelectAll 
-                             = 'SELECT a.stats_type, a.per_device_level, a.name_info_key, a.name_info_label, a.name_info_summary, a.group_info_key, a.group_info_label, a.group_info_summary, a.pci_key, a.pci_level, a.rollup_type, a.unit_info_key, a.unit_info_label, a.unit_info_summary '
+                             = 'SELECT a.stats_type, a.per_device_level, a.name_info_key, a.name_info_label, a.name_info_summary, a.group_info_key, a.group_info_label, a.group_info_summary, a.pci_key, a.pci_level, a.rollup_type, a.unit_info_key, a.unit_info_label, a.unit_info_summary, a.crit_threshold, a.warn_threshold '
                              . 'FROM perf_counter_info as a';
-our $sqlPerfCounterInfoSelectByKey     = 'SELECT a.stats_type, a.per_device_level, a.name_info_key, a.name_info_label, a.name_info_summary, a.group_info_key, a.group_info_label, a.group_info_summary, a.pci_key, a.pci_level, a.rollup_type, a.unit_info_key, a.unit_info_label, a.unit_info_summary '
+our $sqlPerfCounterInfoSelectByKey     = 'SELECT a.stats_type, a.per_device_level, a.name_info_key, a.name_info_label, a.name_info_summary, a.group_info_key, a.group_info_label, a.group_info_summary, a.pci_key, a.pci_level, a.rollup_type, a.unit_info_key, a.unit_info_label, a.unit_info_summary, a.crit_threshold, a.warn_threshold '
                              . 'FROM perf_counter_info as a '
                              . 'where a.pci_key = ?';
 our $sqlPerfCounterInfoInsert
-                             = 'INSERT INTO perf_counter_info (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level) '
-                             . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+                             = 'INSERT INTO perf_counter_info (pci_key, name_info_key, name_info_label, name_info_summary, group_info_key, group_info_label, group_info_summary, unit_info_key, unit_info_label, unit_info_summary, rollup_type, stats_type, pci_level, per_device_level, crit_threshold, warn_threshold) '
+                             . 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 our $sqlPerfCounterInfoUpdate
-                             = 'UPDATE perf_counter_info set name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ? where pci_key = ?';
+                             = 'UPDATE perf_counter_info set name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?, crit_threshold = ?, warn_threshold = ? where pci_key = ?';
 our $sqlPerfCounterInfoDelete
                              = 'DELETE FROM perf_counter_info where mo_ref = ?';
 
 ####################################
 # SQL Statements for PerfMetric
 ####################################
+# a.crit_threshold, a.warn_threshold, a.last_value
 our $sqlPerfMetricSelectAll 
-                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a';
-our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
-our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.last_collection '
+our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                                   . 'FROM perf_metric as a '
                                   . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert
-                              = 'INSERT INTO perf_metric (mo_ref, counter_id, instance) '
-                              . 'VALUES (?, ?, ?)';
+                              = 'INSERT INTO perf_metric (mo_ref, counter_id, instance, crit_threshold, warn_threshold) '
+                              . 'VALUES (?, ?, ?, ?, ?)';
                              # Nop update just to update timestamp
 our $sqlPerfMetricUpdate
                              = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
@@ -549,6 +550,7 @@ sub getAllEntitiesOfType {
       }
       elsif($entityType eq 'PerfCounterInfo') {
         $e = OPerfCounterInfo->new(\@data);
+print "DEBUG: Dao: loaded PerfCounterInfo=$e\n";
         push @r, $e;
       }
       else {
@@ -660,8 +662,12 @@ sub update {
     $updateType = 1;
     $desc = $oClassName . ": " . $entity->toCsvRow();
   }
-  elsif($oClassName eq 'PerfCounterInfo'
-     || $oClassName eq 'OPerfCounterInfo') {
+  elsif($oClassName eq 'PerfCounterInfo') {
+    Carp::croak("DAO just should update OPerfCounterInfo, not VMware's "
+              . "PerfCounterInfo objects, we must update also thresholds");
+    return 0;
+  }
+  elsif($oClassName eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoUpdate;
     $updateType = 2;
     $desc = $oClassName . ": key=" . $entity->key;
@@ -752,7 +758,9 @@ sub update {
                   $entity->statsType->val,
                   $entity->level,
                   $entity->perDeviceLevel,
-                  $entity->key
+                  $entity->key,
+                  $entity->critThreshold,
+                  $entity->warnThreshold
                 );
     }
     # PerfMetric
@@ -1290,6 +1298,14 @@ sub insert {
     $insertType = 3;
     $desc  = "$oClassName with counterId='" . $entity->counterId
            . "',instanceId='" . $entity->instance . "'";
+
+    if(defined($entity->{_critThreshold})) {
+      $desc .= ",critThreshold='" . $entity->{_critThreshold} . "'";
+      $desc .= ",warnThreshold='" . $entity->{_warnThreshold} . "'";
+    }
+    else {
+      $desc .= ", no specific thresholds";
+    }
   }
   else {
     Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
@@ -1316,11 +1332,7 @@ sub insert {
       Carp::croak("Trying to insert a $desc without related mo_ref");
       return 0;
     }
-    $desc  = "$oClassName with counterId='" . $entity->counterId
-           . "',instanceId='" . $entity->instance
-           . "' for entity with mo_ref='" . $mor->value . "'";
   }
- 
 
   OInventory::log(1, "Inserting into db the $desc");
 
@@ -1356,28 +1368,64 @@ sub insert {
       $sthRes = $sth->execute($entity->{name}, $entity->{mo_ref}, $loadedParentId);
     }
     elsif($insertType == 2) {
-      $sthRes = $sth->execute(
-        $entity->key,
-        $entity->nameInfo->key ,
-        $entity->nameInfo->label ,
-        $entity->nameInfo->summary ,
-        $entity->groupInfo->key,
-        $entity->groupInfo->label,
-        $entity->groupInfo->summary,
-        $entity->unitInfo->key,
-        $entity->unitInfo->label,
-        $entity->unitInfo->summary,
-        $entity->rollupType->val,
-        $entity->statsType->val,
-        $entity->level,
-        $entity->perDeviceLevel
-      );
+      #
+      # PerfCounterInfo objects lacks thresholds
+      #
+      if(ref($entity) eq 'PerfCounterInfo') {
+        #
+        # PerfCounterInfo
+        #
+        $sthRes = $sth->execute(
+          $entity->key,
+          $entity->nameInfo->key ,
+          $entity->nameInfo->label ,
+          $entity->nameInfo->summary ,
+          $entity->groupInfo->key,
+          $entity->groupInfo->label,
+          $entity->groupInfo->summary,
+          $entity->unitInfo->key,
+          $entity->unitInfo->label,
+          $entity->unitInfo->summary,
+          $entity->rollupType->val,
+          $entity->statsType->val,
+          $entity->level,
+          $entity->perDeviceLevel,
+          undef,
+          undef
+        );
+      }
+      else {
+        #
+        # OPerfCounterInfo
+        #
+        $sthRes = $sth->execute(
+          $entity->key,
+          $entity->nameInfo->key ,
+          $entity->nameInfo->label ,
+          $entity->nameInfo->summary ,
+          $entity->groupInfo->key,
+          $entity->groupInfo->label,
+          $entity->groupInfo->summary,
+          $entity->unitInfo->key,
+          $entity->unitInfo->label,
+          $entity->unitInfo->summary,
+          $entity->rollupType->val,
+          $entity->statsType->val,
+          $entity->level,
+          $entity->perDeviceLevel,
+          $entity->critThreshold,
+          $entity->warnThreshold
+        );
+      }
+
     }
     elsif($insertType == 3) {
       $sthRes = $sth->execute(
                                $mor->value,
                                $entity->counterId ,
-                               $entity->instance
+                               $entity->instance,
+                               $entity->critThreshold,
+                               $entity->warnThreshold
                              );
     }
     elsif($insertType == 0) {

@@ -107,7 +107,9 @@ CREATE TABLE `perf_counter_info` (
   `rollup_type` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
   `stats_type` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
   `pci_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
-  `per_device_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL
+  `per_device_level` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `crit_threshold` float NULL DEFAULT NULL,
+  `warn_threshold` float NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci COMMENT='To store PerfCounterInfo objects';
 
 --
@@ -119,7 +121,31 @@ CREATE TABLE `perf_metric` (
   `mo_ref` varchar(255) COLLATE utf8_spanish_ci NOT NULL  COMMENT 'No FK because we want to allow for hosts and VMs to be temporarily out of inventory and it would break integrity. More over, we do not designed a single base entity table to have a single index controlling the unicity of mo_ref. It does not introduce any problem.',
   `counter_id` int(10) UNSIGNED NOT NULL COMMENT 'fk perf_counter_info.pci_key',
   `instance` varchar(255) COLLATE utf8_spanish_ci NOT NULL,
+  `crit_threshold` float NULL DEFAULT NULL,
+  `warn_threshold` float NULL DEFAULT NULL,
+  `last_value` float NULL DEFAULT NULL,
   `last_collection` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
+
+--
+-- Table structure for table `entity_types`
+--
+
+CREATE TABLE `entity_types` (
+  `id` TINYINT NOT NULL ,
+  `type_name` VARCHAR(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
+
+--
+-- Table structure for table `alerts`
+--
+
+CREATE TABLE `alerts` (
+  `id` INT(10) NOT NULL ,
+  `entity_type` TINYINT NOT NULL ,
+  `entity_moref` VARCHAR(255) NOT NULL ,
+  `is_critical` BOOLEAN NULL DEFAULT NULL ,
+  `perf_metric_id` INT(10) UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
 
 --
@@ -256,6 +282,22 @@ ALTER TABLE `virtualmachine`
 --
 ALTER TABLE `perf_metric`
   ADD CONSTRAINT `pmi_pci_fk` FOREIGN KEY (`counter_id`) REFERENCES `perf_counter_info` (`pci_key`);
+
+--
+-- Constraints for table `entity_types`
+--
+ALTER TABLE `entity_types`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Constraints for table `alerts`
+--
+ALTER TABLE `alerts`
+  ADD PRIMARY KEY (`id`),
+  ADD INDEX ( `entity_type`); 
+
+ALTER TABLE `alerts`
+  ADD CONSTRAINT `entity_type_fk` FOREIGN KEY (`entity_type`) REFERENCES `entity_types`(`id`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

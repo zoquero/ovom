@@ -25,6 +25,23 @@ sub new {
   return $self;
 }
 
+sub newFromElementDescription {
+  my ($class, $p) = @_;
+
+  if(! defined ($p) || ref($p) ne 'ElementDescription') {
+    Carp::croak("The constructor needs a ElementDescription and got a " 
+                . ref($p));
+    return undef;
+  }
+
+  my $self = bless {
+    _key     => $p->{key},
+    _label   => $p->{label},
+    _summary => $p->{summary},
+  }, $class;
+  return $self;
+}
+
 sub key {
   my ($self) = @_;
   return $self->{_key};
