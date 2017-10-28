@@ -1,8 +1,8 @@
 Things to be done:
 
-* Were troubleshooting that there's no perfData for some entities ("No PerfEntityMetricCSV for " entries on logs)
+* We're troubleshooting that there's no perfData for some entities ("No PerfEntityMetricCSV for " entries on logs)
 
-* BUG:
+* BUG: When there are gaps in perfData files:
 $ time ./picker.pl 
 Use of uninitialized value in multiplication (*) at /usr/share/perl5/Math/Derivative.pm line 123.
 Use of uninitialized value in multiplication (*) at /usr/share/perl5/Math/Derivative.pm line 123.
