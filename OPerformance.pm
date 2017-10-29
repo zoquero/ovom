@@ -356,11 +356,6 @@ sub initCounterInfo {
     foreach my $aPCI ( @{$allCountersByGIKey{$oPCI->groupInfo->key}} ) {
       if ( $aPCI->key eq $oPCI->key ) {
         $perfCounterWasAlreadyPushed = 1;
-
-        #
-        # Let's overwrite the ref just in case thresholds have changed
-        #
-        $aPCI = $oPCI;
       }
     }
     if(! $perfCounterWasAlreadyPushed ) {
@@ -633,6 +628,10 @@ sub getPerfData {
     }
   }
 
+## print "==============================================\n";
+## print "perfQuerySpec = " . Dumper($perfQuerySpec ) . "\n";
+## print "queryPerf     = " . Dumper($r) . "\n";
+
   if (! defined ($r)) {
     OInventory::log(3, "perfManager->QueryPerf returned undef");
     return undef;
@@ -642,6 +641,8 @@ sub getPerfData {
     my $d = Dumper($r);
     chomp($d);
     OInventory::log(3, "perfManager->QueryPerf returned "
+                     . "an empty array of PerfEntityMetricCSV: " . $d);
+die("perfManager->QueryPerf returned "
                      . "an empty array of PerfEntityMetricCSV: " . $d);
     return undef;
   }
