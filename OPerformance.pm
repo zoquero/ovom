@@ -641,9 +641,10 @@ sub getPerfData {
     my $d = Dumper($r);
     chomp($d);
     OInventory::log(3, "perfManager->QueryPerf returned "
-                     . "an empty array of PerfEntityMetricCSV: " . $d);
-die("perfManager->QueryPerf returned "
-                     . "an empty array of PerfEntityMetricCSV: " . $d);
+                     . "an empty array of PerfEntityMetricCSV for "
+                     . "entity {name=" . $perfQuerySpec->{entity}->{name}
+                     . ",mo_ref=" . $perfQuerySpec->{entity}->{mo_ref}->{value}
+                     . "}: " . $d);
     return undef;
   }
 

@@ -35,6 +35,7 @@ my $stype    = $ARGV[2]; # cpu | mem | ...
 my $server   = $ARGV[3]; # fqdn
 my $vurl     ="https://$server/sdk";
 
+print "Modified version of /usr/share/doc/vmware-vcli/samples/performance/performance.pl\n";
 print "etype=$etype (vm|), ename=$ename (vmname...), stype=$stype (cpu | mem | ...), server=$server (vC fqdn), vurl=$vurl\n";
 
 # connect to the server
@@ -58,133 +59,147 @@ Util::connect($vurl, $username, $passwd);
 # also initialices the $perfmgr_view object
 init_perf_counter_info();
 
-# find target virtual machine or host
-my $entity;
-if ($etype eq 'vm') {
-   my $vm = $ename;
-   $entity = Vim::find_entity_view(view_type => 'VirtualMachine',
-#           'properties' => ['name','parent'],
-                                   filter => { name => $vm });
-} else {
-   my $host = $ename;
-   $entity = Vim::find_entity_view(view_type => 'HostSystem',
-                                   filter => { name => $host });
-}
 
+die "fill it with some of your entities to do it on a loop";
+my @theEntities = ("myvm01", "myvm02", "myvm03", "myvm04");
 
-# my $myEntity = OVirtualMachine->newFromView($entity);
-# $entity = $myEntity;
-# ->{view}
-
-
-
-if (!$entity) {
-   die "Target entity not found\n";
-}
-
-#
-# $perfmgr_view->QueryAvailablePerfMetric(entity => $entity) returns a 
-# reference to an array of PerfMetricId objects like this:
-#          bless( {
-#                   'counterId' => '2',
-#                   'instance' => ''
-#                 }, 'PerfMetricId' ),
-#          bless( {
-#                   'instance' => '',
-#                   'counterId' => '6'
-#                 }, 'PerfMetricId' ),
-#          bless( {
-#                   'instance' => '',
-#                   'counterId' => '12'
-#                 }, 'PerfMetricId' ),
-#   ...
-#          bless( {
-#                   'instance' => 'DELTAFILE',
-#                   'counterId' => '240'
-#                 }, 'PerfMetricId' ),
-#          bless( {
-#                   'instance' => 'DISKFILE',
-#                   'counterId' => '240'
-#                 }, 'PerfMetricId' ),
-#          bless( {
-#                   'instance' => 'OTHERFILE',
-#                   'counterId' => '240'
-#                 }, 'PerfMetricId' ),
-#          bless( {
-#                   'counterId' => '240',
-#                   'instance' => 'SWAPFILE'
-#                 }, 'PerfMetricId' ),
-#
-my $availablePerfMetric = $perfmgr_view->QueryAvailablePerfMetric(entity => $entity);
-
-# get all available metric id's for given counter_type
-# my $countertype = Opts::get_option('countertype');
-my $countertype = $stype; # cpu | mem | ...
-my $perf_metric_ids =
-   filter_metric_ids($countertype,
-                     $perfmgr_view->QueryAvailablePerfMetric(entity => $entity));
-
-
-
-
-    # Just one PerfMetricId for debugging:
-    print "DEBUG: Just counterId==2\n";
-    my @reducedPerfMetricIds = ();
-    foreach my $aPMI (@$perf_metric_ids) {
-      if($aPMI->{counterId} == 2) {
-#       my $e = OMockView::OMockPerfMetricId->newFromPerfMetricId($aPMI);
-#print "e = " . Dumper($e) . "\n";
-# print "e = " . Dumper($aPMI) . "\n";
-#       push @reducedPerfMetricIds, $e;
-        push @reducedPerfMetricIds, $aPMI;
-        last;
+# loop for each entity
+foreach $ename (@theEntities) {
+  print "ename=$ename\n";
+  
+  # find target virtual machine or host
+  my $entity;
+  if ($etype eq 'vm') {
+     my $vm = $ename;
+     $entity = Vim::find_entity_view(view_type => 'VirtualMachine',
+  #           'properties' => ['name','parent'],
+                                     filter => { name => $vm });
+  } else {
+     my $host = $ename;
+     $entity = Vim::find_entity_view(view_type => 'HostSystem',
+                                     filter => { name => $host });
+  }
+  
+  
+  my $myEntity = OVirtualMachine->newFromView($entity);
+  
+  
+  if (!$myEntity->{view}) {
+     die "Target entity not found\n";
+  }
+  
+  #
+  # $perfmgr_view->QueryAvailablePerfMetric(entity => $entity) returns a 
+  # reference to an array of PerfMetricId objects like this:
+  #          bless( {
+  #                   'counterId' => '2',
+  #                   'instance' => ''
+  #                 }, 'PerfMetricId' ),
+  #          bless( {
+  #                   'instance' => '',
+  #                   'counterId' => '6'
+  #                 }, 'PerfMetricId' ),
+  #          bless( {
+  #                   'instance' => '',
+  #                   'counterId' => '12'
+  #                 }, 'PerfMetricId' ),
+  #   ...
+  #          bless( {
+  #                   'instance' => 'DELTAFILE',
+  #                   'counterId' => '240'
+  #                 }, 'PerfMetricId' ),
+  #          bless( {
+  #                   'instance' => 'DISKFILE',
+  #                   'counterId' => '240'
+  #                 }, 'PerfMetricId' ),
+  #          bless( {
+  #                   'instance' => 'OTHERFILE',
+  #                   'counterId' => '240'
+  #                 }, 'PerfMetricId' ),
+  #          bless( {
+  #                   'counterId' => '240',
+  #                   'instance' => 'SWAPFILE'
+  #                 }, 'PerfMetricId' ),
+  #
+  my $availablePerfMetric = $perfmgr_view->QueryAvailablePerfMetric(entity => $myEntity->{view});
+  
+  # get all available metric id's for given counter_type
+  # my $countertype = Opts::get_option('countertype');
+  my $countertype = $stype; # cpu | mem | ...
+  my $perf_metric_ids =
+     filter_metric_ids($countertype,
+                       $perfmgr_view->QueryAvailablePerfMetric(entity => $myEntity->{view}));
+  
+  
+  
+  
+      # Just one PerfMetricId for debugging:
+      print "DEBUG: Just counterId==2\n";
+      my @reducedPerfMetricIds = ();
+      foreach my $aPMI (@$perf_metric_ids) {
+        if($aPMI->{counterId} == 2) {
+  #       my $e = OMockView::OMockPerfMetricId->newFromPerfMetricId($aPMI);
+  #print "e = " . Dumper($e) . "\n";
+  # print "e = " . Dumper($aPMI) . "\n";
+  #       push @reducedPerfMetricIds, $e;
+          push @reducedPerfMetricIds, $aPMI;
+          last;
+        }
       }
-    }
-    $perf_metric_ids = \@reducedPerfMetricIds;
+      $perf_metric_ids = \@reducedPerfMetricIds;
+  
+  
+  
+  
+  # make sure there is data available for this entity   
+  if (!@$perf_metric_ids) {
+     die "Performance data not available for " . $countertype . "\n";
+  }
+  
+  # get all available perf intervals for this vm
+  my $intervals = get_available_intervals($myEntity->{view});
+  
+  # performance data for the smallest interval in csv format
+  #
+  # more info on local file DUMP.perf_query_spec._vm_.out
+  #
+  my $perf_query_spec = PerfQuerySpec->new(entity => $myEntity->{view},
+                                           metricId => $perf_metric_ids,
+                                           format => 'csv',
+                                           intervalId => shift @$intervals);
+  
+  # print "Printem el perfQuerySpec per depurar:\n";
+  # print Dumper($perf_query_spec) . "\n";
+  
+  
+  # get performance data
+  #
+  # more info on local file DUMP.QueryPerf._vm_.out
+  #
+  my $perf_data = $perfmgr_view->QueryPerf(querySpec => $perf_query_spec);
+  
+  # print "Printem el perf_data per depurar:\n";
+  # print Dumper $perf_data;
+  
+  foreach (@$perf_data) {
+     print "Performance data for: " . $myEntity->{view}->name . "\n\n";
+     my $time_stamps = $_->sampleInfoCSV;
+     my $values = $_->value;
+     foreach (@$values) {
+        print_counter_info($_->id->counterId, $_->id->instance);
+        print "Sample info : " . $time_stamps . "\n";
+        print "Value: " . $_->value . "\n\n";
+     }
+  }
 
-
-
-
-# make sure there is data available for this entity   
-if (!@$perf_metric_ids) {
-   die "Performance data not available for " . $countertype . "\n";
 }
-
-# get all available perf intervals for this vm
-my $intervals = get_available_intervals($entity);
-
-# performance data for the smallest interval in csv format
-#
-# more info on local file DUMP.perf_query_spec._vm_.out
-#
-my $perf_query_spec = PerfQuerySpec->new(entity => $entity,
-                                         metricId => $perf_metric_ids,
-                                         format => 'csv',
-                                         intervalId => shift @$intervals);
-
-# print "Printem el perfQuerySpec per depurar:\n";
-# print Dumper($perf_query_spec) . "\n";
+## end of loop
 
 
-# get performance data
-#
-# more info on local file DUMP.QueryPerf._vm_.out
-#
-my $perf_data = $perfmgr_view->QueryPerf(querySpec => $perf_query_spec);
 
-# print "Printem el perf_data per depurar:\n";
-# print Dumper $perf_data;
 
-foreach (@$perf_data) {
-   print "Performance data for: " . $entity->name . "\n\n";
-   my $time_stamps = $_->sampleInfoCSV;
-   my $values = $_->value;
-   foreach (@$values) {
-      print_counter_info($_->id->counterId, $_->id->instance);
-      print "Sample info : " . $time_stamps . "\n";
-      print "Value: " . $_->value . "\n\n";
-   }
-}
+
+
 
 # disconnect from the server
 Util::disconnect();                                  

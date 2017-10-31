@@ -1,9 +1,11 @@
 Things to be done:
 
 * We're troubleshooting that there's no perfData for some entities ("No PerfEntityMetricCSV for " entries on logs)
+** It also happens with /usr/share/doc/vmware-vcli/samples/performance/performance.pl if you change it to show performance for several VMs on a loop.
 ** I found these entries in vCSA's /storage/log/vmware/vpxd/vpxd-XXX.log :
 2017-10-28T15:03:50.318Z error vpxd[7F0612850700] [Originator@6876 sub=MoHost] Response from host host-74427 is null, even though no error received
 2017-10-28T15:03:50.318Z error vpxd[7F0612850700] [Originator@6876 sub=MoHost] [HandleAsyncQueryPerfResultsDoFinally] The RPC for host host-74427 completed with status code 3
+** I've tried with this KB: https://kb.vmware.com/s/article/2107096?language=en_US but it doesn't help
 
 * BUG: When there are gaps in perfData files:
 $ time ./picker.pl 
