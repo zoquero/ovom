@@ -597,7 +597,7 @@ sub getPerfData {
     OInventory::log(3, "getPerfData argument must be a PerfQuerySpec");
     return undef;
   }
-  if ( $#{$perfQuerySpec->{metricId}} == -1 ) {
+  if ( $#{$perfQuerySpec->metricId} == -1 ) {
     OInventory::log(2, "getPerfData: perfQuerySpec got no metricIds");
     return undef;
   }
@@ -683,10 +683,16 @@ sub getPerfMetricIdThreshold {
   # print "DEBUG: all thresholds = " . Dumper($allPerfMetricIdThresholds) ."\n";
   if(defined($entity)) {
     if($thresType eq 'crit') {
-      return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[1];
+      return $$allPerfMetricIdThresholds{$entity->value}{$counterId}{$instance}[1];
     }
     else {
-      return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[0];
+
+## print "\n\n=======\ncounterId=$counterId\ninstance=$instance\nentity=" . Dumper($entity) . "\n\nthresholds=\n" . Dumper($allPerfMetricIdThresholds) . "\n=====\n";
+## #     return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[0];
+##       my %c = $$allPerfMetricIdThresholds{$entity->value};
+##       return $c{$counterId}{$instance}[0];
+
+      return $$allPerfMetricIdThresholds{$entity->value}{$counterId}{$instance}[0];
     }
   }
   else {
@@ -2478,7 +2484,6 @@ sub getLatestPerformance {
                                          metricId   => $filteredPerfMetricIds,
                                          format     => 'csv',
                                          intervalId => 20); # 20s hardcoded
-# die ref($perfQuerySpec ) . "\n". Dumper($perfQuerySpec );
     $eTime=Time::HiRes::time - $timeBefore;
     alarm 0;
     OInventory::log(1, "Profiling: Calling getPerfQuerySpec took "
@@ -2488,7 +2493,7 @@ sub getLatestPerformance {
       OInventory::log(3, "Could not get QuerySpec for entity");
       next;
     }
-    if($#{$perfQuerySpec->{metricId}} == -1) {
+    if($#{$perfQuerySpec->metricId} == -1) {
       OInventory::log(2, "QuerySpec contains no metricIds for a non-empty "
                        . "array of filteredPerfMetricIds. Why?");
       next;

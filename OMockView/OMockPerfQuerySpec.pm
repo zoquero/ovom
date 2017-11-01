@@ -51,10 +51,10 @@ sub new {
   return $self;
 }
 
-# sub instance {
-#   my ($self) = @_;
-#   return $self->{_instance};
-# }
+sub metricId {
+  my ($self) = @_;
+  return $self->{_metricId};
+}
 
 sub stringify {
   my ($self) = @_;

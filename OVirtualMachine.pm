@@ -42,7 +42,7 @@ sub newWithArgsHash {
 
   my $self = bless {
     id              => $args->{'id'},
-    view            => undef,
+#   view            => undef,
     name            => $args->{'name'},
     mo_ref          => $args->{'mo_ref'},
     parent          => $args->{'parent'},

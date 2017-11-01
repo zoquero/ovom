@@ -23,13 +23,15 @@ sub new {
 sub newFromPerfStatsType {
   my ($class, $p) = @_;
 
-  if(! defined ($p) || ref($p) ne 'PerfStatsType') {
+  if(  ! defined ($p)
+      || (    ref($p) ne 'PerfStatsType'
+           && ref($p) ne 'OMockView::OMockStatsType')) {
     Carp::croak("The constructor needs a StatsType and got a " . ref($p));
     return undef;
   }
 
   my $self = bless {
-    _val => $p->{val},
+    _val => $p->val,
   }, $class;
   return $self;
 }

@@ -170,6 +170,7 @@ sub compare {
     || $self->unitInfo->summary  ne $other->unitInfo->summary
   ) {
     # Different folder (mo_ref differs)
+#die "diferent PerfCounterInfo:\n=======\nself=" . Dumper($self) . "\n=======\nother=" . Dumper($other) . "\n";
     return 0;
   }
   else {
