@@ -937,6 +937,15 @@ sub registerPerfDataSaved {
     $pds .= ", no warnThreshold";
   }
 
+# if(! setAlarmState($entity, $perfData, $critThreshold, $warnThreshold, $timestamps, $values)) {
+#   OInventory::log(3, "Can't setAlarmState for "
+#               . " counterId='"               . $perfData->id->counterId
+#               . "',instance='"               . $perfData->id->instance
+#               . "' for entity with mo_ref='" . $entity->value . "'");
+#   return 0;
+
+# }
+
   if(defined($critThreshold) && defined($lastValue) && $lastValue >= $critThreshold) {
     # Let's trigger a critical alarm
 warn "DEBUG: Let's trigger a critical alarm for moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ". Effective crit=$critThreshold, warn=$warnThreshold\n";
@@ -953,6 +962,173 @@ warn "DEBUG: Let's trigger a warning alarm for moref=" . $entity->value . ",coun
   OInventory::log(0, "Saved perf data: $pds");
 
   return 1;
+}
+
+# 
+# States:
+# * undef : Ok
+# * 0     : Ok
+# * 1     : Warn
+# * 2     : Crit
+# 
+# Transitions (hooks):
+# * uprise2Warn   (Ok|undef      => Warn)
+# * uprise2Crit   (Ok|Warn|undef => Crit)
+# * decrease2Warn (Crit          => Warn)
+# * recover       (Crit|Warn     => Ok)
+# 
+# @arg entity   : ManagedObjectReference
+#               : $entity->value (it's mo_ref)
+#                 $entity->type ('VirtualMachine', ...)
+# @arg perfData : PerfMetricSeriesCSV
+#               : $perfData->id->counterId
+#                 $perfData->id->instance
+# @arg critThreshold
+# @arg warnThreshold
+# @arg timestamps : ref to array of timestamps
+# @arg values     : ref to array of timestamps
+# @return 1 ok, 0 error
+# 
+sub setAlarmState {
+  my $entity          = shift; # ManagedObjectReference : $entity->value (it's mo_ref) , $entity->type ('VirtualMachine', ...)
+  my $perfData        = shift; # PerfMetricSeriesCSV : $perfData->id->counterId , $perfData->id->instance
+  my $critThreshold   = shift;
+  my $warnThreshold   = shift;
+  my $timestamps      = shift;
+  my $values          = shift;
+
+  if(!defined($entity)) {
+    OInventory::log(3, "setAlarmState: got undefined entity");
+    return 0;
+  }
+  if(!defined($perfData)) {
+    OInventory::log(3, "setAlarmState: got undefined perfData");
+    return 0;
+  }
+  if(!defined($critThreshold) || !defined($warnThreshold)) {
+    OInventory::log(3, "setAlarmState: got undefined threshold");
+    return 0;
+  }
+  if(!defined($timestamps) || ref($timestamps) ne 'ARRAY') {
+    OInventory::log(3, "setAlarmState: timestamps must be an array of tstamps");
+    return 0;
+  }
+  if(!defined($values) || ref($values) ne 'ARRAY') {
+    OInventory::log(3, "setAlarmState: values must be an array of tstamps");
+    return 0;
+  }
+
+  my $prevState       = undef;
+  my $prevStateTime   = 0;
+
+  my $latestState     = 0;
+  my $latestStateTime = $$timestamps[$#$timestamps];
+
+warn " must load prevState and prevStateTime from DB";
+
+warn "ooh, we must not use $prevStateTime as 2nd param for getFirstPosAfterValue, we must use latest (previous) perfData";
+
+  my $firstPosAfterValue = getFirstPosAfterValue($timestamps, $prevStateTime);
+
+  if(!defined($firstPosAfterValue)) {
+    OInventory::log(3, "Can't get the first pos after the timestamp "
+                     . $prevStateTime);
+    return 0;
+  }
+
+  for (my $i = $firstPosAfterValue; $i <= $#$values; $i++) {
+    my $v = $$values[$i];
+    if(defined($v)) {
+      if($v >= $critThreshold ) {
+        $latestState = 2;
+        last;
+      }
+      if($latestState == 0 && $v >= $warnThreshold ) {
+        $latestState = 1;
+      }
+    }
+  }
+
+warn "latestState=$latestState , latestStateTime=$latestStateTime";
+  return 1;
+}
+
+#
+# Get the first position after a value
+# in an array that always increases with a constant delta
+#
+# Simply iterating from the first component is computationally very inefficient
+#
+# @arg ref to array of equidistant values that are increasing
+#      (valid for array of timestamps or sorted data ascending)
+# @arg the value
+# @return first position in the array (0..N-1)
+#         that contains a value greater than the value,
+#         or undef if errors.
+#
+sub getFirstPosAfterValue {
+  my $values   = shift;
+  my $theValue = shift;
+
+  #
+  # Preconditions, errors:
+  #
+  if(!defined($values) || ref($values) ne 'ARRAY') {
+    OInventory::log(3,
+      "getFirstPosAfterValue: values must be an array of tstamps");
+    return 0;
+  }
+  if($#$values == -1) {
+    OInventory::log(3,
+      "getFirstPosAfterValue: values can't be an empty array");
+    return 0;
+  }
+
+  #
+  # Easy cases
+  #
+  if($$values[0] > $theValue) {
+    # First is already greater
+    return 0;
+  }
+  if($$values[$#$values] <= $theValue) {
+    # Last is lower or equal: No way
+    OInventory::log(3,
+      "getFirstPosAfterValue: Last is lower or equal: No way");
+    return undef;
+  }
+
+  #
+  # The value is greater than the first one in the array,
+  #           is lower or equal than the last one in the array
+  # and there's at least two points in the array
+  #
+  my $first  = $$values[0];
+  my $last   = $$values[$#$values];
+  my $diff   = $last-$first;
+  my $delta  = $diff/($#$values);
+  my $pos    = int(($theValue-$first)/$delta)+1;
+
+  #
+  # Some sanity checks:
+  #
+  if ($$values[$pos] <= $theValue) {
+    OInventory::log(3, "getFirstPosAfterValue: BUG! We calculated that "
+      . "the first position greater than $theValue in the array ("
+      . (join ", ", @$values) . ") should be the number $pos (0..N-1), "
+      . "but its value (" . $$values[$pos] . ") is not greater than $theValue");
+    return undef;
+  }
+  if (defined($$values[$pos-1]) && defined($$values[$pos-1]) > $theValue) {
+    OInventory::log(3, "getFirstPosAfterValue: BUG! We calculated that "
+      . "the first position greater than $theValue in the array ("
+      . (join ", ", @$values) . ") should be the number $pos (0..N-1), "
+      . "but the previous value in the array (" . $$values[$pos-1] . ") "
+      . "is also greater than $theValue");
+    return undef;
+  }
+
+  return $pos;
 }
 
 #

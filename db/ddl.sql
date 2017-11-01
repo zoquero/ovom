@@ -137,10 +137,10 @@ CREATE TABLE `entity_types` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
 
 --
--- Table structure for table `alerts`
+-- Table structure for table `alarms`
 --
 
-CREATE TABLE `alerts` (
+CREATE TABLE `alarms` (
   `id` INT(10) NOT NULL ,
   `entity_type` TINYINT NOT NULL ,
   `entity_moref` VARCHAR(255) NOT NULL ,
@@ -290,13 +290,13 @@ ALTER TABLE `entity_types`
   ADD PRIMARY KEY (`id`);
 
 --
--- Constraints for table `alerts`
+-- Constraints for table `alarms`
 --
-ALTER TABLE `alerts`
+ALTER TABLE `alarms`
   ADD PRIMARY KEY (`id`),
   ADD INDEX ( `entity_type`); 
 
-ALTER TABLE `alerts`
+ALTER TABLE `alarms`
   ADD CONSTRAINT `entity_type_fk` FOREIGN KEY (`entity_type`) REFERENCES `entity_types`(`id`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
