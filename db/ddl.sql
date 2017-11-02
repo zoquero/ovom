@@ -145,8 +145,13 @@ CREATE TABLE `alarms` (
   `entity_type` TINYINT NOT NULL ,
   `entity_moref` VARCHAR(255) NOT NULL ,
   `is_critical` BOOLEAN NULL DEFAULT NULL ,
-  `perf_metric_id` INT(10) UNSIGNED NOT NULL
+  `perf_metric_id` INT(10) UNSIGNED NOT NULL ,
+  `is_acknowledged` BOOLEAN NULL DEFAULT NULL ,
+  `is_active` BOOLEAN NULL DEFAULT NULL ,
+  `alarm_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ,
+  `last_change` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
+
 
 --
 -- Indexes for dumped tables

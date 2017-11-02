@@ -157,6 +157,29 @@ our $sqlPerfMetricUpdate
 our $sqlPerfMetricDelete
                              = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
 
+####################################
+# SQL Statements for Alarms
+####################################
+# # a.crit_threshold, a.warn_threshold, a.last_value
+# our $sqlAlarmsSelectAll 
+#                               = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+#                               . 'FROM perf_metric as a';
+# our $sqlAlarmsSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+#                               . 'FROM perf_metric as a '
+#                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
+# our $sqlAlarmsSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+#                                   . 'FROM perf_metric as a '
+#                                   . 'where mo_ref = ? ';
+# our $sqlAlarmsInsert
+#                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance, crit_threshold, warn_threshold) '
+#                               . 'VALUES (?, ?, ?, ?, ?)';
+#                              # Nop update just to update timestamp
+# our $sqlAlarmsUpdate
+#                              = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
+# our $sqlAlarmsDelete
+#                              = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
+# 
+
 
 #
 # Connect to DataBase
