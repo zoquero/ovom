@@ -937,14 +937,14 @@ sub registerPerfDataSaved {
     $pds .= ", no warnThreshold";
   }
 
-# if(! setAlarmState($entity, $perfData, $critThreshold, $warnThreshold, $timestamps, $values)) {
-#   OInventory::log(3, "Can't setAlarmState for "
-#               . " counterId='"               . $perfData->id->counterId
-#               . "',instance='"               . $perfData->id->instance
-#               . "' for entity with mo_ref='" . $entity->value . "'");
-#   return 0;
+  if(! setAlarmState($entity, $perfData, $critThreshold, $warnThreshold, $timestamps, $values)) {
+    OInventory::log(3, "Can't setAlarmState for "
+                . " counterId='"               . $perfData->id->counterId
+                . "',instance='"               . $perfData->id->instance
+                . "' for entity with mo_ref='" . $entity->value . "'");
+    return 0;
 
-# }
+  }
 
   if(defined($critThreshold) && defined($lastValue) && $lastValue >= $critThreshold) {
     # Let's trigger a critical alarm

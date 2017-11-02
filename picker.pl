@@ -23,6 +23,9 @@ if( ! OInventory::pickerInit()) {
 
 my ($timeBefore, $r, $eTime);
 while(1) {
+  my $error = 0;
+  $timeBefore=Time::HiRes::time;
+
   if(OInventory::askedToStop()) {
     OInventory::log(2, "We must stop. Let's finish. ");
     goto LOOP_STOP;
@@ -53,6 +56,7 @@ while(1) {
     OInventory::log(3, "Somehow wasn't connected to DB, let's connect again.");
     if(OvomDao::connect() != 1) {
       OInventory::log(3, "Cannot connect to DataBase. This iteration ends.");
+      $error=1;
       goto ITERATION_END;
     }
   }
@@ -84,6 +88,7 @@ while(1) {
         if( OvomDao::disconnect() != 1 ) {
           OInventory::log(3, "Cannot disconnect from DataBase");
         }
+        $error=1;
         goto ITERATION_END;
       }
 
@@ -107,6 +112,7 @@ while(1) {
           OInventory::log(3, "Cannot disconnect from DataBase");
         }
       }
+      $error=1;
       goto ITERATION_END;
     }
   }
@@ -138,6 +144,7 @@ while(1) {
       if( OvomDao::disconnect() != 1 ) {
         OInventory::log(3, "Cannot disconnect from DataBase");
       }
+      $error=1;
       goto ITERATION_END;
     }
 
@@ -164,6 +171,7 @@ while(1) {
         OInventory::log(3, "Cannot disconnect from DataBase");
       }
     }
+    $error=1;
     goto ITERATION_END;
   }
 
@@ -171,6 +179,17 @@ while(1) {
   # Iteration has finished
   #
   ITERATION_END:
+  $eTime=Time::HiRes::time - $timeBefore;
+
+  if($error) {
+    OInventory::log(1, "Extraction iteration #" . $inventoryRefreshCount
+                     . " ended with errors in " . sprintf("%.3f", $eTime) . "s");
+  }
+  else {
+    OInventory::log(1, "Extraction iteration #" . $inventoryRefreshCount
+                     . " ended successfully in " . sprintf("%.3f", $eTime) . "s");
+  }
+
   if($justOneIteration) {
     OInventory::log(1, "Running just one iteration, let's finish.");
     last;

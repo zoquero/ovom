@@ -125,12 +125,16 @@ sub connectToVcenter {
     return 1;
   }
 
-  my $vCWSUrl = 'https://'
-                . $OInventory::configuration{'vCenter.fqdn'}
-                . '/sdk/webService';
+  my $vcFqdn = $ENV{'OVOM_VC_FQDN'};
+  if ( ! defined($vcFqdn) || $vcFqdn eq '') {
+    OInventory::log(3, "Can't find vCenter's Fully Qualified Domain Name "
+                        . "in the environment. Read install instructions.");
+    return 0;
+  }
+  my $vCWSUrl = "https://$vcFqdn/sdk/webService";
   my $user = $ENV{'OVOM_VC_USERNAME'};
   my $pass = $ENV{'OVOM_VC_PASSWORD'};
-  if ( ! defined($user) || $user eq '' ||  ! defined($pass) || $pass eq '') {
+  if ( ! defined($user) || $user eq '' || ! defined($pass) || $pass eq '') {
     OInventory::log(3, "Can't find username or password for vCenter "
                         . "in the environment. Read install instructions.");
     return 0;
@@ -1380,11 +1384,17 @@ sub readConfiguration {
         $line =~s/\s+$//;           # no trailing white spaces
         next unless length($line);  # anything left?
         my ($var, $value) = split(/\s*=\s*/, $line, 2);
-        if(   $var eq 'OVOM_DB_USERNAME' || $var eq 'OVOM_DB_PASSWORD'
-           || $var eq 'OVOM_VC_USERNAME' || $var eq 'OVOM_VC_PASSWORD') {
+        if(   $var eq 'OVOM_VC_USERNAME' || $var eq 'OVOM_VC_PASSWORD'
+           || $var eq 'OVOM_DB_USERNAME' || $var eq 'OVOM_DB_PASSWORD') {
           if(!defined($ENV{$var})) {
             $ENV{$var} = $value;
           }
+        }
+        if($var eq 'OVOM_VC_FQDN') {
+          if(!defined($ENV{$var})) {
+            $ENV{$var} = $value;
+          }
+          $OInventory::configuration{'vCenter.fqdn'} = $value;
         }
     } 
     if( ! close(CONFIG) ) {
