@@ -192,13 +192,13 @@ sub stringify {
     $s .= ",critThreshold='" . $self->{_critThreshold} . "'";
   }
   else {
-    $s .= ",no critThreshold";
+    $s .= ",no_critThreshold";
   }
   if(defined($self->{_warnThreshold})) {
     $s .= ",warnThreshold='" . $self->{_warnThreshold} . "'";
   }
   else {
-    $s .= ",no warnThreshold";
+    $s .= ",no_warnThreshold";
   }
 
   return sprintf "'%s' with statsType='%s', perDeviceLevel='%s', nameInfoKey='%s', nameInfoLabel='%s', nameInfoSummary='%s', groupInfoKey='%s', groupInfoLabel='%s', groupInfoSummary='%s', key='%s', level='%s', rollupType='%s', unitInfoKey='%s', unitInfoLabel='%s', unitInfoSummary='%s' %s", ref($self), $self->{_statsType}->{_val}, $self->{_perDeviceLevel}, $self->{_nameInfo}->{_key}, $self->{_nameInfo}->{_label}, $self->{_nameInfo}->{_summary}, $self->{_groupInfo}->{_key}, $self->{_groupInfo}->{_label}, $self->{_groupInfo}->{_summary}, $self->{_key}, $self->{_level}, $self->{_rollupType}->{_val}, $self->{_unitInfo}->{_key}, $self->{_unitInfo}->{_label}, $self->{_unitInfo}->{_summary}, $s;

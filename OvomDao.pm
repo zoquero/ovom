@@ -140,12 +140,12 @@ our $sqlPerfCounterInfoDelete
 ####################################
 # a.crit_threshold, a.warn_threshold, a.last_value
 our $sqlPerfMetricSelectAll 
-                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+                              = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a';
-our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+our $sqlPerfMetricSelectByKey = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
-our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+our $sqlPerfMetricSelectEntityPMs = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                                   . 'FROM perf_metric as a '
                                   . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert
@@ -160,25 +160,17 @@ our $sqlPerfMetricDelete
 ####################################
 # SQL Statements for Alarms
 ####################################
-# # a.crit_threshold, a.warn_threshold, a.last_value
-# our $sqlAlarmsSelectAll 
-#                               = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
-#                               . 'FROM perf_metric as a';
-# our $sqlAlarmsSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
-#                               . 'FROM perf_metric as a '
-#                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
-# our $sqlAlarmsSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
-#                                   . 'FROM perf_metric as a '
-#                                   . 'where mo_ref = ? ';
-# our $sqlAlarmsInsert
-#                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance, crit_threshold, warn_threshold) '
-#                               . 'VALUES (?, ?, ?, ?, ?)';
-#                              # Nop update just to update timestamp
-# our $sqlAlarmsUpdate
-#                              = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
-# our $sqlAlarmsDelete
-#                              = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
-# 
+our $sqlAlarmsSelectAll       = 'SELECT a.id, a.entity_type, a.mo_ref, a.is_critical, a.perf_metric_id, a.is_acknowledged, a.is_active, a.alarm_time, a.last_change '
+                              . 'FROM alarm as a';
+our $sqlAlarmsSelectByKey     = 'SELECT a.id, a.entity_type, a.mo_ref, a.is_critical, a.perf_metric_id, a.is_acknowledged, a.is_active, a.alarm_time, a.last_change '
+                              . 'FROM alarm as a '
+                              . 'where counter_id = ? and instance = ? and mo_ref = ? ';
+our $sqlAlarmsInsert
+                              = 'INSERT INTO alarm (entity_type, mo_ref, is_critical, perf_metric_id, is_acknowledged, is_active, alarm_time) '
+                              . 'VALUES (?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?))';
+our $sqlAlarmsUpdate
+                             = 'UPDATE alarm set is_critical = ? , is_acknowledged = ? , is_active = ? , last_change = NOW() where id = ?';
+our $sqlAlarmsDelete         = 'DELETE FROM alarm where id = ? ';
 
 
 #
@@ -1327,8 +1319,13 @@ sub insert {
       $desc .= ",warnThreshold='" . $entity->{_warnThreshold} . "'";
     }
     else {
-      $desc .= ", no specific thresholds";
+      $desc .= ",no_thresholds";
     }
+  }
+  elsif($oClassName eq 'OAlarm') {
+    $stmt       = $sqlAlarmsInsert;
+    $insertType = 4;
+    $desc       = "$oClassName with for mo_ref='" . $entity->mo_ref . "'";
   }
   else {
     Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
@@ -1349,12 +1346,27 @@ sub insert {
       return 0;
     }
   }
-
-  if($insertType == 3) {
+  elsif($insertType == 2) {
+    #
+    # Nothing to be done for PerfCounterInfo or OPerfCounterInfo
+    #
+  }
+  elsif($insertType == 3) {
     if( ! defined($mor->value) || $mor->value eq '' ) {
       Carp::croak("Trying to insert a $desc without related mo_ref");
       return 0;
     }
+  }
+  elsif($insertType == 4) {
+    # at least let's check de mo_ref
+    if( ! defined($entity->value) || $entity->value eq '' ) {
+      Carp::croak("Trying to insert a $desc without mo_ref");
+      return 0;
+    }
+  }
+  else {
+    Carp::croak("Unexpected insertType $insertType");
+    return 0;
   }
 
   OInventory::log(1, "Inserting into db the $desc");
@@ -1450,6 +1462,29 @@ sub insert {
                                $entity->critThreshold,
                                $entity->warnThreshold
                              );
+      my $newId = $dbh->{'mysql_insertid'};
+      if(!defined($newId)) {
+        Carp::croak("Can't get the new id generated with $stmt");
+        return 0;
+      }
+      $entity->setId($newId);
+    }
+    elsif($insertType == 4) {
+      $sthRes = $sth->execute(
+                               $entity->entity_type ,
+                               $entity->mo_ref,
+                               $entity->is_critical,
+                               $entity->perf_metric_id,
+                               $entity->is_acknowledged,
+                               $entity->is_active,
+                               $entity->alarm_time
+                             );
+      my $newId = $dbh->{'mysql_insertid'};
+      if(!defined($newId)) {
+        Carp::croak("Can't get the new id generated with $stmt");
+        return 0;
+      }
+      $entity->setId($newId);
     }
     elsif($insertType == 0) {
       #
@@ -1513,7 +1548,8 @@ sub insert {
                               $hostFolderPid, $networkFolderPid);
     }
     else {
-      Carp::croak("Insert statement unimplemented for $oClassName");
+      Carp::croak("Insert statement unimplemented "
+                . "for $oClassName and insertType $insertType");
       return 0;
     }
 

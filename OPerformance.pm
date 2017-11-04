@@ -842,7 +842,7 @@ sub registerPerfDataSaved {
 # die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " , that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv";
 
     $pmi = OMockView::OMockPerfMetricId->new(
-                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
+                          [ undef, $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
                         );
 
     #
@@ -875,7 +875,7 @@ sub registerPerfDataSaved {
     #
     OInventory::log(0, "Let's update previous PerfMetricId:");
     # my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-    #                       [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
+    #                       [ undef, $entity->value, $perfData->id->counterId, $perfData->id->instance ]
     #                     );
 
     #
@@ -948,7 +948,7 @@ sub registerPerfDataSaved {
     $pds .= ", no warnThreshold";
   }
 
-  if(! setAlarmState($entity, $perfData, $critThreshold, $warnThreshold, $timestamps, $values, $previousLastCollection)) {
+  if(! setAlarmState($entity, $pmi, $perfData, $critThreshold, $warnThreshold, $timestamps, $values, $previousLastCollection)) {
     OInventory::log(3, "Can't setAlarmState for "
                 . " counterId='"               . $perfData->id->counterId
                 . "',instance='"               . $perfData->id->instance
@@ -991,6 +991,7 @@ warn "DEBUG: Let's trigger a warning alarm for moref=" . $entity->value . ",coun
 # @arg entity   : ManagedObjectReference
 #               : $entity->value (it's mo_ref)
 #                 $entity->type ('VirtualMachine', ...)
+# @arg pmi      : MockView::OMockPerfMetricId object
 # @arg perfData : PerfMetricSeriesCSV
 #               : $perfData->id->counterId
 #                 $perfData->id->instance
@@ -1006,6 +1007,7 @@ sub setAlarmState {
   my $entity                 = shift; # ManagedObjectReference :
                                       # $entity->value (it's mo_ref) ,
                                       # $entity->type ('VirtualMachine', ...)
+  my $pmi                    = shift; # MockView::OMockPerfMetricId object
   my $perfData               = shift; # PerfMetricSeriesCSV :
                                       # $perfData->id->counterId ,
                                       # $perfData->id->instance
@@ -1017,6 +1019,15 @@ sub setAlarmState {
 
   if(!defined($entity)) {
     OInventory::log(3, "setAlarmState: got undefined entity");
+    return 0;
+  }
+  if(!defined($pmi)) {
+    OInventory::log(3, "setAlarmState: got undefined PerfMetricId");
+    return 0;
+  }
+  if(ref($pmi) ne 'OMockView::OMockPerfMetricId') {
+    OInventory::log(3, "setAlarmState: expected a MockView::OMockPerfMetricId "
+                     . "as 2nd parameter and got a " . ref($pmi));
     return 0;
   }
   if(!defined($perfData)) {
@@ -1092,31 +1103,38 @@ print "checking value $v\n";
 # * recover       (Crit|Warn     => Ok)
 # 
 
-  if(!defined($prevState) || $prevState == 0) {
-    # uprise2Crit
+  #
+  # * uprise2Crit   (Ok|Warn|undef => Crit)
+  #
+  if((!defined($prevState) || $prevState != 2) && $newState == 2) {
 
-    my $isCritical = $newState == 2 ? 1 : 0;
+    my $entityId = OInventory::entityType2entityId($entity->type);
+    if(!defined($entityId)) {
+      OInventory::log(3, "Can't get the entity id for " . $entity->type);
+      return 0;
+    }
+
     my $a = { 'id'               => undef,
-              'entity_type'      => 'PENDING TO BE FIT FROM PMI',
-              'entity_moref'     => 'PENDING TO BE FIT FROM PMI',
-              'is_critical'      => $isCritical,
-              'perf_metric_id'   => 0,        # PENDING TO BE FIT FROM PMI
+              'entity_type'      => $entityId,
+              'mo_ref'           => $entity->value,
+              'is_critical'      => 1, # crit == 1 , warn = 0
+              'perf_metric_id'   => $pmi->id,
               'is_acknowledged'  => 0,
               'is_active'        => 1,
               'alarm_time'       => $newStateTime,
-              'last_change'      => undef};
+              'last_change'      => undef     # It will be set on db
+            };
 
     my $alarm = OAlarm->newWithArgsHash($a);
-die "alarm = " . Dumper($alarm);
+warn "alarm = " . Dumper($alarm);
 
-#   if( ! OvomDao::insert($pCI) ) {
-#     OInventory::log(3, "Can't insert the PerfCounterInfo "
-#                 . " with key '" . $pCI->key . "'" );
-#     return -1;
-#   }
+    if( ! OvomDao::insert($alarm) ) {
+      OInventory::log(3, "Can't insert the Alarm $alarm");
+      return -1;
+    }
   }
 
-  die "newState=$newState , newStateTime=$newStateTime";
+warn "newState=$newState , newStateTime=$newStateTime";
 
   return 1;
 }

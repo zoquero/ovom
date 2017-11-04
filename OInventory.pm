@@ -64,6 +64,9 @@ our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
 our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource",
                     "HostSystem", "VirtualMachine");
+our @mockingEntityTypes = ("OMockView::OMockFolderView", "OMockView::OMockDatacenterView", "OMockView::OMockClusterView",
+                           "OMockView::OMockHostView", "OMockView::OMockVirtualMachineView");
+
 
 # vmname/last_hour/
 # vmname/last_day/
@@ -95,6 +98,38 @@ our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource",
 sub getEntityTypes {
   return \@entityTypes;
 }
+
+
+#
+# Given a string identitying an entity type it returns its numerical id.
+#
+# Those entity type and entity id correspond with
+# entity_types.type_.name and entity_types.id from database
+#
+sub entityType2entityId {
+  my $entityType = shift;
+  if(!defined($entityType)) {
+    OInventory::log(3, "entityType2entityId got no entity type");
+    return undef;
+  }
+
+  # Mapping for mocking views:
+
+  # Easy, we simply set its a id as its position in the array @entityTypes
+  for(my $i = 0; $i <= $#entityTypes; $i++) {
+    if ($entityTypes[$i] eq $entityType) {
+      return $i;
+    }
+    if ($mockingEntityTypes[$i] eq $entityType) {
+      return $i;
+    }
+  }
+  OInventory::log(3,
+    "entityType2entityId could not find the entity type $entityType");
+  return undef;
+}
+
+
 
 #
 # Get a reference to the inventory hash
