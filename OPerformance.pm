@@ -1045,9 +1045,33 @@ sub setAlarmState {
   }
 
   my $prevState    = undef;
+  my $prevAlarm    = undef;
+  my $r            = undef;
   my $newState     = 0;
   my $newStateTime = $$timestamps[$#$timestamps];
   my $firstPosAfterValue = 0;
+
+  ($r, $prevAlarm) = OvomDao::loadEntity($entity->value, 'OAlarm', $pmi->id);
+  if( ! defined($r) || $r != 1 ) {
+    OInventory::log(3, "Can't look for previous alarms");
+    return 0;
+  }
+
+# if(defined($prevAlarm)) {
+#   warn "DEBUG: Alarm found: ". Dumper($prevAlarm) . "\n";
+# }
+# else {
+#   warn "DEBUG: NO previous alarm found\n";
+# }
+
+  if(defined($prevAlarm)) {
+    if($prevAlarm->is_critical) {
+      $prevState = 2;
+    }
+    else {
+      $prevState = 1;
+    }
+  }
 
   if(defined($critThreshold) || defined($warnThreshold)) {
     if(! defined($critThreshold)) {
@@ -1066,10 +1090,10 @@ sub setAlarmState {
       return 0;
     }
   
-print "critThreshold=$critThreshold , warnThreshold=$warnThreshold\n";
+# print "critThreshold=$critThreshold , warnThreshold=$warnThreshold\n";
     for (my $i = $firstPosAfterValue; $i <= $#$values; $i++) {
       my $v = $$values[$i];
-print "checking value $v\n";
+# print "checking value $v\n";
       if(defined($critThreshold) && defined($v)) {
         if($v >= $critThreshold) {
           $newState = 2;
@@ -1084,6 +1108,15 @@ print "checking value $v\n";
     }
 
   }
+
+  #
+  # Note:
+  #
+  # You can remove thresholds after having an alarm launched and you 
+  # can change thresholds after , so you always must check for previous 
+  # and new alarm states to trigger transitions, independently of 
+  # whether are there or are there not thresholds.
+  #
 
   #
   # Set alarm state and trigger transition hooks, if applies
@@ -1103,11 +1136,10 @@ print "checking value $v\n";
 # * recover       (Crit|Warn     => Ok)
 # 
 
-  #
-  # * uprise2Crit   (Ok|Warn|undef => Crit)
-  #
-  if((!defined($prevState) || $prevState != 2) && $newState == 2) {
-
+  if(!defined($prevState) && $newState == 2) {
+    #
+    # * uprise2Crit   (Ok     |undef => Crit)
+    #
     my $entityId = OInventory::entityType2entityId($entity->type);
     if(!defined($entityId)) {
       OInventory::log(3, "Can't get the entity id for " . $entity->type);
@@ -1126,15 +1158,98 @@ print "checking value $v\n";
             };
 
     my $alarm = OAlarm->newWithArgsHash($a);
-warn "alarm = " . Dumper($alarm);
+# warn "alarm = " . Dumper($alarm);
 
     if( ! OvomDao::insert($alarm) ) {
       OInventory::log(3, "Can't insert the Alarm $alarm");
       return -1;
     }
+    OInventory::log(1, "Alarm uprise2Crit from Ok "
+                     . " for entity=" . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
   }
+  elsif(defined($prevState) && $prevState == 1 && $newState == 2) {
+    #
+    # * uprise2Crit   (   Warn       => Crit)
+    #
+    $prevAlarm->setIsCritical(1);
+    if( ! OvomDao::update($prevAlarm) ) {
+      OInventory::log(3, "Can't update the Alarm $prevAlarm to Crit");
+      return -1;
+    }
+    OInventory::log(1, "Alarm uprise2Crit from Warn "
+                     . "for entity="    . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif((!defined($prevState) || $prevState == 0) && $newState == 1) {
+    #
+    # * uprise2Warn   (Ok|undef      => Warn)
+    #
+    my $entityId = OInventory::entityType2entityId($entity->type);
+    if(!defined($entityId)) {
+      OInventory::log(3, "Can't get the entity id for " . $entity->type);
+      return 0;
+    }
 
-warn "newState=$newState , newStateTime=$newStateTime";
+    my $a = { 'id'               => undef,
+              'entity_type'      => $entityId,
+              'mo_ref'           => $entity->value,
+              'is_critical'      => 0, # crit == 1 , warn = 0
+              'perf_metric_id'   => $pmi->id,
+              'is_acknowledged'  => 0,
+              'is_active'        => 1,
+              'alarm_time'       => $newStateTime,
+              'last_change'      => undef     # It will be set on db
+            };
+
+    my $alarm = OAlarm->newWithArgsHash($a);
+# warn "alarm = " . Dumper($alarm);
+
+    if( ! OvomDao::insert($alarm) ) {
+      OInventory::log(3, "Can't insert the Alarm $alarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm uprise2Warn from Ok "
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif((defined($prevState) && $prevState == 2) && $newState == 1) {
+    #
+    # * decrease2Warn (Crit          => Warn)
+    #
+    $prevAlarm->setIsCritical(0);
+    if( ! OvomDao::update($prevAlarm) ) {
+      OInventory::log(3, "Can't update the Alarm $prevAlarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm decrease2Warn from Crit "
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif((defined($prevState) && $prevState != 0) && $newState == 0) {
+    #
+    # * recover       (Crit|Warn     => Ok)
+    #
+    $prevAlarm->setIsActive(0);
+    if( ! OvomDao::update($prevAlarm) ) {
+      OInventory::log(3, "Can't update the Alarm $prevAlarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm recover from $prevState (Crit==1,Warn==2) "
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  else {
+    OInventory::log(0, "No Alarm change"
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
 
   return 1;
 }

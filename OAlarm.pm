@@ -27,7 +27,7 @@ sub new {
             'is_active'        => shift @$args,
             'alarm_time'       => shift @$args,
             'last_change'      => shift @$args };
-  return Alarm->newWithArgsHash($a);
+  return OAlarm->newWithArgsHash($a);
 }
 
 #
@@ -120,18 +120,91 @@ sub setId {
   $self->{id} = $id;
 }
 
+sub setIsCritical {
+  my ($self, $v) = @_;
+  if(!defined($v)) {
+    Carp::croak("Alarm::setIsCritical requires value")
+  }
+  if($v != 0 && $v != 1) {
+    Carp::croak("Alarm::setIsCritical requires 0|1")
+  }
+  $self->{is_critical} = $v;
+}
 
+sub setIsAcive {
+  my ($self, $v) = @_;
+  if(!defined($v)) {
+    Carp::croak("Alarm::setIsAcive requires value")
+  }
+  if($v != 0 && $v != 1) {
+    Carp::croak("Alarm::setIsAcive requires 0|1")
+  }
+  $self->{is_active} = $v;
+}
+
+sub setIsAcknowledged {
+  my ($self, $v) = @_;
+  if(!defined($v)) {
+    Carp::croak("Alarm::setIsAcknowledged requires value")
+  }
+  if($v != 0 && $v != 1) {
+    Carp::croak("Alarm::setIsAcknowledged requires 0|1")
+  }
+  $self->{is_acknowledged} = $v;
+}
+
+#
+# CSV version of stringify
+#
 sub toCsvRow {
   my $self = shift;
-  my $csvRow = $self->{id}              . $csvSep;
+
+  my $id;
+  my $warnOrCrit;
+  my $isActive;
+  my $isAcknowledged;
+  my $lastChange;
+
+  if(defined($self->{id})) {
+    $id = $self->{id};
+  }
+  else {
+    $id = 'undef';
+  }
+  if($self->{is_critical}) {
+    $warnOrCrit = 'Critical';
+  }
+  else {
+    $warnOrCrit = 'Warning';
+  }
+  if($self->{is_active}) {
+    $isActive = 'active';
+  }
+  else {
+    $isActive = 'non-active';
+  }
+  if($self->{is_acknowledged}) {
+    $isAcknowledged = 'acknowledged';
+  }
+  else {
+    $isAcknowledged = 'non-acknowledged';
+  }
+  if(defined($self->{last_change})) {
+    $lastChange = $self->{last_change};
+  }
+  else {
+    $lastChange = 'undef';
+  }
+
+  my $csvRow = $id                      . $csvSep;
   $csvRow   .= $self->{entity_type}     . $csvSep;
   $csvRow   .= $self->{mo_ref}          . $csvSep;
-  $csvRow   .= $self->{is_critical}     . $csvSep;
+  $csvRow   .= $warnOrCrit              . $csvSep;
   $csvRow   .= $self->{perf_metric_id}  . $csvSep;
-  $csvRow   .= $self->{is_acknowledged} . $csvSep;
-  $csvRow   .= $self->{is_active}       . $csvSep;
+  $csvRow   .= $isAcknowledged          . $csvSep;
+  $csvRow   .= $isActive                . $csvSep;
   $csvRow   .= $self->{alarm_time}      . $csvSep;
-  $csvRow   .= $self->{last_change};
+  $csvRow   .= $lastChange;
   return $csvRow;
 }
 

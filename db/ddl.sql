@@ -217,6 +217,9 @@ ALTER TABLE `perf_metric`
   ADD UNIQUE KEY `mo_ref` (`mo_ref`,`counter_id`,`instance`),
   ADD KEY `counter_id` (`counter_id`);
 
+--
+-- Indexes for table `alarm`
+--
 ALTER TABLE `alarm`
   ADD PRIMARY KEY (`id`);
 
