@@ -976,6 +976,8 @@ warn "DEBUG: Let's trigger a warning alarm for moref=" . $entity->value . ",coun
 }
 
 # 
+# Set alarm state for this PMI based on the thresholds.
+# 
 # States:
 # * undef : Ok
 # * 0     : Ok

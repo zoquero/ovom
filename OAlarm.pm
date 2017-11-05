@@ -19,7 +19,7 @@ sub new {
     if (! defined($args) || $#$args < 0);
 
   my $a = { 'id'               => shift @$args,
-            'entity_type'      => shift @$args,
+            'entity_type'      => shift @$args, # entity ids provided by OInventory::entityType2entityId
             'mo_ref'           => shift @$args,
             'is_critical'      => shift @$args,
             'perf_metric_id'   => shift @$args,
@@ -58,7 +58,7 @@ sub newWithArgsHash {
 
   my $self = bless {
     id              => $args->{'id'},
-    entity_type     => $args->{'entity_type'},
+    entity_type     => $args->{'entity_type'}, # entity ids provided by OInventory::entityType2entityId
     mo_ref          => $args->{'mo_ref'},
     is_critical     => $args->{'is_critical'},     # 1 crit , 0 warn
     perf_metric_id  => $args->{'perf_metric_id'},

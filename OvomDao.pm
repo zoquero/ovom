@@ -134,6 +134,7 @@ our $sqlPerfCounterInfoUpdate
                              = 'UPDATE perf_counter_info set name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?, crit_threshold = ?, warn_threshold = ? where pci_key = ?';
 our $sqlPerfCounterInfoDelete
                              = 'DELETE FROM perf_counter_info where mo_ref = ?';
+our $sqlPerfCounterInfoSelectGroupInfoKeys = 'SELECT distinct group_info_key FROM `perf_counter_info`';
 
 ####################################
 # SQL Statements for PerfMetric
@@ -375,6 +376,51 @@ sub transactionRollback {
 
 
 #
+# Gets all the distinct groupInfo key of the registered PerfCounterInfo objects
+#
+# @return undef (if errors) or ref to array of strings with keys (else)
+#
+sub getAllGroupInfoKeys {
+  my @r    = ();
+  my @data = ();
+
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $stmt;
+  my $sthRes;
+  OInventory::log(0, "Getting all group info keys");
+
+  $stmt = $sqlPerfCounterInfoSelectGroupInfoKeys;
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement to get all group info keys: "
+                . $dbh->errstr;
+    $sthRes = $sth->execute();
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get all group info keys");
+      $sth->finish();
+      return undef;
+    }
+
+    while (@data = $sth->fetchrow_array()) {
+      push @r, $data[0];
+    }
+  };
+  if($@) {
+    OInventory::log(3, "Errors getting all group info keys from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: select all group info keys took "
+                        . sprintf("%.3f", $eTime) . " s "
+                        . "and returned " . ($#r + 1) . " keys");
+  return \@r;
+}
+
+#
 # Get all entities of a type from DB that are son of an entity.
 #
 # @arg entityType (Folder | Datacenter | ClusterComputeResource
@@ -486,14 +532,67 @@ sub getAllChildEntitiesOfType {
 
 
 #
+# Get all active OAlarms
+#
+# @return undef (if errors),
+#         or a reference to array of references to OAlarms (if ok)
+#
+sub getAllActiveOAlarms {
+  my %args = (
+#   entity_type     => undef, # entity ids provided by OInventory::entityType2entityId
+#   mo_ref          => undef,
+#   is_critical     => undef,
+#   perf_metric_id  => undef,
+#   is_acknowledged => undef,
+    is_active       => '1',
+#   alarm_time      => undef,
+#   last_change     => undef,
+  );
+
+  my $entities = getAllEntitiesOfType('OAlarm', \%args);
+
+}
+
+#
+#
+#
+sub getSqlQuery {
+  my $sqlPrefix  = shift;
+  my $sqlSufix   = shift;
+  my $args       = shift;
+
+  if(!defined($sqlPrefix) || !defined($sqlSufix)) {
+    OInventory::log(3, "Missing sql prefix or sufix calling getSqlQuery");
+    return undef;
+  }
+
+  my $r = $sqlPrefix;
+
+  if(defined($args)) {
+    $r .= " where";
+    foreach my $key (keys %$args) {
+      my $value = $$args{$key};
+      if(!defined($value)) {
+        $value = "*";
+      }
+      $r .= " $key=$value";
+    }
+  }
+
+  $r .= " " . $sqlSufix;
+  return $r;
+}
+
+#
 # Get all entities of a type from DB.
 #
-# @arg entityType (Folder | Datacenter | ClusterComputeResource
-#                         | HostSystem | VirtualMachine | PerfCounterInfo)
+# @arg entityType ( Folder     | Datacenter     | ClusterComputeResource
+#                 | HostSystem | VirtualMachine | PerfCounterInfo
+#                 | PerfMetric | OAlarm )
 # @return undef (if errors),
 #         or a reference to array of references to entity objects (if ok)
-#         : objects OFolder | ODatacenter | OCluster | OHost
-#                           | OVirtualMachine | OPerfCounterInfo
+#         : objects OFolder | ODatacenter     | OCluster         | OHost
+#                           | OVirtualMachine | OPerfCounterInfo | OAlarm
 #
 sub getAllEntitiesOfType {
   my $entityType = shift;
@@ -504,6 +603,8 @@ sub getAllEntitiesOfType {
   my $stmt;
   my $sthRes;
   OInventory::log(0, "Getting all entities of type $entityType");
+
+  my $optArgs = shift;
 
   if($entityType eq 'Folder') {
     $stmt = $sqlFolderSelectAll;
@@ -522,6 +623,9 @@ sub getAllEntitiesOfType {
   }
   elsif($entityType eq 'PerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoSelectAll;
+  }
+  elsif($entityType eq 'OAlarm') {
+    $stmt = getSqlQuery($sqlAlarmsSelectAll, '', $optArgs);
   }
   else {
     Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
@@ -564,7 +668,10 @@ sub getAllEntitiesOfType {
       }
       elsif($entityType eq 'PerfCounterInfo') {
         $e = OPerfCounterInfo->new(\@data);
-print "DEBUG: Dao: loaded PerfCounterInfo=$e\n";
+        push @r, $e;
+      }
+      elsif($entityType eq 'OAlarm') {
+        $e = OAlarm->new(\@data);
         push @r, $e;
       }
       else {

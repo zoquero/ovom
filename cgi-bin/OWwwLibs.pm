@@ -21,6 +21,7 @@ use OPerformance;
 our $ACTION_ID_MENU_ENTRY                       = 0;
 our $ACTION_ID_ON_MANAGED_OBJECT                = 1;
 our $ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT = 2;
+our $ACTION_ID_SEARCH_FOR_ALARMS                = 3;
 
 #
 # Navigation entries tree:
@@ -41,13 +42,13 @@ my $neInventory =
     'childs'  => [4, 5, 6, 7, 8],
     'method'  => undef
   };
-my $neAlerts =
+my $neAlarms =
   {
     'id'      => 2,
-    'display' => 'Alerts',
+    'display' => 'Alarms',
     'parent'  => 0,
-    'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForShowAlerts
+    'childs'  => [9, 10],
+    'method'  => undef
   };
 my $neAbout =
   {
@@ -98,19 +99,38 @@ my $neAllClusters =
     'childs'  => undef,
     'method'  => \&OWwwLibs::getContentsForShowAllClusters
   };
+my $neAllActiveAlarms =
+  {
+    'id'      => 10,
+    'display' => 'Alarms',
+    'parent'  => 2,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForAlarms
+#   'method'  => \&OWwwLibs::getContentsForShowAllActiveAlarms
+  };
+my $neThresholds =
+  {
+    'id'      => 9,
+    'display' => 'Thresholds',
+    'parent'  => 2,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForShowThresholds
+  };
 
 
 my $navEntries =
   {
     0 => $neMain,
     1 => $neInventory,
-    2 => $neAlerts,
+    2 => $neAlarms,
     3 => $neAbout,
     4 => $neAllFolders,
     5 => $neAllDatacenters,
     6 => $neAllVMs,
     7 => $neAllHosts,
     8 => $neAllClusters,
+    9 => $neAllActiveAlarms,
+   10 => $neThresholds,
   };
 
 #
@@ -402,7 +422,12 @@ sub getLinkToEntity {
   my $mObject = shift;
   my $type    = ref($mObject);
   die "Must get an object param" if(!defined($mObject));
-  return "<a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&mo_ref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a>";
+  if(ref($mObject) eq 'OAlarm') {
+    return "<b>Pending</b> to manage it in OWwwLibs::getLinkToEntity" . $mObject;
+  }
+  else {
+    return "<a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&mo_ref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a>";
+  }
 }
 
 #
@@ -536,22 +561,189 @@ _FFCPGI2_
 }
 
 #
-# Gets the string to show the contents for "Alerts"
+# Gets the string to show the contents for "Alarms"
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsForShowAlerts {
+sub getContentsForAlarms {
   my $cgiObject    = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   my $retval = 1;
-  my $output = "Here we'll show the alerts body using the DAO of ovom core and the perfData files";
+  my $groupInfoKeys;
+  my $output;
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    OInventory::log(3, "Can't connect to DataBase.");
+    goto _GROUPINFO_KEYS_SEARCHED_;
+  }
+
+  $groupInfoKeys = OvomDao::getAllGroupInfoKeys();
+  if(! defined($groupInfoKeys)) {
+    OInventory::log(3, "There were errors trying to get the list of groupInfo keys.");
+  }
+
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    OInventory::log(3, "Cannot disconnect from DataBase.");
+  }
+  _GROUPINFO_KEYS_SEARCHED_:
+
+  my $groupInfoCheckboxesHtml = '';
+  foreach my $aGIKey (@$groupInfoKeys) {
+    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
+  }
+
+  $output = <<"_ALARMS_SEARCH_FORM_";
+
+<h2>Alarms</h2>
+  <h3> About thresholds and alarms </h3>
+    <p>You can specify <b>generic warning and critical thresholds</b> for each <b>performance counter</b> (<em>PerfCounterInfo</em> objects). Those thresholds will be the same for all its instances in all the entities of your infraestructure. You can also specify <b>concrete thresholds for each instance</b> of those counters of your entities (<em>PerfMetricId</em> objects).</p>
+    <p> Both kinds of thresholds (generic and concrete) can be specified the first time that a <em>PerfCounterInfo</em> or <em>PerfMetricId</em> object is loaded in the file <em><b>thresholds/PerfMetricId.thresholds.csv</b></em>. After that you'll be able to change those thresholds on database through this web interface. </p>
+    <p> When a perfData (value of a counter) exceeds a generic or a concrete threshold an <b>active alarm</b> is launched. This alarm can be <em>warning</em> o <em>critical</em>. On the next iterations of picker's loop the new perfData will be compared again agains those thresholds, but just will be compared the perfData after the last data collected for that <em>PerfMetricId</em>. After each loop the state of the alarm is re-evaluated. When there's no critical or warning value in a complete loop then that alarm is <b>deactivated</b> (<em>active=false</em>). An active alarm can be <b>acknowledged</b> so that it will not appear in alarm reports that just show non-acknowledged active alarms. </p>
+  <h3> Alarm reporting </h3>
+    <p> Here you can search for alarms based on criteria: </p>
+
+    <form action="?" method="post" accept-charset="utf-8">
+      <input type="hidden" name="actionId" value="$ACTION_ID_SEARCH_FOR_ALARMS"/>
+
+      <table border="1">
+        <tr align="center">
+          <th valign="middle">Active</th>
+          <td>
+            <select name="is_active" id="active"> 
+              <option value="2"         >All</option> 
+              <option value="1" selected>Just active alerts</option> 
+              <option value="0"         >Just inactive alerts</option> 
+            </select>
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Creation date in <em>epoch</em></th>
+          <td>
+            Just alerts create after<br/>
+            <input type="text" name="alarm_time" width="10" size="10"/>
+            Leave it blank to search for alarms<br/>
+            independently on its creation date.<br/>
+            You can generate epoch timestamps with this command:<br/>
+            <em>`date --date "\${Y}\${M}\${D} \${H}\${m}" +%s`</em>
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">GroupInfo</th>
+          <td>
+            $groupInfoCheckboxesHtml
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Entity's mo_ref</th>
+          <td>
+            <input type="text" name="mo_ref" width="10" size="10"/> <br/>
+            Leave it blank to search for alarms on all entities
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Criticality</th>
+          <td>
+            <select name="is_critical" id="active"> 
+              <option value="2"         >Any</option> 
+              <option value="1" selected>Just critical alerts</option> 
+              <option value="0"         >Just warning  alerts</option> 
+            </select>
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Acknowledgement</th>
+          <td>
+            <select name="is_acknowledged" id="is_acknowledged"> 
+              <option value="2"         >Any</option> 
+              <option value="1"         >Just acknowledged alerts</option> 
+              <option value="0" selected>Just non-acknowledged alerts</option> 
+            </select>
+          </td>
+        </tr>
+
+        <tr>
+          <td colspan=2 align="center">
+            <input type="submit" name="Search" value="Search" />
+          </td>
+        </tr>
+      </table>
+    </form>
+
+_ALARMS_SEARCH_FORM_
+
   return { retval => $retval, output => $output };
 }
 
 #
-# Gets the string to show the contents for "Alerts"
+# Gets the string to show the contents for "Alarms"
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAllActiveAlarms {
+  my $cgiObject = shift;
+  my $entType   = 'OAlarm';
+  my $retval = 0;
+  my $output = '';
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  die "Must get a entType param"    if(!defined($entType) || $entType eq '');
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $output .= "Can't connect to DataBase. ";
+    $retval  = 0;
+    goto _SHOW_INVENTORY_END_;
+  }
+
+  # @arg entityType (Folder | Datacenter | ClusterComputeResource
+  #                         | HostSystem | VirtualMachine | PerfCounterInfo)
+  my $entities = OvomDao::getAllActiveOAlarms();
+  if(! defined($entities)) {
+    $output .= "There were errors trying to get the list of ${entType}s. ";
+    $retval  = 0;
+    goto _SHOW_INVENTORY_DISCONNECT_;
+  }
+
+  _SHOW_INVENTORY_DISCONNECT_:
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $output .= "Cannot disconnect from DataBase. ";
+    $retval  = 0;
+  }
+
+  $output .= ($#$entities + 1) . " ${entType}s:<br/>\n";
+  $output .= "<ul>\n";
+  foreach my $aEntity (@$entities) {
+    $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
+  }
+  $output .= "</ul>\n";
+
+  $retval  = 1;
+
+  _SHOW_INVENTORY_END_:
+  return { retval => $retval, output => $output };
+}
+
+#
+# Gets the string to show the contents for "Alarms"
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
@@ -1418,5 +1610,54 @@ sub respondShowPerformance {
   $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
   print $template->output();
 }
+
+
+#
+# Return an HTTP response showing the contents for a search of alerts
+# It prints full HTTP response body, not just a canvas.
+#
+sub respondShowAlarmsReport {
+  die "still working on respondShowAlarmsReport, we must adapt here the draft done in OWwwLibs::getContentsForShowAllActiveAlarms()  ";
+##   my $cgiObject  = shift;
+##   my $args       = shift;
+##   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+##   die "Must get args param"         if(!defined($args) || ref($args) ne 'HASH');
+## 
+##   foreach my $key ( ( "xxxx", "yyyyyy" ) ) {
+##     if(!defined($args->{$key})) {
+##       die "Missing arg key $key";
+##     }
+##   }
+##   my $xxxxxxxxx = $args->{xxxxxxxxx};
+##   die "empty xxxxxxxxx param" if($xxxxxxxxx eq '');
+## 
+## 
+##   my $id = getNavEntryIdForType($type);
+##   if (!defined $$navEntries{$id}) {
+##     die "respondShowPerformance: Can't find the navigation entry for $id";
+##   }
+##   my $attributes = $$navEntries{$id};
+##   my $menuCanvasRet = getNavMenuBody($attributes, $id);
+## 
+##   my $contentsCanvasRet
+##      = getContentsForPerformance($cgiObject, $args);
+## 
+##   if(! $contentsCanvasRet->{retval}) {
+##     triggerError($cgiObject, "Errors getting the performance of the entity:<br/>\n"
+##                            . "<b>" . $contentsCanvasRet->{output} . "</b>\n"
+##                            . ".<br/>You'll find more information in the logs.");
+##     return;
+##   }
+## 
+##   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+##   my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+##   $template->param(HEAD      => getHead() ); 
+##   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+##   $template->param(FOOTER    => getFooter() ); 
+##   $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+##   $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
+##   print $template->output();
+}
+
 
 1;

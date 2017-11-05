@@ -62,6 +62,11 @@ else {
     $args{'toMinute'}   = $cgiObject->param('toMinute');
     OWwwLibs::respondShowPerformance($cgiObject, \%args);
   }
+  elsif($actionId == $OWwwLibs::ACTION_ID_SEARCH_FOR_ALARMS) {
+    my %args;
+    $args{'xxxxxx'}       = $cgiObject->param('xxxxxx');
+    OWwwLibs::respondShowAlarmsReport($cgiObject, \%args);
+  }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");
   }
