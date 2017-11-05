@@ -16,11 +16,11 @@ vCenter is a great software but lacks some features. Some of them can be found i
 
 * Effective alarms: custom and manageable thresholds and alarms with hooks
 * Custom RoundRobin configuration for Performance Intervals
-** vSphere's static configuration sets that day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...
-** vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
+    * vSphere's static configuration sets that day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...
+    * vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
 * Reporting:
-** Full performance report generation on custom intervals for your entities
-** Which are the top consumers of your resources and which are suffering the worst latencies?
+    * Full performance report generation on custom intervals for your entities
+    * Which are the top consumers of your resources and which are suffering the worst latencies?
 * vCenter API to ask for performance is too much heavy to be used by your preferred monitoring tool to poll your assets at scale
 
 # Features
@@ -120,9 +120,13 @@ $ sudo chown -R ovom:ovom "$OVOM_BASE"
 ## vCenter access
 By now it just needs inventory access. A role like *Read-only* would be more than enough. In future releases it may need permissions for vMotion and Storage vMotion.
 
-Copy **`extra/secrets.conf.sample`** in to **`secrets.conf`** and set the credentials in its variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+* Copy **`extra/secrets.conf.sample`** in to **`secrets.conf`** 
+* set the *Fully Qualified Domain Name* of the vCenter in the variable **`OVOM_VC_FQDN`**
+* set its credentials in its variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+
 ```
 $ cp extra/secrets.conf.sample secrets.conf
+$ vim secrets.conf
 ```
 
 ## Database
