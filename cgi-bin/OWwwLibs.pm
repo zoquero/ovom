@@ -101,7 +101,7 @@ my $neAllClusters =
   };
 my $neAllActiveAlarms =
   {
-    'id'      => 10,
+    'id'      => 9,
     'display' => 'Alarms',
     'parent'  => 2,
     'childs'  => undef,
@@ -110,7 +110,7 @@ my $neAllActiveAlarms =
   };
 my $neThresholds =
   {
-    'id'      => 9,
+    'id'      => 10,
     'display' => 'Thresholds',
     'parent'  => 2,
     'childs'  => undef,
@@ -626,17 +626,31 @@ sub getContentsForAlarms {
         </tr>
       
         <tr>
-          <th valign="middle">Creation date in <em>epoch</em></th>
+          <th valign="middle">Created after of<br/>(date in <em>epoch</em>)</th>
           <td>
-            Just alerts create after<br/>
-            <input type="text" name="alarm_time" width="10" size="10"/>
-            Leave it blank to search for alarms<br/>
-            independently on its creation date.<br/>
-            You can generate epoch timestamps with this command:<br/>
+            Just alerts created after.<br/>
+            You can leave it blank.
+            <input type="text" name="alarm_time_lower" width="10" size="10"/>
+          </td>
+        </tr>
+
+         <tr>
+          <th valign="middle">Created before of<br/>(date in <em>epoch</em>)</th>
+          <td>
+            Just alerts created before.<br/>
+            You can leave it blank.
+            <input type="text" name="alarm_time_upper" width="10" size="10"/>
+          </td>
+        </tr>
+
+        <tr>
+          <th>&nbsp;</th>
+          <td align="center">
+            Tip: You can generate epoch timestamps with this command:<br/>
             <em>`date --date "\${Y}\${M}\${D} \${H}\${m}" +%s`</em>
           </td>
         </tr>
-      
+ 
         <tr>
           <th valign="middle">GroupInfo</th>
           <td>
@@ -1500,6 +1514,9 @@ sub getNavEntryIdForType {
   elsif($type eq 'OCluster') {
     $id = 8;
   }
+  elsif($type eq 'OAlarm') {
+    $id = 9;
+  }
   else {
     $id = 1;
   }
@@ -1616,48 +1633,228 @@ sub respondShowPerformance {
 # Return an HTTP response showing the contents for a search of alerts
 # It prints full HTTP response body, not just a canvas.
 #
-sub respondShowAlarmsReport {
-  die "still working on respondShowAlarmsReport, we must adapt here the draft done in OWwwLibs::getContentsForShowAllActiveAlarms()  ";
-##   my $cgiObject  = shift;
-##   my $args       = shift;
-##   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
-##   die "Must get args param"         if(!defined($args) || ref($args) ne 'HASH');
-## 
-##   foreach my $key ( ( "xxxx", "yyyyyy" ) ) {
-##     if(!defined($args->{$key})) {
-##       die "Missing arg key $key";
-##     }
-##   }
-##   my $xxxxxxxxx = $args->{xxxxxxxxx};
-##   die "empty xxxxxxxxx param" if($xxxxxxxxx eq '');
-## 
-## 
-##   my $id = getNavEntryIdForType($type);
-##   if (!defined $$navEntries{$id}) {
-##     die "respondShowPerformance: Can't find the navigation entry for $id";
-##   }
-##   my $attributes = $$navEntries{$id};
-##   my $menuCanvasRet = getNavMenuBody($attributes, $id);
-## 
-##   my $contentsCanvasRet
-##      = getContentsForPerformance($cgiObject, $args);
-## 
-##   if(! $contentsCanvasRet->{retval}) {
-##     triggerError($cgiObject, "Errors getting the performance of the entity:<br/>\n"
-##                            . "<b>" . $contentsCanvasRet->{output} . "</b>\n"
-##                            . ".<br/>You'll find more information in the logs.");
-##     return;
-##   }
-## 
-##   print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
-##   my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
-##   $template->param(HEAD      => getHead() ); 
-##   $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
-##   $template->param(FOOTER    => getFooter() ); 
-##   $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
-##   $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
-##   print $template->output();
+sub respondShowAlarmReport {
+  my $cgiObject  = shift;
+  my $args       = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  die "Must get args param"         if(!defined($args) || ref($args) ne 'HASH');
+  my $entType = 'OAlarm';
+  my $entities;
+  my $output = '';
+
+# my $xxxxxxxxx = $args->{xxxxxxxxx};
+
+  my $id = getNavEntryIdForType('OAlarm');
+  if (!defined $$navEntries{$id}) {
+    die "respondShowPerformance: Can't find the navigation entry for $id";
+  }
+  my $attributes = $$navEntries{$id};
+  my $menuCanvasRet = getNavMenuBody($attributes, $id);
+  my $contentsCanvasRet;
+  my $errorInContentCanvas = 0;
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $contentsCanvasRet = "Can't connect to DataBase.";
+    $errorInContentCanvas = 1;
+  }
+  else {
+    #
+    # Let's get the report of alerts
+    #
+    $entities = OvomDao::getAllActiveOAlarms();
+    if(! defined($entities)) {
+      $contentsCanvasRet = "There were errors trying to get the list of ${entType}s from DB.";
+      $errorInContentCanvas = 1;
+    }
+  }
+
+  $output .= ($#$entities + 1) . " ${entType}s:<br/>\n";
+  $output .= "<table>\n";
+  $output .= getHtmlTableRowHeader('OAlarm') . "\n";
+  foreach my $aEntity (@$entities) {
+#   $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
+    $output .= getHtmlTableRow($aEntity) . "\n";
+  }
+  $output .= "</table>\n";
+
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $contentsCanvasRet = "Cannot disconnect from DataBase.";
+    $errorInContentCanvas = 1;
+  }
+
+
+
+
+
+  if($errorInContentCanvas) {
+    triggerError($cgiObject, "Errors getting alarm report:<br/>\n"
+                           . "<b>" . $contentsCanvasRet . "</b>\n"
+                           . ".<br/>You'll find more information in the logs.");
+    return;
+  }
+
+  print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+  my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+  $template->param(HEAD      => getHead() ); 
+  $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+  $template->param(CONTENTS_CANVAS   => $output ); 
+  print $template->output();
 }
 
+sub getHtmlTableRow {
+  my $entity = shift;
+  if(!defined($entity)) {
+    OInventory::log(3, "getHtmlTableRow got a undef param");
+    return '';
+  }
+  if(ref($entity) eq 'OAlarm') {
+
+    my $id;
+    my $warnOrCrit;
+    my $isActive;
+    my $isAcknowledged;
+    my $lastChange;
+    my $name;
+
+    my $entity_type=OInventory::entityId2entityType($entity->{entity_type});
+    my $mo_ref=$entity->{mo_ref};
+    my $perf_metric_id=$entity->{perf_metric_id};
+    my $alarm_time=$entity->{alarm_time};
+    my $counterName;
+    my $instance;
+    my $linkToSourceEntiy; # getLinkToEntity
+
+    #
+    # Let's get the source entity
+    #
+    my $sourceEntity = OvomDao::loadEntity($entity->{mo_ref}, $entity_type);
+    if(! defined($sourceEntity)) {
+      OInventory::log(3, "getHtmlTableRow can't load the source entity");
+      $name = "Can't load it";
+    }
+    else {
+      $name = $sourceEntity->{name};
+      $linkToSourceEntiy = getLinkToEntity($sourceEntity);
+      $name = $linkToSourceEntiy;
+    }
+
+    #
+    # Let's load the PerfMetricId
+    #
+$counterName = "PENDING";
+$instance = "PENDING";
+#   my $pmi = OvomDao::loadEntity($entity->{perf_metric_id}, 'PerfMetric');
+#   if(! defined($pmi)) {
+#     OInventory::log(3, "getHtmlTableRow can't load the PerfMetricId");
+#     $counterName = "Can't load it";
+#   }
+#   else {
+#     my $counterId = $pmi->{counterId};
+#     my $pci = OvomDao::loadEntity($counterId, 'PerfCounterInfo');
+#     if(! defined($pci)) {
+#       OInventory::log(3, "getHtmlTableRow can't load the PerfCounterInfo");
+#       $counterName = "Can't load it";
+#     }
+#     else {
+#       $counterName = $pci->nameInfo->label;
+#     }
+#   }
+  
+    if(defined($entity->{id})) {
+      $id = $entity->{id};
+    }
+    else {
+      $id = 'undef';
+    }
+    if($entity->{is_critical}) {
+      $warnOrCrit = 'Critical';
+    }
+    else {
+      $warnOrCrit = 'Warning';
+    }
+    if($entity->{is_active}) {
+      $isActive = 'active';
+    }
+    else {
+      $isActive = 'non-active';
+    }
+    if($entity->{is_acknowledged}) {
+      $isAcknowledged = 'acknowledged';
+    }
+    else {
+      $isAcknowledged = 'non-acknowledged';
+    }
+    if(defined($entity->{last_change})) {
+      $lastChange = $entity->{last_change};
+    }
+    else {
+      $lastChange = 'undef';
+    }
+
+    return <<"_ENTITY_CONTENTS_";
+<tr>
+  <td>$id</td>
+  <td>$entity_type</td>
+  <td>$name</td>
+  <td>$mo_ref</td>
+  <td>$warnOrCrit</td>
+  <td>$perf_metric_id</td>
+  <td>$counterName</td>
+  <td>$instance</td>
+  <td>$isAcknowledged</td>
+  <td>$isActive</td>
+  <td>$alarm_time</td>
+  <td>$lastChange</td>
+</tr>
+_ENTITY_CONTENTS_
+
+  }
+  else {
+    OInventory::log(3, "getHtmlTableRow got an unexpected "
+                    . ref($entity) . " param");
+    return '';
+  }
+}
+
+sub getHtmlTableRowHeader {
+  my $entity = shift;
+  if(!defined($entity)) {
+    OInventory::log(3, "getHtmlTableRow got a undef param");
+    return '';
+  }
+  if($entity eq 'OAlarm') {
+
+    return <<"_ENTITY_CONTENTS_";
+<tr>
+  <th>id</th>
+  <th>entity_type</th>
+  <th>mo_ref</th>
+  <th>name</th>
+  <th>warnOrCrit</th>
+  <th>perf_metric_id</th>
+  <th>counter</th>
+  <th>instance</th>
+  <th>isAcknowledged</th>
+  <th>isActive</th>
+  <th>alarm_time</th>
+  <th>lastChange</th>
+</tr>
+_ENTITY_CONTENTS_
+
+  }
+  else {
+    OInventory::log(3, "getHtmlTableRow got an unexpected "
+                    . ref($entity) . " param");
+    return '';
+  }
+}
 
 1;

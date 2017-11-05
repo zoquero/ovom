@@ -129,7 +129,26 @@ sub entityType2entityId {
   return undef;
 }
 
+#
+# Given the numerical id of an entity returns the string identitying it
+#
+# Those entity type and entity id correspond with
+# entity_types.type_.name and entity_types.id from database
+#
+sub entityId2entityType {
+  my $entityId = shift;
+  if(!defined($entityId)) {
+    OInventory::log(3, "entityId2entityType got no entity id");
+    return undef;
+  }
 
+  my $r = $entityTypes[$entityId];
+  if(!defined($r))  {
+    OInventory::log(3,
+      "entityId2entityType could not find the entity id $entityId");
+  }
+  return $r;
+}
 
 #
 # Get a reference to the inventory hash
