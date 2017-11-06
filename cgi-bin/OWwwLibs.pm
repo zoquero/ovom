@@ -1749,24 +1749,24 @@ sub getHtmlTableRow {
     #
     # Let's load the PerfMetricId
     #
-$counterName = "PENDING";
-$instance = "PENDING";
-#   my $pmi = OvomDao::loadEntity($entity->{perf_metric_id}, 'PerfMetric');
-#   if(! defined($pmi)) {
-#     OInventory::log(3, "getHtmlTableRow can't load the PerfMetricId");
-#     $counterName = "Can't load it";
-#   }
-#   else {
-#     my $counterId = $pmi->{counterId};
-#     my $pci = OvomDao::loadEntity($counterId, 'PerfCounterInfo');
-#     if(! defined($pci)) {
-#       OInventory::log(3, "getHtmlTableRow can't load the PerfCounterInfo");
-#       $counterName = "Can't load it";
-#     }
-#     else {
-#       $counterName = $pci->nameInfo->label;
-#     }
-#   }
+    my $pmi = OvomDao::loadEntity($entity->{perf_metric_id}, 'PerfMetric', '', '', 1);
+    if(! defined($pmi)) {
+      OInventory::log(3, "getHtmlTableRow can't load the PerfMetricId");
+      $counterName = "Can't load it";
+      $instance    = "Can't load it";
+    }
+    else {
+      my $counterId = $pmi->counterId;
+      my $pci = OvomDao::loadEntity($counterId, 'PerfCounterInfo');
+      if(! defined($pci)) {
+        OInventory::log(3, "getHtmlTableRow can't load the PerfCounterInfo");
+        $counterName = "Can't load it";
+      }
+      else {
+        $counterName = $pci->nameInfo->label;
+        $instance    = $pmi->instance;
+      }
+    }
   
     if(defined($entity->{id})) {
       $id = $entity->{id};

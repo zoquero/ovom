@@ -65,7 +65,7 @@ sub newWithArgsHash {
     is_acknowledged => $args->{'is_acknowledged'}, # 1 acknowledged , 0 not
     is_active       => $args->{'is_active'},       # 1 acknowledged , 0 not
     alarm_time      => $args->{'alarm_time'},
-    last_change     => $args->{'last_chang'},
+    last_change     => $args->{'last_change'},
   }, $class;
   return $self;
 }

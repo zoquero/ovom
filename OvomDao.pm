@@ -146,6 +146,9 @@ our $sqlPerfMetricSelectAll
 our $sqlPerfMetricSelectByKey = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
+our $sqlPerfMetricSelectById  = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+                              . 'FROM perf_metric as a '
+                              . 'where id = ?';
 our $sqlPerfMetricSelectEntityPMs = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                                   . 'FROM perf_metric as a '
                                   . 'where mo_ref = ? ';
@@ -1158,6 +1161,16 @@ sub loadEntity {
   $timeBefore=Time::HiRes::time;
   my $secondParam;
   my $pmiMor;
+  my $loadPerfMetricSelectMethod = 'key';
+
+  #
+  # Note: There's 2 load mechanisms to load a PerfMetric:
+  #
+  # By key:
+  # $pmi = OvomDao::loadEntity($counterId, 'PerfMetric', $instance,  $mo_Ref);
+  # By id:
+  # $pmi = OvomDao::loadEntity($pmiId, 'PerfMetric', '', '');
+  #
 
   if (! defined ($aId)) {
     Carp::croak("Got an undefined id trying to load a $entityType");
@@ -1206,14 +1219,28 @@ sub loadEntity {
     $stmt = $sqlPerfMetricSelectByKey;
     $secondParam = shift; # pmiInstance
     $pmiMor      = shift;
-
-    if (! defined ($secondParam)) { # pmiInstance
-      Carp::croak("Got an undefined instance trying to load a $entityType");
-      return undef;
+    my $pmiLoadKeySelector = shift;
+    if(defined($pmiLoadKeySelector) && $pmiLoadKeySelector == 1) {
+      #
+      # $loadPerfMetricSelectMethod = 'id';
+      #
+      $loadPerfMetricSelectMethod = 'id';
+      $stmt = $sqlPerfMetricSelectById;
+      $secondParam = '';
+      $pmiMor      = '';
     }
-    if (! defined ($pmiMor)) {
-      Carp::croak("Got an undefined mor trying to load a $entityType");
-      return undef;
+    else {
+      #
+      # $loadPerfMetricSelectMethod = 'key';
+      #
+      if (! defined ($secondParam)) { # pmiInstance
+        Carp::croak("Got an undefined instance trying to load a $entityType");
+        return undef;
+      }
+      if (! defined ($pmiMor)) {
+        Carp::croak("Got an undefined mor trying to load a $entityType");
+        return undef;
+      }
     }
   }
   elsif($entityType eq 'OAlarm') {
@@ -1233,8 +1260,13 @@ sub loadEntity {
   # Debug messages for logs
   #
   if($entityType eq 'PerfMetric') {
-    OInventory::log(0, "selecting from db the ${entityType} metricId='$aId',"
-                     . "instance='$secondParam',moRef='". $pmiMor->value . "'");
+    if($loadPerfMetricSelectMethod eq 'key') {
+      OInventory::log(0, "selecting from db the ${entityType} metricId='$aId',"
+                       . "instance='$secondParam',moRef='". $pmiMor->value . "'");
+    }
+    else {
+      OInventory::log(0, "selecting from db the ${entityType} id='$aId'");
+    }
   }
   elsif($entityType eq 'OAlarm') {
     OInventory::log(0, "selecting from db the ${entityType} mo_ref='$aId',"
@@ -1251,7 +1283,18 @@ sub loadEntity {
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     my $sthRes;
     if($entityType eq 'PerfMetric') {
-      $sthRes = $sth->execute($aId, $secondParam, $pmiMor->value);
+      if($loadPerfMetricSelectMethod eq 'key') {
+        #
+        # $loadPerfMetricSelectMethod = 'key';
+        #
+        $sthRes = $sth->execute($aId, $secondParam, $pmiMor->value);
+      }
+      else {
+        #
+        # $loadPerfMetricSelectMethod = 'id';
+        #
+        $sthRes = $sth->execute($aId);
+      }
     }
     elsif($entityType eq 'OAlarm') {
       # mo_ref
@@ -1273,9 +1316,15 @@ sub loadEntity {
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
         if($entityType eq 'PerfMetric') {
-          Carp::croak("Found more than one ${entityType} when "
-                    . "looking for the one with metricId='$aId',"
-                    . "instance='$secondParam',moRef='". $pmiMor->value . "'");
+          if($loadPerfMetricSelectMethod eq 'key') {
+            Carp::croak("Found more than one ${entityType} when "
+                      . "looking for the one with metricId='$aId',"
+                      . "instance='$secondParam',moRef='". $pmiMor->value . "'");
+          }
+          else {
+            Carp::croak("Found more than one ${entityType} when "
+                      . "looking for the one with id='$aId'");
+          }
         }
         elsif($entityType eq 'OAlarm') {
           Carp::croak("Found more than one ${entityType} when "
