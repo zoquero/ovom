@@ -106,7 +106,6 @@ my $neAllActiveAlarms =
     'parent'  => 2,
     'childs'  => undef,
     'method'  => \&OWwwLibs::getContentsForAlarms
-#   'method'  => \&OWwwLibs::getContentsForShowAllActiveAlarms
   };
 my $neThresholds =
   {
@@ -617,7 +616,7 @@ sub getContentsForAlarms {
         <tr align="center">
           <th valign="middle">Active</th>
           <td>
-            <select name="is_active" id="active"> 
+            <select name="is_active" id="is_active"> 
               <option value="2"         >All</option> 
               <option value="1" selected>Just active alerts</option> 
               <option value="0"         >Just inactive alerts</option> 
@@ -669,7 +668,7 @@ sub getContentsForAlarms {
         <tr>
           <th valign="middle">Criticality</th>
           <td>
-            <select name="is_critical" id="active"> 
+            <select name="is_critical" id="is_critical"> 
               <option value="2"         >Any</option> 
               <option value="1" selected>Just critical alerts</option> 
               <option value="0"         >Just warning  alerts</option> 
@@ -698,61 +697,6 @@ sub getContentsForAlarms {
 
 _ALARMS_SEARCH_FORM_
 
-  return { retval => $retval, output => $output };
-}
-
-#
-# Gets the string to show the contents for "Alarms"
-#
-# @return ref to hash with keys:
-#         * retval : 1 (ok) | 0 (errors)
-#         * output : html output to be returned
-#
-sub getContentsForShowAllActiveAlarms {
-  my $cgiObject = shift;
-  my $entType   = 'OAlarm';
-  my $retval = 0;
-  my $output = '';
-  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
-  die "Must get a entType param"    if(!defined($entType) || $entType eq '');
-
-  #
-  # Connect to Database:
-  #
-  if(OvomDao::connect() != 1) {
-    $output .= "Can't connect to DataBase. ";
-    $retval  = 0;
-    goto _SHOW_INVENTORY_END_;
-  }
-
-  # @arg entityType (Folder | Datacenter | ClusterComputeResource
-  #                         | HostSystem | VirtualMachine | PerfCounterInfo)
-  my $entities = OvomDao::getAllActiveOAlarms();
-  if(! defined($entities)) {
-    $output .= "There were errors trying to get the list of ${entType}s. ";
-    $retval  = 0;
-    goto _SHOW_INVENTORY_DISCONNECT_;
-  }
-
-  _SHOW_INVENTORY_DISCONNECT_:
-  #
-  # Let's disconnect from DB
-  #
-  if( OvomDao::disconnect() != 1 ) {
-    $output .= "Cannot disconnect from DataBase. ";
-    $retval  = 0;
-  }
-
-  $output .= ($#$entities + 1) . " ${entType}s:<br/>\n";
-  $output .= "<ul>\n";
-  foreach my $aEntity (@$entities) {
-    $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
-  }
-  $output .= "</ul>\n";
-
-  $retval  = 1;
-
-  _SHOW_INVENTORY_END_:
   return { retval => $retval, output => $output };
 }
 
@@ -1635,14 +1579,10 @@ sub respondShowPerformance {
 #
 sub respondShowAlarmReport {
   my $cgiObject  = shift;
-  my $args       = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
-  die "Must get args param"         if(!defined($args) || ref($args) ne 'HASH');
   my $entType = 'OAlarm';
   my $entities;
   my $output = '';
-
-# my $xxxxxxxxx = $args->{xxxxxxxxx};
 
   my $id = getNavEntryIdForType('OAlarm');
   if (!defined $$navEntries{$id}) {
@@ -1652,6 +1592,7 @@ sub respondShowAlarmReport {
   my $menuCanvasRet = getNavMenuBody($attributes, $id);
   my $contentsCanvasRet;
   my $errorInContentCanvas = 0;
+  my %argsForAlarmsSqlSearch;
 
   #
   # Connect to Database:
@@ -1664,7 +1605,59 @@ sub respondShowAlarmReport {
     #
     # Let's get the report of alerts
     #
-    $entities = OvomDao::getAllActiveOAlarms();
+    my $aParam;
+
+    $aParam = 'entity_type';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'mo_ref';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'is_critical';
+    if(defined($cgiObject->param($aParam))) {
+      my $v = $cgiObject->param($aParam);
+      if($v == 0 || $v == 1) {
+        $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+      }
+      # else not selected, so sql will be 'value=*'
+    }
+    $aParam = 'perf_metric_id';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'is_acknowledged';
+    if(defined($cgiObject->param($aParam))) {
+      my $v = $cgiObject->param($aParam);
+      if($v == 0 || $v == 1) {
+        $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+      }
+      # else not selected, so sql will be 'value=*'
+    }
+    $aParam = 'is_active';
+    if(defined($cgiObject->param($aParam))) {
+      my $v = $cgiObject->param($aParam);
+      if($v == 0 || $v == 1) {
+        $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+      }
+      # else not selected, so sql will be 'value=*'
+    }
+    $aParam = 'alarm_time_upper';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'alarm_time_lower';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'groupInfoKey';
+    if(defined($cgiObject->param($aParam))) {
+      my @a = $cgiObject->param($aParam);
+      $argsForAlarmsSqlSearch{$aParam} = \@a;
+    }
+
+    $entities = OvomDao::getAllEntitiesOfType('OAlarm', \%argsForAlarmsSqlSearch);
     if(! defined($entities)) {
       $contentsCanvasRet = "There were errors trying to get the list of ${entType}s from DB.";
       $errorInContentCanvas = 1;
@@ -1676,7 +1669,7 @@ sub respondShowAlarmReport {
   $output .= getHtmlTableRowHeader('OAlarm') . "\n";
   foreach my $aEntity (@$entities) {
 #   $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
-    $output .= getHtmlTableRow($aEntity) . "\n";
+    $output .= getHtmlTableRow($aEntity, $argsForAlarmsSqlSearch{'groupInfoKey'}) . "\n";
   }
   $output .= "</table>\n";
 
@@ -1710,7 +1703,8 @@ sub respondShowAlarmReport {
 }
 
 sub getHtmlTableRow {
-  my $entity = shift;
+  my $entity        = shift;
+  my $groupInfoKeys = shift;
   if(!defined($entity)) {
     OInventory::log(3, "getHtmlTableRow got a undef param");
     return '';
@@ -1763,6 +1757,17 @@ sub getHtmlTableRow {
         $counterName = "Can't load it";
       }
       else {
+        if(defined($groupInfoKeys)) {
+          my $found = 0;
+          foreach my $aGIK (@$groupInfoKeys) {
+            if($aGIK eq $pci->groupInfo->key) {
+              $found = 1;
+            }
+          }
+          if(!$found) {
+            return '';
+          }
+        }
         $counterName = $pci->nameInfo->label;
         $instance    = $pmi->instance;
       }

@@ -63,15 +63,7 @@ else {
     OWwwLibs::respondShowPerformance($cgiObject, \%args);
   }
   elsif($actionId == $OWwwLibs::ACTION_ID_SEARCH_FOR_ALARMS) {
-    my %args;
-    foreach my $aParam ( ("is_active", "alarm_time_lower", 
-                          "alarm_time_upper", "groupInfoKey", 
-                          "mo_ref", "is_critical", "is_acknowledged") ) {
-      if(defined($cgiObject->param($aParam))) {
-        $args{$aParam} = $cgiObject->param($aParam);
-      }
-    }
-    OWwwLibs::respondShowAlarmReport($cgiObject, \%args);
+    OWwwLibs::respondShowAlarmReport($cgiObject);
   }
   else {
     OWwwLibs::triggerError($cgiObject, "Unknown actionId ($actionId)");

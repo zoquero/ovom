@@ -540,7 +540,7 @@ sub getAllChildEntitiesOfType {
 # @return undef (if errors),
 #         or a reference to array of references to OAlarms (if ok)
 #
-sub getAllActiveOAlarms {
+sub getOAlarms {
   my %args = (
 #   entity_type     => undef, # entity ids provided by OInventory::entityType2entityId
 #   mo_ref          => undef,
@@ -573,13 +573,31 @@ sub getSqlQuery {
 
   if(defined($args)) {
     $r .= " where";
-    foreach my $key (keys %$args) {
-      my $value = $$args{$key};
-      if(!defined($value)) {
-        $value = "*";
+    my @clauses;
+
+    foreach my $key ( ('entity_type', 'mo_ref', 'is_critical', 'perf_metric_id',
+                     'is_acknowledged', 'is_active', 'alarm_time_upper',
+                     'alarm_time_lower') ) {
+      if($key eq 'alarm_time_lower') {
+        my $value = $$args{$key};
+        if(defined($value) && $value ne '') {
+          push @clauses, " alarm_time >= FROM_UNIXTIME($value)";
+        }
       }
-      $r .= " $key=$value";
+      elsif($key eq 'alarm_time_upper') {
+        my $value = $$args{$key};
+        if(defined($value) && $value ne '') {
+          push @clauses, " alarm_time <= FROM_UNIXTIME($value)";
+        }
+      }
+      else {
+        my $value = $$args{$key};
+        if(defined($value) && $value ne '') {
+          push @clauses, " $key=$value";
+        }
+      }
     }
+    $r .= join " and ", @clauses;
   }
 
   $r .= " " . $sqlSufix;

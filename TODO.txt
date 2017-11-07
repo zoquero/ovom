@@ -1,5 +1,7 @@
 Things to be done:
 
+* Performance improvement: Now groupInfo filters when searching alarms is not implemented in SQL nor in the control, it's implemented in OWwwLibs::respondShowAlarmReport() OWwwLibs::getHtmlTableRow(). To improve the search time it should be implemented at least in the control.
+
 * We're troubleshooting that there's no perfData for some entities ("No PerfEntityMetricCSV for " entries on logs)
 ** It also happens with /usr/share/doc/vmware-vcli/samples/performance/performance.pl if you change it to show performance for several VMs on a loop.
 ** I found these entries in vCSA's /storage/log/vmware/vpxd/vpxd-XXX.log :
