@@ -1785,7 +1785,6 @@ sub getHtmlTableRow {
     return '';
   }
   if(ref($entity) eq 'OAlarm') {
-
     my $id;
     my $warnOrCrit;
     my $isActive;
@@ -1897,6 +1896,9 @@ sub getHtmlTableRow {
 _ENTITY_CONTENTS_
 
   }
+  elsif(ref($entity) eq 'OPerfCounterInfo') {
+    return "<tr>\n" . $entity->toCsvRow() . "\n</tr>\n";
+  }
   else {
     OInventory::log(3, "getHtmlTableRow got an unexpected "
                     . ref($entity) . " param");
@@ -1930,8 +1932,11 @@ sub getHtmlTableRowHeader {
 _ENTITY_CONTENTS_
 
   }
+  elsif($entity eq 'OPerfCounterInfo') {
+    return "<tr>\n" . $entity->getCsvRowHeader() . "\n</tr>\n";
+  }
   else {
-    OInventory::log(3, "getHtmlTableRow got an unexpected "
+    OInventory::log(3, "getHtmlTableRowHeader got an unexpected "
                     . ref($entity) . " param");
     return '';
   }
@@ -1982,12 +1987,16 @@ sub getContentsForShowThresholds {
       OInventory::log(3, "There were errors trying to get the list of ${entType}s. ");
       goto _GROUPINFO_KEYS_SEARCHED_;
     }
-    foreach my $aPCI (@$entities) {
-      foreach my $aGIK (@$groupInfoKeys) {
-#  die "aGIK = " . Dumper ($aGIK) . " -------\naPCI = " . ref($aPCI) . " = " . Dumper($aPCI);
+    PCI_LABEL: foreach my $aPCI (@$entities) {
+      GIK_LABEL: foreach my $aGIK (@groupInfoKeys) {
         if ($aGIK eq $aPCI->groupInfo->key) {
           push @pcis, $aPCI;
+          last GIK_LABEL;
         }
+        else {
+          next;
+        }
+
       }
     }
   }
@@ -2010,11 +2019,20 @@ sub getContentsForShowThresholds {
     $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
   }
 
-  my $perfCounterInfosHtml = '<ul>';
+##     $output .= "<table>\n";
+##     $output .= getHtmlTableRowHeader('OAlarm') . "\n";
+##     foreach my $aEntity (@$entities) {
+##   #   $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
+##       $output .= getHtmlTableRow($aEntity, $argsForAlarmsSqlSearch{'groupInfoKey'}) . "\n";
+##     }
+##     $output .= "</table>\n";
+
+  my $perfCounterInfosHtml = "<table>\n";
+  $perfCounterInfosHtml   .= getHtmlTableRowHeader('OPerfCounterInfo') . "\n";
   foreach my $aPCI (@pcis) {
-    $perfCounterInfosHtml .= "<li>" . $aPCI . "</li>\n";
+    $perfCounterInfosHtml .= getHtmlTableRow($aPCI) . "\n";
   }
-  $perfCounterInfosHtml .= '</ul>';
+  $perfCounterInfosHtml .= '</table>';
 
   $output = <<"_THRESHOLDS_";
 <h2>Thresholds</h2>
