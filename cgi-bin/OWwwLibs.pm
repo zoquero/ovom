@@ -22,6 +22,7 @@ our $ACTION_ID_MENU_ENTRY                       = 0;
 our $ACTION_ID_ON_MANAGED_OBJECT                = 1;
 our $ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT = 2;
 our $ACTION_ID_SEARCH_FOR_ALARMS                = 3;
+our $ACTION_ID_SHOW_THRESHOLDS                  = 4;
 
 #
 # Navigation entries tree:
@@ -42,12 +43,12 @@ my $neInventory =
     'childs'  => [4, 5, 6, 7, 8],
     'method'  => undef
   };
-my $neAlarms =
+my $neMonitoring =
   {
     'id'      => 2,
-    'display' => 'Alarms',
+    'display' => 'Monitoring',
     'parent'  => 0,
-    'childs'  => [9, 10],
+    'childs'  => [9, 10, 11],
     'method'  => undef
   };
 my $neAbout =
@@ -115,13 +116,21 @@ my $neThresholds =
     'childs'  => undef,
     'method'  => \&OWwwLibs::getContentsForShowThresholds
   };
+my $neAboutMonitoring =
+  {
+    'id'      => 11,
+    'display' => 'About monitoring',
+    'parent'  => 2,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForShowAboutMonitoring
+  };
 
 
 my $navEntries =
   {
     0 => $neMain,
     1 => $neInventory,
-    2 => $neAlarms,
+    2 => $neMonitoring,
     3 => $neAbout,
     4 => $neAllFolders,
     5 => $neAllDatacenters,
@@ -130,6 +139,7 @@ my $navEntries =
     8 => $neAllClusters,
     9 => $neAllActiveAlarms,
    10 => $neThresholds,
+   11 => $neAboutMonitoring,
   };
 
 #
@@ -602,10 +612,6 @@ sub getContentsForAlarms {
   $output = <<"_ALARMS_SEARCH_FORM_";
 
 <h2>Alarms</h2>
-  <h3> About thresholds and alarms </h3>
-    <p>You can specify <b>generic warning and critical thresholds</b> for each <b>performance counter</b> (<em>PerfCounterInfo</em> objects). Those thresholds will be the same for all its instances in all the entities of your infraestructure. You can also specify <b>concrete thresholds for each instance</b> of those counters of your entities (<em>PerfMetricId</em> objects).</p>
-    <p> Both kinds of thresholds (generic and concrete) can be specified the first time that a <em>PerfCounterInfo</em> or <em>PerfMetricId</em> object is loaded in the file <em><b>thresholds/PerfMetricId.thresholds.csv</b></em>. After that you'll be able to change those thresholds on database through this web interface. </p>
-    <p> When a perfData (value of a counter) exceeds a generic or a concrete threshold an <b>active alarm</b> is launched. This alarm can be <em>warning</em> o <em>critical</em>. On the next iterations of picker's loop the new perfData will be compared again agains those thresholds, but just will be compared the perfData after the last data collected for that <em>PerfMetricId</em>. After each loop the state of the alarm is re-evaluated. When there's no critical or warning value in a complete loop then that alarm is <b>deactivated</b> (<em>active=false</em>). An active alarm can be <b>acknowledged</b> so that it will not appear in alarm reports that just show non-acknowledged active alarms. </p>
   <h3> Alarm reporting </h3>
     <p> Here you can search for alarms based on criteria: </p>
 
@@ -738,6 +744,33 @@ at <a href='$appSite' target='_blank'>$appSite</a></p>
 _ABOUT_
 
   return { retval => $retval, output => $t };
+}
+
+#
+# Gets the string to show the contents for "About Monitoring" menu entry
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAboutMonitoring {
+  my $cgiObject    = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $appName  = $OInventory::configuration{'app.name'};
+  my $appTitle = $OInventory::configuration{'app.title'};
+  my $appSite  = $OInventory::configuration{'app.site'};
+  my $retval = 1;
+  my $output = <<"_ALARMS_ABOUT_";
+
+<h2>Alarms</h2>
+  <h3> About thresholds and alarms </h3>
+    <p>You can specify <b>generic warning and critical thresholds</b> for each <b>performance counter</b> (<em>PerfCounterInfo</em> objects). Those thresholds will be the same for all its instances in all the entities of your infraestructure. You can also specify <b>concrete thresholds for each instance</b> of those counters of your entities (<em>PerfMetricId</em> objects).</p>
+    <p> Both kinds of thresholds (generic and concrete) can be specified the first time that a <em>PerfCounterInfo</em> or <em>PerfMetricId</em> object is loaded in the file <em><b>thresholds/PerfMetricId.thresholds.csv</b></em>. After that you'll be able to change those thresholds on database through this web interface. </p>
+    <p> When a perfData (value of a counter) exceeds a generic or a concrete threshold an <b>active alarm</b> is launched. This alarm can be <em>warning</em> o <em>critical</em>. On the next iterations of picker's loop the new perfData will be compared again agains those thresholds, but just will be compared the perfData after the last data collected for that <em>PerfMetricId</em>. After each loop the state of the alarm is re-evaluated. When there's no critical or warning value in a complete loop then that alarm is <b>deactivated</b> (<em>active=false</em>). An active alarm can be <b>acknowledged</b> so that it will not appear in alarm reports that just show non-acknowledged active alarms. </p>
+
+_ALARMS_ABOUT_
+
+  return { retval => $retval, output => $output };
 }
 
 #
@@ -1572,6 +1605,52 @@ sub respondShowPerformance {
   print $template->output();
 }
 
+#
+# Return an HTTP response showing the contents
+# to show Thresholds and allow change them.
+# It prints full HTTP response body, not just a canvas.
+#
+sub respondShowThresholds {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $entType = 'OAlarm';
+  my $entities;
+  my $output = '';
+
+  #
+  # Navigation menu
+  #
+  my $id = getNavEntryIdForType('OAlarm');
+  if (!defined $$navEntries{$id}) {
+    die "respondShowPerformance: Can't find the navigation entry for $id";
+  }
+  my $attributes = $$navEntries{$id};
+  my $menuCanvasRet = getNavMenuBody($attributes, $id);
+
+  #
+  # Contents
+  #
+  my $contentsCanvasRet = getContentsForShowThresholds($cgiObject);
+  if(! $contentsCanvasRet->{retval}) {
+    triggerError($cgiObject, "Errors generating the contents: "
+                           . $contentsCanvasRet->{output} . "<br/>\n"
+                           . "You'll find more information in the logs.");
+    return;
+  }
+
+  #
+  # Response
+  #
+  print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+  my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+  $template->param(HEAD      => getHead() ); 
+  $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+  $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
+  print $template->output();
+}
+
 
 #
 # Return an HTTP response showing the contents for a search of alerts
@@ -1680,10 +1759,6 @@ sub respondShowAlarmReport {
     $contentsCanvasRet = "Cannot disconnect from DataBase.";
     $errorInContentCanvas = 1;
   }
-
-
-
-
 
   if($errorInContentCanvas) {
     triggerError($cgiObject, "Errors getting alarm report:<br/>\n"
@@ -1861,5 +1936,113 @@ _ENTITY_CONTENTS_
     return '';
   }
 }
+
+#
+# Gets the string to show the contents for "Thresholds"
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowThresholds {
+  my $cgiObject    = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $retval = 1;
+  my $errStr = '';
+  my $groupInfoKeys;
+  my $output;
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $retval = 0;
+    $errStr         .= "Can't connect to DataBase. ";
+    OInventory::log(3, "Can't connect to DataBase. ");
+    goto _GROUPINFO_KEYS_SEARCHED_;
+  }
+
+  $groupInfoKeys = OvomDao::getAllGroupInfoKeys();
+  if(! defined($groupInfoKeys)) {
+    $retval = 0;
+    $errStr         .= "Errors trying to get the list of PerfCounterInfos. ";
+    OInventory::log(3, "Errors trying to get the list of PerfCounterInfos. ");
+    goto _GROUPINFO_KEYS_SEARCHED_;
+  }
+
+  my $entType = 'groupInfoKey';
+  my @groupInfoKeys = $cgiObject->param('groupInfoKey');
+  my @pcis; # PerfCounterInfo objects
+  if($#groupInfoKeys > -1) {
+
+    my $entities = OvomDao::getAllEntitiesOfType('PerfCounterInfo');
+    if(! defined($entities)) {
+      $retval = 0;
+      $errStr         .= "There were errors trying to get the list of ${entType}s. ";
+      OInventory::log(3, "There were errors trying to get the list of ${entType}s. ");
+      goto _GROUPINFO_KEYS_SEARCHED_;
+    }
+    foreach my $aPCI (@$entities) {
+      foreach my $aGIK (@$groupInfoKeys) {
+#  die "aGIK = " . Dumper ($aGIK) . " -------\naPCI = " . ref($aPCI) . " = " . Dumper($aPCI);
+        if ($aGIK eq $aPCI->groupInfo->key) {
+          push @pcis, $aPCI;
+        }
+      }
+    }
+  }
+
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $retval = 0;
+    $errStr         .= "Cannot disconnect from DataBase.";
+    OInventory::log(3, "Cannot disconnect from DataBase.");
+  }
+  _GROUPINFO_KEYS_SEARCHED_:
+  if(! $retval) {
+    return { retval => $retval, output => $errStr };
+  }
+
+  my $groupInfoCheckboxesHtml = '';
+  foreach my $aGIKey (@$groupInfoKeys) {
+    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
+  }
+
+  my $perfCounterInfosHtml = '<ul>';
+  foreach my $aPCI (@pcis) {
+    $perfCounterInfosHtml .= "<li>" . $aPCI . "</li>\n";
+  }
+  $perfCounterInfosHtml .= '</ul>';
+
+  $output = <<"_THRESHOLDS_";
+<h2>Thresholds</h2>
+  <h3> Show thresholds </h3>
+    <p> Choose which counters and thresholds do you want to show: </p>
+    <form action="?" method="post" accept-charset="utf-8">
+      <input type="hidden" name="actionId" value="$ACTION_ID_SHOW_THRESHOLDS"/>
+      <table border="1">
+        <tr>
+          <th valign="middle">GroupInfo</th>
+          <td>
+            $groupInfoCheckboxesHtml
+          </td>
+        </tr>
+        <tr>
+          <td colspan=2 align="center">
+            <input type="submit" name="Show" value="Show" />
+          </td>
+        </tr>
+      </table>
+    </form>
+  <h3> PerfCounterInfo objects and its thresholds </h3>
+    <p> Please remember that these are generic counter objects, its values apply to all the affected entities. Later, these thresholds can be overriden in each of those entity. </p>
+    $perfCounterInfosHtml
+_THRESHOLDS_
+
+  return { retval => $retval, output => $output };
+}
+
 
 1;
