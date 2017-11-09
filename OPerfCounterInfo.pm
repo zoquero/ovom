@@ -185,7 +185,8 @@ sub getShortDescription {
 }
 
 sub toCsvRow {
-  my ($self) = @_;
+  my $self          = shift;
+  my $showAllFields = shift;
 
   my $cth = '';
   my $wth = '';
@@ -202,14 +203,100 @@ sub toCsvRow {
     $wth = '';
   }
 
-  return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n" , $self->{_statsType}->{_val}, $self->{_perDeviceLevel}, $self->{_nameInfo}->{_key}, $self->{_nameInfo}->{_label}, $self->{_nameInfo}->{_summary}, $self->{_groupInfo}->{_key}, $self->{_groupInfo}->{_label}, $self->{_groupInfo}->{_summary}, $self->{_key}, $self->{_level}, $self->{_rollupType}->{_val}, $self->{_unitInfo}->{_key}, $self->{_unitInfo}->{_label}, $self->{_unitInfo}->{_summary}, $cth, $wth;
+# key , gil , (gil) , (gis) , nil , (nil) , nis , uil , (uis) , (uik)
+  if(defined($showAllFields) && $showAllFields == 1) {
+    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='cth_%s' value='%s'/></td>\n<td> <input type='text' name='cth_%s' value='%s'/> </td>\n" ,
+
+      $self->{_key},
+      $self->{_groupInfo}->{_key},
+      $self->{_groupInfo}->{_label},
+      $self->{_groupInfo}->{_summary},
+      $self->{_nameInfo}->{_key},
+      $self->{_nameInfo}->{_label},
+      $self->{_nameInfo}->{_summary},
+      $self->{_unitInfo}->{_key},
+      $self->{_unitInfo}->{_label},
+      $self->{_unitInfo}->{_summary},
+      $self->{_statsType}->{_val},
+      $self->{_perDeviceLevel},
+      $self->{_level},
+      $self->{_rollupType}->{_val},
+      $self->{_key},
+      $cth,
+      $self->{_key},
+      $wth;
+  }
+  else {
+    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='cth_%s' value='%s'/></td>\n<td> <input type='text' name='cth_%s' value='%s'/> </td>\n" ,
+
+      $self->{_key},
+#     $self->{_groupInfo}->{_key},
+      $self->{_groupInfo}->{_label},
+#     $self->{_groupInfo}->{_summary},
+#     $self->{_nameInfo}->{_key},
+      $self->{_nameInfo}->{_label},
+#     $self->{_nameInfo}->{_summary},
+#     $self->{_unitInfo}->{_key},
+      $self->{_unitInfo}->{_label},
+#     $self->{_unitInfo}->{_summary},
+      $self->{_statsType}->{_val},
+      $self->{_perDeviceLevel},
+      $self->{_level},
+      $self->{_rollupType}->{_val},
+      $self->{_key},
+      $cth,
+      $self->{_key},
+      $wth;
+  }
 }
 
+
 #
-# Such a static method
+# Such a static method...
 #
 sub getCsvRowHeader {
-  return sprintf "<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n" , 'stats Type', 'per device level', 'name info key', 'name info label', 'name info summary', 'group info key', 'group info label', 'group info summary', 'key', 'level', 'rollupType val', 'unit info key', 'unit info label', 'unit info summary', 'crit threshold', 'warn threshold';
+  my $self          = shift;
+  my $showAllFields = shift;
+
+# key , gil , (gil) , (gis) , nil , (nil) , nis , uil , (uis) , (uik)
+  if(defined($showAllFields) && $showAllFields == 1) {
+    return sprintf "<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n" ,
+      'Key',
+      'Group info key',
+      'Group info label',
+      'Group info summary',
+      'Name info key',
+      'Name info label',
+      'Name info summary',
+      'Unit info key',
+      'Unit info label',
+      'Unit info summary',
+      'Stats Type',
+      'Per device level',
+      'Level',
+      'RollupType val',
+      'Critical threshold',
+      'Warning threshold';
+  }
+  else {
+    return sprintf "\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n" ,
+      'Key',
+#     'Group info key',
+      'Group info label',
+#     'Group info summary',
+#     'Name info key',
+      'Name info label',
+#     'Name info summary',
+#     'Unit info key',
+      'Unit info label',
+#     'Unit info summary',
+      'Stats Type',
+      'Per device level',
+      'Level',
+      'RollupType val',
+      'Critical threshold',
+      'Warning threshold';
+  }
 }
 
 

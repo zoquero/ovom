@@ -1778,13 +1778,14 @@ sub respondShowAlarmReport {
 }
 
 sub getHtmlTableRow {
-  my $entity        = shift;
-  my $groupInfoKeys = shift;
+  my $entity      = shift;
+  my $secondParam = shift;
   if(!defined($entity)) {
     OInventory::log(3, "getHtmlTableRow got a undef param");
     return '';
   }
   if(ref($entity) eq 'OAlarm') {
+    my $groupInfoKeys = $secondParam;
     my $id;
     my $warnOrCrit;
     my $isActive;
@@ -1897,7 +1898,12 @@ _ENTITY_CONTENTS_
 
   }
   elsif(ref($entity) eq 'OPerfCounterInfo') {
-    return "<tr>\n" . $entity->toCsvRow() . "\n</tr>\n";
+    my $showAllFields = $secondParam;
+    my $showAllFieldsSend = 0;
+    if(defined($showAllFields) && $showAllFields == 1) {
+      $showAllFieldsSend = 1;
+    }
+    return "<tr>\n" . $entity->toCsvRow($showAllFieldsSend) . "\n</tr>\n";
   }
   else {
     OInventory::log(3, "getHtmlTableRow got an unexpected "
@@ -1907,7 +1913,8 @@ _ENTITY_CONTENTS_
 }
 
 sub getHtmlTableRowHeader {
-  my $entity = shift;
+  my $entity        = shift;
+  my $showAllFields = shift;
   if(!defined($entity)) {
     OInventory::log(3, "getHtmlTableRow got a undef param");
     return '';
@@ -1933,7 +1940,11 @@ _ENTITY_CONTENTS_
 
   }
   elsif($entity eq 'OPerfCounterInfo') {
-    return "<tr>\n" . $entity->getCsvRowHeader() . "\n</tr>\n";
+    my $showAllFieldsSend = 0;
+    if(defined($showAllFields) && $showAllFields == 1) {
+      $showAllFieldsSend = 1;
+    }
+    return "<tr>\n" . $entity->getCsvRowHeader($showAllFieldsSend) . "\n</tr>\n";
   }
   else {
     OInventory::log(3, "getHtmlTableRowHeader got an unexpected "
@@ -1976,10 +1987,12 @@ sub getContentsForShowThresholds {
   }
 
   my $entType = 'groupInfoKey';
+  my $doSearch = $cgiObject->param('doSearch');
+  my $doUpdate = $cgiObject->param('doUpdate');
   my @groupInfoKeys = $cgiObject->param('groupInfoKey');
   my @pcis; # PerfCounterInfo objects
-  if($#groupInfoKeys > -1) {
 
+  if(defined($doSearch) && $doSearch == 1) {
     my $entities = OvomDao::getAllEntitiesOfType('PerfCounterInfo');
     if(! defined($entities)) {
       $retval = 0;
@@ -2000,6 +2013,13 @@ sub getContentsForShowThresholds {
       }
     }
   }
+  if(defined($doUpdate) && $doUpdate == 1) {
+    my $t = '';
+    foreach my $aParam ($cgiObject->param()) {
+      $t .= "$aParam ";
+    }
+    die "Will continue here: must manage the params, parse 1) the PCI key 2) crit|warn 3) and the threshold value = $t";
+  }
 
   #
   # Let's disconnect from DB
@@ -2014,32 +2034,52 @@ sub getContentsForShowThresholds {
     return { retval => $retval, output => $errStr };
   }
 
+  #
+  # Let's compose the search menu
+  #
   my $groupInfoCheckboxesHtml = '';
   foreach my $aGIKey (@$groupInfoKeys) {
     $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
   }
 
-##     $output .= "<table>\n";
-##     $output .= getHtmlTableRowHeader('OAlarm') . "\n";
-##     foreach my $aEntity (@$entities) {
-##   #   $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
-##       $output .= getHtmlTableRow($aEntity, $argsForAlarmsSqlSearch{'groupInfoKey'}) . "\n";
-##     }
-##     $output .= "</table>\n";
-
-  my $perfCounterInfosHtml = "<table>\n";
-  $perfCounterInfosHtml   .= getHtmlTableRowHeader('OPerfCounterInfo') . "\n";
-  foreach my $aPCI (@pcis) {
-    $perfCounterInfosHtml .= getHtmlTableRow($aPCI) . "\n";
+  my $showAllFieldsGot = $cgiObject->param('showAllFields');
+  my $showAllFields = 0;
+  if(defined($showAllFieldsGot) && $showAllFieldsGot ne '') {
+    $showAllFields = 1;
   }
-  $perfCounterInfosHtml .= '</table>';
 
+  #
+  # Let's compose the table with the results of the search of PCIs
+  #
+
+  my $perfCounterInfosHtml = <<"_THRESHOLDS_INIT_TABLE_";
+<form action="?" method="post" accept-charset="utf-8">
+  <input type="hidden" name="actionId" value="$ACTION_ID_SHOW_THRESHOLDS"/>
+  <input type="hidden" name="doUpdate" value="1"/>
+  <table>
+_THRESHOLDS_INIT_TABLE_
+
+  if(defined($doSearch) && $doSearch == 1) {
+    $perfCounterInfosHtml   .= getHtmlTableRowHeader('OPerfCounterInfo', $showAllFields) . "\n";
+    foreach my $aPCI (@pcis) {
+      $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields) . "\n";
+    }
+    my $colspan = 16;
+    $perfCounterInfosHtml .= "<tr><td colspan=$colspan><input type='submit' name='Set thresholds' value='Set thresholds'/></td></td>\n";
+    $perfCounterInfosHtml .= "</table>\n";
+    $perfCounterInfosHtml .= "</form>\n";
+  }
+
+  #
+  # Let's compose the output
+  #
   $output = <<"_THRESHOLDS_";
 <h2>Thresholds</h2>
   <h3> Show thresholds </h3>
     <p> Choose which counters and thresholds do you want to show: </p>
     <form action="?" method="post" accept-charset="utf-8">
       <input type="hidden" name="actionId" value="$ACTION_ID_SHOW_THRESHOLDS"/>
+      <input type="hidden" name="doSearch" value="1"/>
       <table border="1">
         <tr>
           <th valign="middle">GroupInfo</th>
@@ -2048,16 +2088,25 @@ sub getContentsForShowThresholds {
           </td>
         </tr>
         <tr>
-          <td colspan=2 align="center">
+          <td align="center">
             <input type="submit" name="Show" value="Show" />
+          </td>
+          <td align="center">
+            <input type="checkbox" name="showAllFields" value="showAllFields" />
+            Show all fields for Group Info objects
           </td>
         </tr>
       </table>
     </form>
+_THRESHOLDS_
+
+  if(defined($doSearch) && $doSearch == 1) {
+  $output .= <<"_THRESHOLDS2_";
   <h3> PerfCounterInfo objects and its thresholds </h3>
     <p> Please remember that these are generic counter objects, its values apply to all the affected entities. Later, these thresholds can be overriden in each of those entity. </p>
     $perfCounterInfosHtml
-_THRESHOLDS_
+_THRESHOLDS2_
+  }
 
   return { retval => $retval, output => $output };
 }
