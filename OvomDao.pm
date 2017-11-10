@@ -891,6 +891,20 @@ sub update {
 
     # PerfCounterInfo
     if($updateType == 2) {
+      my ($c, $w);
+      if(defined($entity->critThreshold) && $entity->critThreshold eq '') {
+        $c = undef;
+      }
+      else {
+        $c = $entity->critThreshold;
+      }
+      if(defined($entity->warnThreshold) && $entity->warnThreshold eq '') {
+        $w = undef;
+      }
+      else {
+        $w = $entity->warnThreshold;
+      }
+
       $sthRes = $sth->execute(
                   $entity->nameInfo->key ,
                   $entity->nameInfo->label ,
@@ -905,9 +919,9 @@ sub update {
                   $entity->statsType->val,
                   $entity->level,
                   $entity->perDeviceLevel,
-                  $entity->key,
-                  $entity->critThreshold,
-                  $entity->warnThreshold
+                  $c,
+                  $w,
+                  $entity->key
                 );
     }
     # PerfMetric
@@ -972,7 +986,7 @@ sub update {
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
-      Carp::croak("Didn't updated any $oClassName trying to update the $desc");
+      Carp::croak("Didn't updated any $oClassName trying to update the $desc, sthRes=$sthRes");
       return 0;
     }
   };
@@ -1222,7 +1236,7 @@ sub loadEntity {
   elsif($entityType eq 'VirtualMachine') {
     $stmt = $sqlVirtualMachineSelectByMoref;
   }
-  elsif($entityType eq 'PerfCounterInfo') {
+  elsif($entityType eq 'PerfCounterInfo' || $entityType eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoSelectByKey;
   }
   #
@@ -1372,7 +1386,8 @@ sub loadEntity {
       elsif($entityType eq 'VirtualMachine') {
         $r = OVirtualMachine->new(\@data);
       }
-      elsif($entityType eq 'PerfCounterInfo') {
+      elsif(   $entityType eq 'PerfCounterInfo'
+            || $entityType eq 'OPerfCounterInfo') {
         $r = OPerfCounterInfo->new(\@data);
       }
       elsif($entityType eq 'PerfMetric') {

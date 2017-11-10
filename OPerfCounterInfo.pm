@@ -130,6 +130,16 @@ sub critThreshold {
   return $self->{_critThreshold};
 }
 
+sub setWarnThreshold {
+  my ($self, $t) = @_;
+  $self->{_warnThreshold} = $t;
+}
+
+sub setCritThreshold {
+  my ($self, $t) = @_;
+  $self->{_critThreshold} = $t;
+}
+
 #
 # Compare this object with other object of the same type.
 #
@@ -170,7 +180,6 @@ sub compare {
     || $self->unitInfo->summary  ne $other->unitInfo->summary
   ) {
     # Different folder (mo_ref differs)
-#die "diferent PerfCounterInfo:\n=======\nself=" . Dumper($self) . "\n=======\nother=" . Dumper($other) . "\n";
     return 0;
   }
   else {
@@ -205,7 +214,8 @@ sub toCsvRow {
 
 # key , gil , (gil) , (gis) , nil , (nil) , nis , uil , (uis) , (uik)
   if(defined($showAllFields) && $showAllFields == 1) {
-    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='cth_%s' value='%s'/></td>\n<td> <input type='text' name='cth_%s' value='%s'/> </td>\n" ,
+    my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>";
+    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td> %s \n" ,
 
       $self->{_key},
       $self->{_groupInfo}->{_key},
@@ -224,10 +234,12 @@ sub toCsvRow {
       $self->{_key},
       $cth,
       $self->{_key},
-      $wth;
+      $wth,
+      $keyInform;
   }
   else {
-    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='cth_%s' value='%s'/></td>\n<td> <input type='text' name='cth_%s' value='%s'/> </td>\n" ,
+    my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>";
+    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td>\n %s \n" ,
 
       $self->{_key},
 #     $self->{_groupInfo}->{_key},
@@ -246,7 +258,8 @@ sub toCsvRow {
       $self->{_key},
       $cth,
       $self->{_key},
-      $wth;
+      $wth,
+      $keyInform;
   }
 }
 

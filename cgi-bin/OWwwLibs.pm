@@ -1998,7 +1998,7 @@ sub getContentsForShowThresholds {
       $retval = 0;
       $errStr         .= "There were errors trying to get the list of ${entType}s. ";
       OInventory::log(3, "There were errors trying to get the list of ${entType}s. ");
-      goto _GROUPINFO_KEYS_SEARCHED_;
+      goto _GROUPINFO_KEYS_DISCONNECT_;
     }
     PCI_LABEL: foreach my $aPCI (@$entities) {
       GIK_LABEL: foreach my $aGIK (@groupInfoKeys) {
@@ -2014,16 +2014,74 @@ sub getContentsForShowThresholds {
     }
   }
   if(defined($doUpdate) && $doUpdate == 1) {
-    my $t = '';
+
+    my %pcisToUpdate = ();
     foreach my $aParam ($cgiObject->param()) {
-      $t .= "$aParam ";
+
+      #    woc  ,  formPciKey
+      my ($first, $second) = split /_/, $aParam;
+      if(defined($first) && $first eq 'keythressend') {
+        $pcisToUpdate{$second}{'found'} = 1;
+      }
+      elsif(defined($first) && $first eq 'critthres') {
+        $pcisToUpdate{$second}{'critthres'} = $cgiObject->param($aParam);
+      }
+      elsif(defined($first) && $first eq 'warnthres') {
+        $pcisToUpdate{$second}{'warnthres'} = $cgiObject->param($aParam);
+      }
+      else {
+        next;
+      }
     }
-    die "Will continue here: must manage the params, parse 1) the PCI key 2) crit|warn 3) and the threshold value = $t";
+    foreach my $aPciKey (keys %pcisToUpdate) {
+      #
+      # Let's load the OPerfCounterInfo object
+      #
+      $entType = 'OPerfCounterInfo';
+      my $entity     = OvomDao::loadEntity($aPciKey, $entType);
+      if (! defined($entity)) {
+          OInventory::log(3, "Can't find the $entType with key $aPciKey "
+                           . "in the Inventory DB. ");
+          $output = "Can't find the $entType with key $aPciKey "
+                  . "in the Inventory DB. ";
+          $retval = 0;
+          goto _GROUPINFO_KEYS_DISCONNECT_;
+      }
+
+      if(defined($pcisToUpdate{$aPciKey}{'critthres'}) && $pcisToUpdate{$aPciKey}{'critthres'} ne '') {
+        $entity->setCritThreshold($pcisToUpdate{$aPciKey}{'critthres'});
+      }
+      else {
+        $entity->setCritThreshold(undef);
+      }
+      if(defined($pcisToUpdate{$aPciKey}{'warnthres'}) && $pcisToUpdate{$aPciKey}{'warnthres'} ne '') {
+        $entity->setWarnThreshold($pcisToUpdate{$aPciKey}{'warnthres'});
+      }
+      else {
+        $entity->setWarnThreshold(undef);
+      }
+
+      if( ! OvomDao::update($entity) ) {
+        OInventory::log(3, "Can't update the $entType " . $entity);
+        $output = "Can't update the $entType ";
+        $retval = 0;
+        goto _GROUPINFO_KEYS_DISCONNECT_; # rollback
+      }
+    }
+  }
+
+  OInventory::log(1, "Let's commit the transaction on DB.");
+  if( ! OvomDao::transactionCommit()) {
+    OInventory::log(3, "Cannot commit transactions on DataBase. "
+                     . "Trying to disconnect from DB.");
+    # Let's disconnect from DB
+    goto _GROUPINFO_KEYS_DISCONNECT_;
   }
 
   #
   # Let's disconnect from DB
   #
+  _GROUPINFO_KEYS_DISCONNECT_:
   if( OvomDao::disconnect() != 1 ) {
     $retval = 0;
     $errStr         .= "Cannot disconnect from DataBase.";
