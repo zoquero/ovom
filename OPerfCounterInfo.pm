@@ -202,13 +202,7 @@ sub toCsvRow {
   my $showPmis      = $args->{'showPmis'};
   my $pmis          = $args->{'pmis'};
 
-
-#tp tmptmp
-  my $moref = 'morefff';
-  my $instances = [ 'one', 'two', 'three' ];
-
-
-  if (defined($pmis) && ref($pmis) ne 'HASH') {
+  if (defined($pmis) && ref($pmis) ne 'ARRAY') {
     Carp::croak("BUG: toCsvRow expected an array of PerfMetricIds");
     die "BUG: toCsvRow expected an array of PerfMetricIds";
   }
@@ -265,10 +259,12 @@ sub toCsvRow {
       $keyInform;
 
     if(defined($showPmis) && $showPmis == 1) {
-#     foreach my $aPmi (@$pmis) 
-      foreach my $anInstance (@$instances) {
-#       $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td> %s </td>\n<td> %s </td>\n<td> &nbsp </td>\n<td> &nbsp </td>\n</tr>\n" , $aPmi->entity_mo_ref, $aPmi->instance;
-        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
+      foreach my $aPmi (@$pmis) {
+        my $moref    = $aPmi->entity_mo_ref;
+        my $instance = $aPmi->instance;
+
+#       $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
+        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $instance;
       }
     }
 
@@ -303,8 +299,12 @@ sub toCsvRow {
       $keyInform;
 
     if(defined($showPmis) && $showPmis == 1) {
-      foreach my $anInstance (@$instances) {
-        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
+      foreach my $aPmi (@$pmis) {
+        my $moref    = $aPmi->entity_mo_ref;
+        my $instance = $aPmi->instance;
+#       $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
+        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $instance;
+
       }
     }
 

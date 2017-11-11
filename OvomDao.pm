@@ -645,11 +645,14 @@ sub getAllEntitiesOfType {
   elsif($entityType eq 'PerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoSelectAll;
   }
+  elsif($entityType eq 'OMockView::OMockPerfMetricId' || $entityType eq 'PerfMetric') {
+    $stmt = $sqlPerfMetricSelectAll;
+  }
   elsif($entityType eq 'OAlarm') {
     $stmt = getSqlQuery($sqlAlarmsSelectAll, '', $optArgs);
   }
   else {
-    Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
+    Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType for $entityType");
     return undef;
   }
 
@@ -689,6 +692,10 @@ sub getAllEntitiesOfType {
       }
       elsif($entityType eq 'PerfCounterInfo') {
         $e = OPerfCounterInfo->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'OMockView::OMockPerfMetricId' || $entityType eq 'PerfMetric') {
+        $e = OMockView::OMockPerfMetricId->new(\@data);
         push @r, $e;
       }
       elsif($entityType eq 'OAlarm') {

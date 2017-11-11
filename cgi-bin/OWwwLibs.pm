@@ -1781,7 +1781,7 @@ sub getHtmlTableRow {
   my $entity      = shift;
   my $secondParam = shift;
   my $thirdParam  = shift;
-  my $forthParam  = shift; # ref to array of PMIs
+  my $forthParam  = shift; # ref to array of all PMIs
   if(!defined($entity)) {
     OInventory::log(3, "getHtmlTableRow got a undef param");
     return '';
@@ -1983,7 +1983,8 @@ sub getContentsForShowThresholds {
   my $groupInfoKeys;
   my $output;
   my $pmis;
-  my %pmisForPCI;
+  my $allPmis;
+  my $entType;
 
   my $showAllFieldsGot = $cgiObject->param('showAllFields');
   my $showAllFields = 0;
@@ -2014,7 +2015,21 @@ sub getContentsForShowThresholds {
     goto _GROUPINFO_KEYS_SEARCHED_;
   }
 
-  my $entType = 'groupInfoKey';
+  if($showPmis == 1) {
+    #
+    # Let's load the OPerfMetricId objects
+    #
+    $entType = 'PerfMetric';
+    $allPmis = OvomDao::getAllEntitiesOfType($entType);
+    if(! defined($allPmis)) {
+      $retval = 0;
+      $errStr         .= "There were errors trying to get the list of ${entType}s. ";
+      OInventory::log(3, "There were errors trying to get the list of ${entType}s. ");
+      goto _GROUPINFO_KEYS_DISCONNECT_;
+    }
+  }
+
+  $entType = 'groupInfoKey';
   my $doSearch = $cgiObject->param('doSearch');
   my $doUpdate = $cgiObject->param('doUpdate');
   my @groupInfoKeys = $cgiObject->param('groupInfoKey');
@@ -2033,21 +2048,7 @@ sub getContentsForShowThresholds {
         if ($aGIK eq $aPCI->groupInfo->key) {
           push @pcis, $aPCI;
 
-          if($showPmis == 1) {
-            #
-            # Let's load the OPerfCounterInfo object
-            #
-#           $entType = 'PerfMetric';
-#           my $entity     = OvomDao::loadPerfMetricIdsForPCI($aPCI);
-#           if(defined($entity)) {
-#             foreach my $aPMI ($entity) {
-#               $pmisForPCI{$aPCI->pci}{$aPMI->moref} = $aPMI;
-#               ...
-#               work TO_DO
-#               ...
-#             }
-#           }
-          }
+
 
           last GIK_LABEL;
         }
@@ -2163,7 +2164,8 @@ _THRESHOLDS_INIT_TABLE_
     foreach my $aPCI (@pcis) {
       my $moref    = 'samplemoref';
       my $instance = 'sampleinstance';
-      $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields, $showPmis, \%pmisForPCI) . "\n";
+      my $pmisForPci = filterPmisForPci($aPCI, $allPmis);
+      $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields, $showPmis, $pmisForPci) . "\n";
     }
     my $colspan = 16;
     $perfCounterInfosHtml .= "<tr><td colspan=$colspan><input type='submit' name='Set thresholds' value='Set thresholds'/></td></td>\n";
@@ -2221,5 +2223,40 @@ _THRESHOLDS2_
   return { retval => $retval, output => $output };
 }
 
+
+sub filterPmisForPci {
+  my $pci  = shift;
+  my $pmis = shift;
+  my @r    = ();
+  if(! defined ($pci) ) {
+    OInventory::log(2, "filterPmisForPci got undefined pci");
+    return undef;
+  }
+  if(! defined ($pmis) ) {
+    OInventory::log(2, "filterPmisForPci got undefined pmi array");
+    return undef;
+  }
+  if(ref($pci) ne 'OPerfCounterInfo') {
+    OInventory::log(2, "filterPmisForPci got a 1st param "
+                     . "that's not a PCI, it's a " . ref($pci));
+    return undef;
+  }
+  if(ref($pmis) ne 'ARRAY') {
+    OInventory::log(2, "filterPmisForPci got a 2nd param "
+                     . "that's not an array of PMIs, it's a " . ref($pmis));
+    return undef;
+  }
+  foreach my $aPmi (@$pmis) {
+    if (ref($aPmi) ne 'OMockView::OMockPerfMetricId') {
+      OInventory::log(2, "Components of the 2on param array of "
+                       . "filterPmisForPci must be PMIs, one is " . ref($aPmi));
+      return undef;
+    }
+    if($aPmi->counterId eq $pci->key) {
+      push @r, $aPmi;
+    }
+  }
+  return \@r;
+}
 
 1;
