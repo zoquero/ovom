@@ -194,8 +194,24 @@ sub getShortDescription {
 }
 
 sub toCsvRow {
-  my $self          = shift;
-  my $showAllFields = shift;
+# my $self = shift;
+# my $args = shift;
+  my ($self, $args) = @_;
+
+  my $showAllFields = $args->{'showAllFields'};
+  my $showPmis      = $args->{'showPmis'};
+  my $pmis          = $args->{'pmis'};
+
+
+#tp tmptmp
+  my $moref = 'morefff';
+  my $instances = [ 'one', 'two', 'three' ];
+
+
+  if (defined($pmis) && ref($pmis) ne 'HASH') {
+    Carp::croak("BUG: toCsvRow expected an array of PerfMetricIds");
+    die "BUG: toCsvRow expected an array of PerfMetricIds";
+  }
 
   my $cth = '';
   my $wth = '';
@@ -213,9 +229,18 @@ sub toCsvRow {
   }
 
 # key , gil , (gil) , (gis) , nil , (nil) , nis , uil , (uis) , (uik)
+  my $r;
+  my $fillMorefHtml;
+  my $fillInstanceHtml;
+
+  if(defined($showPmis) && $showPmis == 1) {
+    $fillMorefHtml    = "<td> &nbsp; </td>\n ";
+    $fillInstanceHtml = "<td> &nbsp; </td>\n ";
+  }
+
   if(defined($showAllFields) && $showAllFields == 1) {
     my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>";
-    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td> %s \n" ,
+    $r = sprintf "<tr><td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n %s %s <td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td> %s \n </tr>\n" ,
 
       $self->{_key},
       $self->{_groupInfo}->{_key},
@@ -231,15 +256,29 @@ sub toCsvRow {
       $self->{_perDeviceLevel},
       $self->{_level},
       $self->{_rollupType}->{_val},
+      $fillMorefHtml,
+      $fillInstanceHtml,
       $self->{_key},
       $cth,
       $self->{_key},
       $wth,
       $keyInform;
+
+    if(defined($showPmis) && $showPmis == 1) {
+#     foreach my $aPmi (@$pmis) 
+      foreach my $anInstance (@$instances) {
+#       $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td> %s </td>\n<td> %s </td>\n<td> &nbsp </td>\n<td> &nbsp </td>\n</tr>\n" , $aPmi->entity_mo_ref, $aPmi->instance;
+        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
+      }
+    }
+
+
+    return $r;
   }
   else {
+
     my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>";
-    return sprintf "<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td>\n %s \n" ,
+    $r = sprintf "<tr><td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n %s %s <td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td>\n %s \n</tr>\n" ,
 
       $self->{_key},
 #     $self->{_groupInfo}->{_key},
@@ -255,11 +294,21 @@ sub toCsvRow {
       $self->{_perDeviceLevel},
       $self->{_level},
       $self->{_rollupType}->{_val},
+      $fillMorefHtml,
+      $fillInstanceHtml,
       $self->{_key},
       $cth,
       $self->{_key},
       $wth,
       $keyInform;
+
+    if(defined($showPmis) && $showPmis == 1) {
+      foreach my $anInstance (@$instances) {
+        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
+      }
+    }
+
+    return $r;
   }
 }
 
@@ -270,10 +319,15 @@ sub toCsvRow {
 sub getCsvRowHeader {
   my $self          = shift;
   my $showAllFields = shift;
+  my $showPmis      = shift;
+  my $showPmisHtml  = '';
 
-# key , gil , (gil) , (gis) , nil , (nil) , nis , uil , (uis) , (uik)
+  if(defined($showPmis) && $showPmis == 1) {
+    $showPmisHtml = '<th> mo_ref <br/>(PMI) </th>\n<th> instance <br/>(PMI) </th>\n';
+  }
+
   if(defined($showAllFields) && $showAllFields == 1) {
-    return sprintf "<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n" ,
+    return sprintf "<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n$showPmisHtml<th> %s </th>\n<th> %s </th>\n" ,
       'Key',
       'Group info key',
       'Group info label',
@@ -292,7 +346,7 @@ sub getCsvRowHeader {
       'Warning threshold';
   }
   else {
-    return sprintf "\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n" ,
+    return sprintf "\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n<th> %s </th>\n$showPmisHtml<th> %s </th>\n<th> %s </th>\n" ,
       'Key',
 #     'Group info key',
       'Group info label',

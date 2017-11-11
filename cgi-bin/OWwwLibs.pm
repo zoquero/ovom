@@ -1780,6 +1780,8 @@ sub respondShowAlarmReport {
 sub getHtmlTableRow {
   my $entity      = shift;
   my $secondParam = shift;
+  my $thirdParam  = shift;
+  my $forthParam  = shift; # ref to array of PMIs
   if(!defined($entity)) {
     OInventory::log(3, "getHtmlTableRow got a undef param");
     return '';
@@ -1898,12 +1900,24 @@ _ENTITY_CONTENTS_
 
   }
   elsif(ref($entity) eq 'OPerfCounterInfo') {
+    # $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields, $showPmis, $moref, $instance) . "\n";
+
     my $showAllFields = $secondParam;
     my $showAllFieldsSend = 0;
     if(defined($showAllFields) && $showAllFields == 1) {
       $showAllFieldsSend = 1;
     }
-    return "<tr>\n" . $entity->toCsvRow($showAllFieldsSend) . "\n</tr>\n";
+
+    my $showPmis = $thirdParam;
+    my $showPmisSend = 0;
+    if(defined($showPmis) && $showPmis == 1) {
+      $showPmisSend = 1;
+    }
+
+    my $args = { 'showAllFields'  => $showAllFieldsSend,
+                 'showPmis'       => $showPmisSend,
+                 'pmis'           => $forthParam };
+    return $entity->toCsvRow($args);
   }
   else {
     OInventory::log(3, "getHtmlTableRow got an unexpected "
@@ -1915,6 +1929,7 @@ _ENTITY_CONTENTS_
 sub getHtmlTableRowHeader {
   my $entity        = shift;
   my $showAllFields = shift;
+  my $showPmis      = shift;
   if(!defined($entity)) {
     OInventory::log(3, "getHtmlTableRow got a undef param");
     return '';
@@ -1944,7 +1959,7 @@ _ENTITY_CONTENTS_
     if(defined($showAllFields) && $showAllFields == 1) {
       $showAllFieldsSend = 1;
     }
-    return "<tr>\n" . $entity->getCsvRowHeader($showAllFieldsSend) . "\n</tr>\n";
+    return "<tr>\n" . $entity->getCsvRowHeader($showAllFieldsSend, $showPmis) . "\n</tr>\n";
   }
   else {
     OInventory::log(3, "getHtmlTableRowHeader got an unexpected "
@@ -1967,6 +1982,19 @@ sub getContentsForShowThresholds {
   my $errStr = '';
   my $groupInfoKeys;
   my $output;
+  my $pmis;
+  my %pmisForPCI;
+
+  my $showAllFieldsGot = $cgiObject->param('showAllFields');
+  my $showAllFields = 0;
+  if(defined($showAllFieldsGot) && $showAllFieldsGot ne '') {
+    $showAllFields = 1;
+  }
+  my $showPmisGot = $cgiObject->param('showPmis');
+  my $showPmis = 0;
+  if(defined($showPmisGot) && $showPmisGot ne '') {
+    $showPmis = 1;
+  }
 
   #
   # Connect to Database:
@@ -2004,6 +2032,23 @@ sub getContentsForShowThresholds {
       GIK_LABEL: foreach my $aGIK (@groupInfoKeys) {
         if ($aGIK eq $aPCI->groupInfo->key) {
           push @pcis, $aPCI;
+
+          if($showPmis == 1) {
+            #
+            # Let's load the OPerfCounterInfo object
+            #
+#           $entType = 'PerfMetric';
+#           my $entity     = OvomDao::loadPerfMetricIdsForPCI($aPCI);
+#           if(defined($entity)) {
+#             foreach my $aPMI ($entity) {
+#               $pmisForPCI{$aPCI->pci}{$aPMI->moref} = $aPMI;
+#               ...
+#               work TO_DO
+#               ...
+#             }
+#           }
+          }
+
           last GIK_LABEL;
         }
         else {
@@ -2100,11 +2145,7 @@ sub getContentsForShowThresholds {
     $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
   }
 
-  my $showAllFieldsGot = $cgiObject->param('showAllFields');
-  my $showAllFields = 0;
-  if(defined($showAllFieldsGot) && $showAllFieldsGot ne '') {
-    $showAllFields = 1;
-  }
+
 
   #
   # Let's compose the table with the results of the search of PCIs
@@ -2118,9 +2159,11 @@ sub getContentsForShowThresholds {
 _THRESHOLDS_INIT_TABLE_
 
   if(defined($doSearch) && $doSearch == 1) {
-    $perfCounterInfosHtml   .= getHtmlTableRowHeader('OPerfCounterInfo', $showAllFields) . "\n";
+    $perfCounterInfosHtml   .= getHtmlTableRowHeader('OPerfCounterInfo', $showAllFields, $showPmis) . "\n";
     foreach my $aPCI (@pcis) {
-      $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields) . "\n";
+      my $moref    = 'samplemoref';
+      my $instance = 'sampleinstance';
+      $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields, $showPmis, \%pmisForPCI) . "\n";
     }
     my $colspan = 16;
     $perfCounterInfosHtml .= "<tr><td colspan=$colspan><input type='submit' name='Set thresholds' value='Set thresholds'/></td></td>\n";
@@ -2146,12 +2189,21 @@ _THRESHOLDS_INIT_TABLE_
           </td>
         </tr>
         <tr>
-          <td align="center">
-            <input type="submit" name="Show" value="Show" />
-          </td>
-          <td align="center">
+          <td colspan='2' align="center">
             <input type="checkbox" name="showAllFields" value="showAllFields" />
             Show all fields for Group Info objects
+          </td>
+        </tr>
+        <tr>
+          <td colspan='2' align="center">
+            <input type="checkbox" name="showPmis" value="showPmis" />
+            Show also the concrete thresholds for all the <em>instances</em> <br/>
+            of those counters on all the <em>ManagedEntities</em> (PerfMetrics)
+          </td>
+        </tr>
+        <tr>
+          <td colspan='2' align="center">
+            <input type="submit" name="Show" value="Show" />
           </td>
         </tr>
       </table>
