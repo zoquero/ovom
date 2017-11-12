@@ -565,6 +565,7 @@ sub getSqlQuery {
   my $sqlPrefix  = shift;
   my $sqlSufix   = shift;
   my $args       = shift;
+  my $append     = '';
 
   if(!defined($sqlPrefix) || !defined($sqlSufix)) {
     OInventory::log(3, "Missing sql prefix or sufix calling getSqlQuery");
@@ -574,9 +575,9 @@ sub getSqlQuery {
   my $r = $sqlPrefix;
 
   if(defined($args)) {
-    $r .= " where";
     my @clauses;
 
+    my $isFirst = 1;
     foreach my $key ( ('entity_type', 'mo_ref', 'is_critical', 'perf_metric_id',
                      'is_acknowledged', 'is_active', 'alarm_time_upper',
                      'alarm_time_lower') ) {
@@ -599,8 +600,12 @@ sub getSqlQuery {
         }
       }
     }
-    $r .= join " and ", @clauses;
+    $append .= join " and ", @clauses;
   }
+  if($append ne '') {
+    $r .= " where $append";
+  }
+
 
   $r .= " " . $sqlSufix;
   return $r;

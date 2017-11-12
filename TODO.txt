@@ -1,5 +1,9 @@
 Things to be done:
 
+* Show OHosts is still not implemented.
+
+* Acknowledgement of alarms is still not implementedAcknowledgement of alarms is still not implemented.
+
 * Move OPerfCounterInfo::getCsvRowHeader and OPerfCounterInfo::toHtmlTableRow to OWwwLibs
 
 * Performance improvement: Now groupInfo filters when searching alarms is not implemented in SQL nor in the control, it's implemented in OWwwLibs::respondShowAlarmReport() OWwwLibs::getHtmlTableRow(). To improve the search time it should be implemented at least in the control.

@@ -604,9 +604,23 @@ sub getContentsForAlarms {
   }
   _GROUPINFO_KEYS_SEARCHED_:
 
-  my $groupInfoCheckboxesHtml = '';
+  my $groupInfoCheckboxesHtml = <<"_JAVASCRIPT_TOGGLE_";
+<script language="JavaScript">
+function toggle(source) {
+  checkboxes = document.getElementsByName('groupInfoKey');
+  for(var i=0, n=checkboxes.length;i<n;i++) {
+    checkboxes[i].checked = source.checked;
+  }
+}
+</script>
+_JAVASCRIPT_TOGGLE_
+
+  my $i    = 1;
+  my $each = $OInventory::configuration{'web.groupInfosPerRow'};
   foreach my $aGIKey (@$groupInfoKeys) {
     $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked /> $aGIKey\n";
+    $groupInfoCheckboxesHtml .= "<br/>\n"
+      if ( ! ($i ++ % $each) ) ;
   }
 
   $output = <<"_ALARMS_SEARCH_FORM_";
@@ -657,7 +671,11 @@ sub getContentsForAlarms {
         </tr>
  
         <tr>
-          <th valign="middle">GroupInfo</th>
+          <th valign="middle">
+            GroupInfo <br/>
+            <hr />
+            <input type='checkbox' onClick='toggle(this)' /> Toggle all
+          </th>
           <td>
             $groupInfoCheckboxesHtml
           </td>
@@ -1743,7 +1761,7 @@ sub respondShowAlarmReport {
     }
   }
 
-  $output .= ($#$entities + 1) . " ${entType}s:<br/>\n";
+  $output .= "<p><strong>" . ($#$entities + 1) . " ${entType}s </strong> for managed entities:<p/>\n";
   $output .= "<table>\n";
   $output .= getHtmlTableRowHeader('OAlarm') . "\n";
   foreach my $aEntity (@$entities) {
@@ -1777,6 +1795,14 @@ sub respondShowAlarmReport {
   print $template->output();
 }
 
+sub epoch2ZuluDate {
+  my $epoch = shift;
+  my ($sec, $min, $hour, $day, $month, $year) = (gmtime($epoch))[0,1,2,3,4,5];
+  $year  += 1900;
+  $month += 1;
+  return "$year/$month/$day $hour:$min:$sec";
+}
+
 sub getHtmlTableRow {
   my $entity      = shift;
   my $secondParam = shift;
@@ -1793,12 +1819,14 @@ sub getHtmlTableRow {
     my $isActive;
     my $isAcknowledged;
     my $lastChange;
+    my $lastChange_str;
     my $name;
 
     my $entity_type=OInventory::entityId2entityType($entity->{entity_type});
     my $mo_ref=$entity->{mo_ref};
     my $perf_metric_id=$entity->{perf_metric_id};
     my $alarm_time=$entity->{alarm_time};
+    my $alarm_time_str=epoch2ZuluDate($alarm_time);
     my $counterName;
     my $instance;
     my $linkToSourceEntiy; # getLinkToEntity
@@ -1876,6 +1904,7 @@ sub getHtmlTableRow {
     }
     if(defined($entity->{last_change})) {
       $lastChange = $entity->{last_change};
+      $lastChange_str=epoch2ZuluDate($lastChange);
     }
     else {
       $lastChange = 'undef';
@@ -1893,8 +1922,8 @@ sub getHtmlTableRow {
   <td>$instance</td>
   <td>$isAcknowledged</td>
   <td>$isActive</td>
-  <td>$alarm_time</td>
-  <td>$lastChange</td>
+  <td>$alarm_time_str<br/>($alarm_time)</td>
+  <td>$lastChange_str<br/>($lastChange)</td>
 </tr>
 _ENTITY_CONTENTS_
 
@@ -1940,8 +1969,8 @@ sub getHtmlTableRowHeader {
 <tr>
   <th>id</th>
   <th>entity_type</th>
-  <th>mo_ref</th>
   <th>name</th>
+  <th>mo_ref</th>
   <th>warnOrCrit</th>
   <th>perf_metric_id</th>
   <th>counter</th>
@@ -2187,17 +2216,29 @@ sub getContentsForShowThresholds {
   #
   # Let's compose the search menu
   #
-  my $groupInfoCheckboxesHtml = '';
+  my $groupInfoCheckboxesHtml = <<"_JAVASCRIPT_TOGGLE_";
+<script language="JavaScript">
+function toggle(source) {
+  checkboxes = document.getElementsByName('groupInfoKey');
+  for(var i=0, n=checkboxes.length;i<n;i++) {
+    checkboxes[i].checked = source.checked;
+  }
+}
+</script>
+_JAVASCRIPT_TOGGLE_
+
+
+  my $i    = 1;
+  my $each = $OInventory::configuration{'web.groupInfosPerRow'};
   foreach my $aGIKey (@$groupInfoKeys) {
     $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked /> $aGIKey\n";
+    $groupInfoCheckboxesHtml .= "<br/>\n"
+      if ( ! ($i ++ % $each) ) ;
   }
-
-
 
   #
   # Let's compose the table with the results of the search of PCIs
   #
-
   my $perfCounterInfosHtml = <<"_THRESHOLDS_INIT_TABLE_";
 <form action="?" method="post" accept-charset="utf-8">
   <input type="hidden" name="actionId" value="$ACTION_ID_SHOW_THRESHOLDS"/>
@@ -2231,7 +2272,11 @@ _THRESHOLDS_INIT_TABLE_
       <input type="hidden" name="doSearch" value="1"/>
       <table border="1">
         <tr>
-          <th valign="middle">GroupInfo</th>
+          <th valign="middle">
+            GroupInfo <br/>
+            <hr />
+            <input type='checkbox' onClick='toggle(this)' /> Toggle all
+          </th>
           <td>
             $groupInfoCheckboxesHtml
           </td>

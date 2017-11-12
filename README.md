@@ -27,14 +27,14 @@ vCenter is a great software but lacks some features. Some of them can be found i
 
 It's still in development but its **goals** are:
 
-* (done! *v0.1*) Maintain its own **Inventory** on a local database, but it also exports entities to CSV files to ease external access
+* (done! **v0.1**) Maintain its own **Inventory** on a local database, but it also exports entities to CSV files to ease external access
 * Extract **performance metrics**:
     * (done! **v0.2**) Extract realtime performance metrics of hosts, clusters and VMs
     * (done! **v0.2**) Store them on plain CSV files
     * (done! **v0.3** & **v0.4**) Housekeep them in a **RRDB** style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
 * Show performance graphics:
     * (done! **v0.5** & **v0.6**) Offer a simple Web UI to allow have graphs for custom intervals on-demand.
-* Report alarms based on thresholds
+* (done! **v0.7**) Report alarms based on thresholds
 * Extend the inventory and performance data collection to more *managed entities* (Datastore, LUN, vDisk) 
 * Model the hierarchy to reflex the dependencies between the *managed entites* so that it can correlate, for examples, latencies in LUNs with latencies in VMs.
 * Suggest changes (initially just sugggest, later would be nice to allow to apply):

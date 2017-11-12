@@ -131,7 +131,7 @@ sub setIsCritical {
   $self->{is_critical} = $v;
 }
 
-sub setIsAcive {
+sub setIsActive {
   my ($self, $v) = @_;
   if(!defined($v)) {
     Carp::croak("Alarm::setIsAcive requires value")
