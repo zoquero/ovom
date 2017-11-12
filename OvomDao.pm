@@ -156,8 +156,10 @@ our $sqlPerfMetricInsert
                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance, crit_threshold, warn_threshold) '
                               . 'VALUES (?, ?, ?, ?, ?)';
                              # Nop update just to update timestamp
-our $sqlPerfMetricUpdate
+our $sqlPerfMetricUpdateTouch
                              = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
+our $sqlPerfMetricUpdateThresholdsById
+                             = 'UPDATE perf_metric set crit_threshold = ?, warn_threshold = ? where id = ?';
 our $sqlPerfMetricDelete
                              = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
 
@@ -823,17 +825,23 @@ sub update {
   }
   elsif($oClassName eq 'PerfMetricId'
      || $oClassName eq 'OMockView::OMockPerfMetricId') {
-    $mor  = shift;
-    if (! defined ($mor)) {
-      Carp::croak("OvomDao.update missing mor (2nd extra) parameter");
-      return 0;
+    if(!defined $entity->id) {
+      if (! defined ($mor)) {
+        Carp::croak("OvomDao.update missing mor (2nd extra) parameter");
+        return 0;
+      }
+      $stmt = $sqlPerfMetricUpdateTouch;
+      my $t = shift;
+      $mor  = $t->value;
     }
-
-    $stmt = $sqlPerfMetricUpdate;
+    else {
+      $stmt = $sqlPerfMetricUpdateThresholdsById;
+      $mor  = $entity->entity_mo_ref;
+    }
     $updateType = 3;
     $desc = $oClassName . ": counterId=" . $entity->counterId
             . ",instance=" . $entity->instance
-            . " for entity with mo_ref='" . $mor->value . "'";
+            . " for entity with mo_ref='" . $mor . "'";
   }
   elsif($oClassName eq 'OAlarm') {
     $stmt = $sqlAlarmsUpdate;
@@ -933,7 +941,12 @@ sub update {
     }
     # PerfMetric
     elsif($updateType == 3) {
-      $sthRes = $sth->execute($entity->counterId, $entity->instance, $mor->value);
+      if(!defined $entity->id) {
+        $sthRes = $sth->execute($entity->counterId, $entity->instance, $mor);
+      }
+      else {
+        $sthRes = $sth->execute($entity->critThreshold, $entity->warnThreshold, $entity->id);
+      }
     }
     # Host, Cluster, VirtualMachine, ...
     elsif($updateType == 1) {

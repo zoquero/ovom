@@ -114,6 +114,16 @@ sub lastCollection {
   return $self->{_lastCollection};
 }
 
+sub setWarnThreshold {
+  my ($self, $t) = @_;
+  $self->{_warnThreshold} = $t;
+}
+
+sub setCritThreshold {
+  my ($self, $t) = @_;
+  $self->{_critThreshold} = $t;
+}
+
 sub stringify {
   my ($self) = @_;
   my $s = '';

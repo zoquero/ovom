@@ -6,6 +6,8 @@ use overload
     '""' => 'stringify';
 use Data::Dumper;
 
+our $csvSep = ";";
+
 sub new {
   my ($class, $args) = @_;
 
@@ -194,6 +196,45 @@ sub getShortDescription {
 }
 
 sub toCsvRow {
+  my ($self) = @_;
+
+  my $cth = '';
+  my $wth = '';
+  if(defined($self->{_critThreshold})) {
+    $cth = $self->{_critThreshold};
+  }
+  else {
+    $cth = '';
+  }
+  if(defined($self->{_warnThreshold})) {
+    $wth = $self->{_warnThreshold};
+  }
+  else {
+    $wth = '';
+  }
+
+  my $r = 
+    $self->{_key}                    . $csvSep .
+    $self->{_groupInfo}->{_key}      . $csvSep .
+    $self->{_groupInfo}->{_label}    . $csvSep .
+    $self->{_groupInfo}->{_summary}  . $csvSep .
+    $self->{_nameInfo}->{_key}       . $csvSep .
+    $self->{_nameInfo}->{_label}     . $csvSep .
+    $self->{_nameInfo}->{_summary}   . $csvSep .
+    $self->{_unitInfo}->{_key}       . $csvSep .
+    $self->{_unitInfo}->{_label}     . $csvSep .
+    $self->{_unitInfo}->{_summary}   . $csvSep .
+    $self->{_statsType}->{_val}      . $csvSep .
+    $self->{_perDeviceLevel}         . $csvSep .
+    $self->{_level}                  . $csvSep .
+    $self->{_rollupType}->{_val}     . $csvSep .
+    $cth                             . $csvSep .
+    $wth;
+
+  return $r;
+}
+
+sub toHtmlTableRow {
 # my $self = shift;
 # my $args = shift;
   my ($self, $args) = @_;
@@ -233,8 +274,8 @@ sub toCsvRow {
   }
 
   if(defined($showAllFields) && $showAllFields == 1) {
-    my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>";
-    $r = sprintf "<tr><td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n %s %s <td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td> %s \n </tr>\n" ,
+    my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>\n";
+    $r = sprintf "<tr><td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n %s %s <td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/>\n%s\n</td>\n</tr>\n" ,
 
       $self->{_key},
       $self->{_groupInfo}->{_key},
@@ -260,21 +301,24 @@ sub toCsvRow {
 
     if(defined($showPmis) && $showPmis == 1) {
       foreach my $aPmi (@$pmis) {
+
         my $moref    = $aPmi->entity_mo_ref;
         my $instance = $aPmi->instance;
+        my $critThres = defined($aPmi->critThreshold) ? $aPmi->critThreshold : '';
+        my $warnThres = defined($aPmi->warnThreshold) ? $aPmi->warnThreshold : '';
+        my $pmiCritfHtml = "<input type='text' name='pmicritthres_" . $aPmi->id . "' value='" . $critThres . "'/>";
+        my $pmiWarnfHtml = "<input type='text' name='pmiwarnthres_" . $aPmi->id . "' value='" . $warnThres . "'/>";
 
-#       $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
-        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $instance;
+        my $pmiInform = "<input type='hidden' name='pmithressend_" . $aPmi->id . "' value='1'/>\n";
+
+        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> %s </td>\n<td bgcolor='ffff66'>\n%s\n%s\n</td>\n</tr>\n" , $moref, $instance, $pmiCritfHtml, $pmiWarnfHtml, $pmiInform;
       }
     }
-
-
     return $r;
   }
   else {
-
     my $keyInform = "<input type='hidden' name='keythressend_" . $self->{_key} . "' value='1'/>";
-    $r = sprintf "<tr><td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n %s %s <td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/> </td>\n %s \n</tr>\n" ,
+    $r = sprintf "<tr><td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n<td> %s </td>\n %s %s <td><input type='text' name='critthres_%s' value='%s'/></td>\n<td> <input type='text' name='warnthres_%s' value='%s'/>\n%s\n</td>\n</tr>\n" ,
 
       $self->{_key},
 #     $self->{_groupInfo}->{_key},
@@ -302,9 +346,14 @@ sub toCsvRow {
       foreach my $aPmi (@$pmis) {
         my $moref    = $aPmi->entity_mo_ref;
         my $instance = $aPmi->instance;
-#       $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $anInstance;
-        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> &nbsp </td>\n<td bgcolor='ffff66'> &nbsp </td>\n</tr>\n" , $moref, $instance;
+        my $critThres = defined($aPmi->critThreshold) ? $aPmi->critThreshold : '';
+        my $warnThres = defined($aPmi->warnThreshold) ? $aPmi->warnThreshold : '';
+        my $pmiCritfHtml = "<input type='text' name='pmicritthres_" . $aPmi->id . "' value='" . $critThres . "'/>";
+        my $pmiWarnfHtml = "<input type='text' name='pmiwarnthres_" . $aPmi->id . "' value='" . $warnThres . "'/>";
 
+        my $pmiInform = "<input type='hidden' name='pmithressend_" . $aPmi->id . "' value='1'/>\n";
+
+        $r .= sprintf "<tr>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n<td> &nbsp; </td>\n <td bgcolor='#ffffcc'> %s </td>\n<td bgcolor='#ffff99'> %s </td>\n<td bgcolor='ffcc66'> %s </td>\n<td bgcolor='ffff66'> %s\n%s\n</td>\n</tr>\n" , $moref, $instance, $pmiCritfHtml, $pmiWarnfHtml, $pmiInform;
       }
     }
 
@@ -323,7 +372,7 @@ sub getCsvRowHeader {
   my $showPmisHtml  = '';
 
   if(defined($showPmis) && $showPmis == 1) {
-    $showPmisHtml = '<th> mo_ref <br/>(PMI) </th>\n<th> instance <br/>(PMI) </th>\n';
+    $showPmisHtml = "<th> mo_ref <br/>(PMI) </th>\n<th> instance <br/>(PMI) </th>\n";
   }
 
   if(defined($showAllFields) && $showAllFields == 1) {

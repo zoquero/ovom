@@ -606,7 +606,7 @@ sub getContentsForAlarms {
 
   my $groupInfoCheckboxesHtml = '';
   foreach my $aGIKey (@$groupInfoKeys) {
-    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
+    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked /> $aGIKey\n";
   }
 
   $output = <<"_ALARMS_SEARCH_FORM_";
@@ -1917,7 +1917,7 @@ _ENTITY_CONTENTS_
     my $args = { 'showAllFields'  => $showAllFieldsSend,
                  'showPmis'       => $showPmisSend,
                  'pmis'           => $forthParam };
-    return $entity->toCsvRow($args);
+    return $entity->toHtmlTableRow($args);
   }
   else {
     OInventory::log(3, "getHtmlTableRow got an unexpected "
@@ -2062,18 +2062,29 @@ sub getContentsForShowThresholds {
   if(defined($doUpdate) && $doUpdate == 1) {
 
     my %pcisToUpdate = ();
+    my %pmisToUpdate = (); # key == it's id in table
     foreach my $aParam ($cgiObject->param()) {
 
       #    woc  ,  formPciKey
       my ($first, $second) = split /_/, $aParam;
+
       if(defined($first) && $first eq 'keythressend') {
         $pcisToUpdate{$second}{'found'} = 1;
+      }
+      if(defined($first) && $first eq 'pmithressend') {
+        $pmisToUpdate{$second}{'found'} = 1;
       }
       elsif(defined($first) && $first eq 'critthres') {
         $pcisToUpdate{$second}{'critthres'} = $cgiObject->param($aParam);
       }
       elsif(defined($first) && $first eq 'warnthres') {
         $pcisToUpdate{$second}{'warnthres'} = $cgiObject->param($aParam);
+      }
+      elsif(defined($first) && $first eq 'pmicritthres') {
+        $pmisToUpdate{$second}{'pmicritthres'} = $cgiObject->param($aParam);
+      }
+      elsif(defined($first) && $first eq 'pmiwarnthres') {
+        $pmisToUpdate{$second}{'pmiwarnthres'} = $cgiObject->param($aParam);
       }
       else {
         next;
@@ -2102,6 +2113,41 @@ sub getContentsForShowThresholds {
       }
       if(defined($pcisToUpdate{$aPciKey}{'warnthres'}) && $pcisToUpdate{$aPciKey}{'warnthres'} ne '') {
         $entity->setWarnThreshold($pcisToUpdate{$aPciKey}{'warnthres'});
+      }
+      else {
+        $entity->setWarnThreshold(undef);
+      }
+
+      if( ! OvomDao::update($entity) ) {
+        OInventory::log(3, "Can't update the $entType " . $entity);
+        $output = "Can't update the $entType ";
+        $retval = 0;
+        goto _GROUPINFO_KEYS_DISCONNECT_; # rollback
+      }
+    }
+    foreach my $aPmiKey (keys %pmisToUpdate) {
+      #
+      # Let's load the PerfMetric object
+      #
+      $entType = 'PerfMetric';
+      my $entity     = OvomDao::loadEntity($aPmiKey, $entType, '', '', 1);
+      if (! defined($entity)) {
+          OInventory::log(3, "Can't find the $entType with key $aPmiKey "
+                           . "in the Inventory DB. ");
+          $output = "Can't find the $entType with key $aPmiKey "
+                  . "in the Inventory DB. ";
+          $retval = 0;
+          goto _GROUPINFO_KEYS_DISCONNECT_;
+      }
+
+      if(defined($pmisToUpdate{$aPmiKey}{'pmicritthres'}) && $pmisToUpdate{$aPmiKey}{'pmicritthres'} ne '') {
+        $entity->setCritThreshold($pmisToUpdate{$aPmiKey}{'pmicritthres'});
+      }
+      else {
+        $entity->setCritThreshold(undef);
+      }
+      if(defined($pmisToUpdate{$aPmiKey}{'pmiwarnthres'}) && $pmisToUpdate{$aPmiKey}{'pmiwarnthres'} ne '') {
+        $entity->setWarnThreshold($pmisToUpdate{$aPmiKey}{'pmiwarnthres'});
       }
       else {
         $entity->setWarnThreshold(undef);
@@ -2143,7 +2189,7 @@ sub getContentsForShowThresholds {
   #
   my $groupInfoCheckboxesHtml = '';
   foreach my $aGIKey (@$groupInfoKeys) {
-    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked>$aGIKey</input>\n";
+    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked /> $aGIKey\n";
   }
 
 
