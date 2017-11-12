@@ -171,7 +171,8 @@ sub QueryAvailablePerfMetric {
       return undef;
     }
 
-    my @np = ($entityView->{mo_ref}->{value}, $parts[0], $parts[1]);
+    # undef for id
+    my @np = (undef, $entityView->{mo_ref}->{value}, $parts[0], $parts[1]);
     my $aPerfMetricId = OMockView::OMockPerfMetricId->new(\@np);
     if ( ! defined($aPerfMetricId) ) {
       OInventory::log(3, "Errors loading a mocking perf metric id object");
@@ -252,7 +253,11 @@ sub QueryPerf {
     $str .= "{counterId=" . $aMetricId->{_counterId} . ",instance=" . $aMetricId->{_instance} . "} ";
 
 #   my $value = '42,83,61,137,60,79,107,78,46,117,50,45,125,270,115,57,82,75,88,77,72,42,43,251,138,60,46,99,154,51,58,90,138,73,68,81,44,75,53,83,47,124,46,214,87,42,84,66,88,43,78,41,47,121,119,70,80,116,445,113,107,84,62,72,59,77,39,63,51,132,50,98,91,286,73,152,157,60,109,41,92,43,46,50,52,66,66,65,135,57,42,143,50,156,44,91,38,133,49,103,122,84,51,114,43,61,149,52,68,58,79,44,60,50,49,51,44,49,94,48,150,85,53,74,46,79,45,48,130,64,59,64,66,107,46,67,87,57,90,45,109,51,47,123,51,77,48,64,107,101,40,83,45,94,43,85,44,69,57,69,99,40,106,242,74,44,101,45,72,85,283,232,142,153,57,57,63,45,420,76';
-    my $value = $self->getRandValues();
+
+    my $maxValForRandData = 100;
+    $maxValForRandData = 100000 if($aMetricId->{_counterId} == 1 || $aMetricId->{_counterId} == 2);
+
+    my $value = $self->getRandValues($maxValForRandData);
     push @perfMetricSeriesCSV, OMockView::OMockPerfMetricSeriesCSV->new(
                    value => $value,
                    id    => $aMetricId);
@@ -303,9 +308,14 @@ sub getTimeStamps {
 # @return Random values sepparated by ','
 #
 sub getRandValues {
+  my ($self, $max) = @_;
+  $max  = 100 if(!defined($max));
+  my $a = int($max*0.12);
+  my $b = int($max-$a)/2;
+
   my @vars ;
   for(my $i = 0; $i < 3*60; $i++) {
-    my $randVal = int((1+cos((time-179*20+$i*20)/300))*44) + int(rand(12));
+    my $randVal = int((1+cos((time-179*20+$i*20)/300))*$b) + int(rand($a));
     push @vars, $randVal;
   }
   return join ',', @vars;

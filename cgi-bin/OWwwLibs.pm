@@ -21,6 +21,8 @@ use OPerformance;
 our $ACTION_ID_MENU_ENTRY                       = 0;
 our $ACTION_ID_ON_MANAGED_OBJECT                = 1;
 our $ACTION_ID_ON_PERFORMANCE_OF_MANAGED_OBJECT = 2;
+our $ACTION_ID_SEARCH_FOR_ALARMS                = 3;
+our $ACTION_ID_SHOW_THRESHOLDS                  = 4;
 
 #
 # Navigation entries tree:
@@ -41,13 +43,13 @@ my $neInventory =
     'childs'  => [4, 5, 6, 7, 8],
     'method'  => undef
   };
-my $neAlerts =
+my $neMonitoring =
   {
     'id'      => 2,
-    'display' => 'Alerts',
+    'display' => 'Monitoring',
     'parent'  => 0,
-    'childs'  => undef,
-    'method'  => \&OWwwLibs::getContentsForShowAlerts
+    'childs'  => [9, 10, 11],
+    'method'  => undef
   };
 my $neAbout =
   {
@@ -98,19 +100,46 @@ my $neAllClusters =
     'childs'  => undef,
     'method'  => \&OWwwLibs::getContentsForShowAllClusters
   };
+my $neAllActiveAlarms =
+  {
+    'id'      => 9,
+    'display' => 'Alarms',
+    'parent'  => 2,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForAlarms
+  };
+my $neThresholds =
+  {
+    'id'      => 10,
+    'display' => 'Thresholds',
+    'parent'  => 2,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForShowThresholds
+  };
+my $neAboutMonitoring =
+  {
+    'id'      => 11,
+    'display' => 'About monitoring',
+    'parent'  => 2,
+    'childs'  => undef,
+    'method'  => \&OWwwLibs::getContentsForShowAboutMonitoring
+  };
 
 
 my $navEntries =
   {
     0 => $neMain,
     1 => $neInventory,
-    2 => $neAlerts,
+    2 => $neMonitoring,
     3 => $neAbout,
     4 => $neAllFolders,
     5 => $neAllDatacenters,
     6 => $neAllVMs,
     7 => $neAllHosts,
     8 => $neAllClusters,
+    9 => $neAllActiveAlarms,
+   10 => $neThresholds,
+   11 => $neAboutMonitoring,
   };
 
 #
@@ -402,7 +431,12 @@ sub getLinkToEntity {
   my $mObject = shift;
   my $type    = ref($mObject);
   die "Must get an object param" if(!defined($mObject));
-  return "<a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&mo_ref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a>";
+  if(ref($mObject) eq 'OAlarm') {
+    return "<b>Pending</b> to manage it in OWwwLibs::getLinkToEntity" . $mObject;
+  }
+  else {
+    return "<a href='?actionId=$ACTION_ID_ON_MANAGED_OBJECT&type=$type&mo_ref=" . $mObject->{mo_ref} . "'>" . $mObject->{name} . "</a>";
+  }
 }
 
 #
@@ -536,22 +570,162 @@ _FFCPGI2_
 }
 
 #
-# Gets the string to show the contents for "Alerts"
+# Gets the string to show the contents for "Alarms"
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
 #         * output : html output to be returned
 #
-sub getContentsForShowAlerts {
+sub getContentsForAlarms {
   my $cgiObject    = shift;
   die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
   my $retval = 1;
-  my $output = "Here we'll show the alerts body using the DAO of ovom core and the perfData files";
+  my $groupInfoKeys;
+  my $output;
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    OInventory::log(3, "Can't connect to DataBase.");
+    goto _GROUPINFO_KEYS_SEARCHED_;
+  }
+
+  $groupInfoKeys = OvomDao::getAllGroupInfoKeys();
+  if(! defined($groupInfoKeys)) {
+    OInventory::log(3, "There were errors trying to get the list of groupInfo keys.");
+  }
+
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    OInventory::log(3, "Cannot disconnect from DataBase.");
+  }
+  _GROUPINFO_KEYS_SEARCHED_:
+
+  my $groupInfoCheckboxesHtml = <<"_JAVASCRIPT_TOGGLE_";
+<script language="JavaScript">
+function toggle(source) {
+  checkboxes = document.getElementsByName('groupInfoKey');
+  for(var i=0, n=checkboxes.length;i<n;i++) {
+    checkboxes[i].checked = source.checked;
+  }
+}
+</script>
+_JAVASCRIPT_TOGGLE_
+
+  my $i    = 1;
+  my $each = $OInventory::configuration{'web.groupInfosPerRow'};
+  foreach my $aGIKey (@$groupInfoKeys) {
+    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked /> $aGIKey\n";
+    $groupInfoCheckboxesHtml .= "<br/>\n"
+      if ( ! ($i ++ % $each) ) ;
+  }
+
+  $output = <<"_ALARMS_SEARCH_FORM_";
+
+<h2>Alarms</h2>
+  <h3> Alarm reporting </h3>
+    <p> Here you can search for alarms based on criteria: </p>
+
+    <form action="?" method="post" accept-charset="utf-8">
+      <input type="hidden" name="actionId" value="$ACTION_ID_SEARCH_FOR_ALARMS"/>
+
+      <table border="1">
+        <tr align="center">
+          <th valign="middle">Active</th>
+          <td>
+            <select name="is_active" id="is_active"> 
+              <option value="2"         >All</option> 
+              <option value="1" selected>Just active alerts</option> 
+              <option value="0"         >Just inactive alerts</option> 
+            </select>
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Created after of<br/>(date in <em>epoch</em>)</th>
+          <td>
+            Just alerts created after.<br/>
+            You can leave it blank.
+            <input type="text" name="alarm_time_lower" width="10" size="10"/>
+          </td>
+        </tr>
+
+         <tr>
+          <th valign="middle">Created before of<br/>(date in <em>epoch</em>)</th>
+          <td>
+            Just alerts created before.<br/>
+            You can leave it blank.
+            <input type="text" name="alarm_time_upper" width="10" size="10"/>
+          </td>
+        </tr>
+
+        <tr>
+          <th>&nbsp;</th>
+          <td align="center">
+            Tip: You can generate epoch timestamps with this command:<br/>
+            <em>`date --date "\${Y}\${M}\${D} \${H}\${m}" +%s`</em>
+          </td>
+        </tr>
+ 
+        <tr>
+          <th valign="middle">
+            GroupInfo <br/>
+            <hr />
+            <input type='checkbox' onClick='toggle(this)' /> Toggle all
+          </th>
+          <td>
+            $groupInfoCheckboxesHtml
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Entity's mo_ref</th>
+          <td>
+            <input type="text" name="mo_ref" width="10" size="10"/> <br/>
+            Leave it blank to search for alarms on all entities
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Criticality</th>
+          <td>
+            <select name="is_critical" id="is_critical"> 
+              <option value="2"         >Any</option> 
+              <option value="1" selected>Just critical alerts</option> 
+              <option value="0"         >Just warning  alerts</option> 
+            </select>
+          </td>
+        </tr>
+      
+        <tr>
+          <th valign="middle">Acknowledgement</th>
+          <td>
+            <select name="is_acknowledged" id="is_acknowledged"> 
+              <option value="2"         >Any</option> 
+              <option value="1"         >Just acknowledged alerts</option> 
+              <option value="0" selected>Just non-acknowledged alerts</option> 
+            </select>
+          </td>
+        </tr>
+
+        <tr>
+          <td colspan=2 align="center">
+            <input type="submit" name="Search" value="Search" />
+          </td>
+        </tr>
+      </table>
+    </form>
+
+_ALARMS_SEARCH_FORM_
+
   return { retval => $retval, output => $output };
 }
 
 #
-# Gets the string to show the contents for "Alerts"
+# Gets the string to show the contents for "Alarms"
 #
 # @return ref to hash with keys:
 #         * retval : 1 (ok) | 0 (errors)
@@ -588,6 +762,33 @@ at <a href='$appSite' target='_blank'>$appSite</a></p>
 _ABOUT_
 
   return { retval => $retval, output => $t };
+}
+
+#
+# Gets the string to show the contents for "About Monitoring" menu entry
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowAboutMonitoring {
+  my $cgiObject    = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $appName  = $OInventory::configuration{'app.name'};
+  my $appTitle = $OInventory::configuration{'app.title'};
+  my $appSite  = $OInventory::configuration{'app.site'};
+  my $retval = 1;
+  my $output = <<"_ALARMS_ABOUT_";
+
+<h2>Alarms</h2>
+  <h3> About thresholds and alarms </h3>
+    <p>You can specify <b>generic warning and critical thresholds</b> for each <b>performance counter</b> (<em>PerfCounterInfo</em> objects). Those thresholds will be the same for all its instances in all the entities of your infraestructure. You can also specify <b>concrete thresholds for each instance</b> of those counters of your entities (<em>PerfMetricId</em> objects).</p>
+    <p> Both kinds of thresholds (generic and concrete) can be specified the first time that a <em>PerfCounterInfo</em> or <em>PerfMetricId</em> object is loaded in the file <em><b>thresholds/PerfMetricId.thresholds.csv</b></em>. After that you'll be able to change those thresholds on database through this web interface. </p>
+    <p> When a perfData (value of a counter) exceeds a generic or a concrete threshold an <b>active alarm</b> is launched. This alarm can be <em>warning</em> o <em>critical</em>. On the next iterations of picker's loop the new perfData will be compared again agains those thresholds, but just will be compared the perfData after the last data collected for that <em>PerfMetricId</em>. After each loop the state of the alarm is re-evaluated. When there's no critical or warning value in a complete loop then that alarm is <b>deactivated</b> (<em>active=false</em>). An active alarm can be <b>acknowledged</b> so that it will not appear in alarm reports that just show non-acknowledged active alarms. </p>
+
+_ALARMS_ABOUT_
+
+  return { retval => $retval, output => $output };
 }
 
 #
@@ -1308,6 +1509,9 @@ sub getNavEntryIdForType {
   elsif($type eq 'OCluster') {
     $id = 8;
   }
+  elsif($type eq 'OAlarm') {
+    $id = 9;
+  }
   else {
     $id = 1;
   }
@@ -1417,6 +1621,733 @@ sub respondShowPerformance {
   $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
   $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
   print $template->output();
+}
+
+#
+# Return an HTTP response showing the contents
+# to show Thresholds and allow change them.
+# It prints full HTTP response body, not just a canvas.
+#
+sub respondShowThresholds {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $entType = 'OAlarm';
+  my $entities;
+  my $output = '';
+
+  #
+  # Navigation menu
+  #
+  my $id = getNavEntryIdForType('OAlarm');
+  if (!defined $$navEntries{$id}) {
+    die "respondShowPerformance: Can't find the navigation entry for $id";
+  }
+  my $attributes = $$navEntries{$id};
+  my $menuCanvasRet = getNavMenuBody($attributes, $id);
+
+  #
+  # Contents
+  #
+  my $contentsCanvasRet = getContentsForShowThresholds($cgiObject);
+  if(! $contentsCanvasRet->{retval}) {
+    triggerError($cgiObject, "Errors generating the contents: "
+                           . $contentsCanvasRet->{output} . "<br/>\n"
+                           . "You'll find more information in the logs.");
+    return;
+  }
+
+  #
+  # Response
+  #
+  print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+  my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+  $template->param(HEAD      => getHead() ); 
+  $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+  $template->param(CONTENTS_CANVAS   => $contentsCanvasRet->{output} ); 
+  print $template->output();
+}
+
+
+#
+# Return an HTTP response showing the contents for a search of alerts
+# It prints full HTTP response body, not just a canvas.
+#
+sub respondShowAlarmReport {
+  my $cgiObject  = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $entType = 'OAlarm';
+  my $entities;
+  my $output = '';
+
+  my $id = getNavEntryIdForType('OAlarm');
+  if (!defined $$navEntries{$id}) {
+    die "respondShowPerformance: Can't find the navigation entry for $id";
+  }
+  my $attributes = $$navEntries{$id};
+  my $menuCanvasRet = getNavMenuBody($attributes, $id);
+  my $contentsCanvasRet;
+  my $errorInContentCanvas = 0;
+  my %argsForAlarmsSqlSearch;
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $contentsCanvasRet = "Can't connect to DataBase.";
+    $errorInContentCanvas = 1;
+  }
+  else {
+    #
+    # Let's get the report of alerts
+    #
+    my $aParam;
+
+    $aParam = 'entity_type';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'mo_ref';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'is_critical';
+    if(defined($cgiObject->param($aParam))) {
+      my $v = $cgiObject->param($aParam);
+      if($v == 0 || $v == 1) {
+        $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+      }
+      # else not selected, so sql will be 'value=*'
+    }
+    $aParam = 'perf_metric_id';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'is_acknowledged';
+    if(defined($cgiObject->param($aParam))) {
+      my $v = $cgiObject->param($aParam);
+      if($v == 0 || $v == 1) {
+        $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+      }
+      # else not selected, so sql will be 'value=*'
+    }
+    $aParam = 'is_active';
+    if(defined($cgiObject->param($aParam))) {
+      my $v = $cgiObject->param($aParam);
+      if($v == 0 || $v == 1) {
+        $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+      }
+      # else not selected, so sql will be 'value=*'
+    }
+    $aParam = 'alarm_time_upper';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'alarm_time_lower';
+    if(defined($cgiObject->param($aParam))) {
+      $argsForAlarmsSqlSearch{$aParam} = $cgiObject->param($aParam);
+    }
+    $aParam = 'groupInfoKey';
+    if(defined($cgiObject->param($aParam))) {
+      my @a = $cgiObject->param($aParam);
+      $argsForAlarmsSqlSearch{$aParam} = \@a;
+    }
+
+    $entities = OvomDao::getAllEntitiesOfType('OAlarm', \%argsForAlarmsSqlSearch);
+    if(! defined($entities)) {
+      $contentsCanvasRet = "There were errors trying to get the list of ${entType}s from DB.";
+      $errorInContentCanvas = 1;
+    }
+  }
+
+  $output .= "<p><strong>" . ($#$entities + 1) . " ${entType}s </strong> for managed entities:<p/>\n";
+  $output .= "<table>\n";
+  $output .= getHtmlTableRowHeader('OAlarm') . "\n";
+  foreach my $aEntity (@$entities) {
+#   $output .= "<li>" . getLinkToEntity($aEntity) . "</li>\n";
+    $output .= getHtmlTableRow($aEntity, $argsForAlarmsSqlSearch{'groupInfoKey'}) . "\n";
+  }
+  $output .= "</table>\n";
+
+  #
+  # Let's disconnect from DB
+  #
+  if( OvomDao::disconnect() != 1 ) {
+    $contentsCanvasRet = "Cannot disconnect from DataBase.";
+    $errorInContentCanvas = 1;
+  }
+
+  if($errorInContentCanvas) {
+    triggerError($cgiObject, "Errors getting alarm report:<br/>\n"
+                           . "<b>" . $contentsCanvasRet . "</b>\n"
+                           . ".<br/>You'll find more information in the logs.");
+    return;
+  }
+
+  print $cgiObject->header(-cache_control=>"no-cache, no-store, must-revalidate");
+  my $template = HTML::Template->new(filename => 'templates/session.contents.tmpl'); 
+  $template->param(HEAD      => getHead() ); 
+  $template->param(APP_TITLE => $OInventory::configuration{'app.title'} ); 
+  $template->param(FOOTER    => getFooter() ); 
+  $template->param(NAVIGATION_CANVAS => $menuCanvasRet ); 
+  $template->param(CONTENTS_CANVAS   => $output ); 
+  print $template->output();
+}
+
+sub epoch2ZuluDate {
+  my $epoch = shift;
+  my ($sec, $min, $hour, $day, $month, $year) = (gmtime($epoch))[0,1,2,3,4,5];
+  $year  += 1900;
+  $month += 1;
+  return "$year/$month/$day $hour:$min:$sec";
+}
+
+sub getHtmlTableRow {
+  my $entity      = shift;
+  my $secondParam = shift;
+  my $thirdParam  = shift;
+  my $forthParam  = shift; # ref to array of all PMIs
+  if(!defined($entity)) {
+    OInventory::log(3, "getHtmlTableRow got a undef param");
+    return '';
+  }
+  if(ref($entity) eq 'OAlarm') {
+    my $groupInfoKeys = $secondParam;
+    my $id;
+    my $warnOrCrit;
+    my $isActive;
+    my $isAcknowledged;
+    my $lastChange;
+    my $lastChange_str;
+    my $name;
+
+    my $entity_type=OInventory::entityId2entityType($entity->{entity_type});
+    my $mo_ref=$entity->{mo_ref};
+    my $perf_metric_id=$entity->{perf_metric_id};
+    my $alarm_time=$entity->{alarm_time};
+    my $alarm_time_str=epoch2ZuluDate($alarm_time);
+    my $counterName;
+    my $instance;
+    my $linkToSourceEntiy; # getLinkToEntity
+
+    #
+    # Let's get the source entity
+    #
+    my $sourceEntity = OvomDao::loadEntity($entity->{mo_ref}, $entity_type);
+    if(! defined($sourceEntity)) {
+      OInventory::log(3, "getHtmlTableRow can't load the source entity");
+      $name = "Can't load it";
+    }
+    else {
+      $name = $sourceEntity->{name};
+      $linkToSourceEntiy = getLinkToEntity($sourceEntity);
+      $name = $linkToSourceEntiy;
+    }
+
+    #
+    # Let's load the PerfMetricId
+    #
+    my $pmi = OvomDao::loadEntity($entity->{perf_metric_id}, 'PerfMetric', '', '', 1);
+    if(! defined($pmi)) {
+      OInventory::log(3, "getHtmlTableRow can't load the PerfMetricId");
+      $counterName = "Can't load it";
+      $instance    = "Can't load it";
+    }
+    else {
+      my $counterId = $pmi->counterId;
+      my $pci = OvomDao::loadEntity($counterId, 'PerfCounterInfo');
+      if(! defined($pci)) {
+        OInventory::log(3, "getHtmlTableRow can't load the PerfCounterInfo");
+        $counterName = "Can't load it";
+      }
+      else {
+        if(defined($groupInfoKeys)) {
+          my $found = 0;
+          foreach my $aGIK (@$groupInfoKeys) {
+            if($aGIK eq $pci->groupInfo->key) {
+              $found = 1;
+            }
+          }
+          if(!$found) {
+            return '';
+          }
+        }
+        $counterName = $pci->nameInfo->label;
+        $instance    = $pmi->instance;
+      }
+    }
+  
+    if(defined($entity->{id})) {
+      $id = $entity->{id};
+    }
+    else {
+      $id = 'undef';
+    }
+    if($entity->{is_critical}) {
+      $warnOrCrit = 'Critical';
+    }
+    else {
+      $warnOrCrit = 'Warning';
+    }
+    if($entity->{is_active}) {
+      $isActive = 'active';
+    }
+    else {
+      $isActive = 'non-active';
+    }
+    if($entity->{is_acknowledged}) {
+      $isAcknowledged = 'acknowledged';
+    }
+    else {
+      $isAcknowledged = 'non-acknowledged';
+    }
+    if(defined($entity->{last_change})) {
+      $lastChange = $entity->{last_change};
+      $lastChange_str=epoch2ZuluDate($lastChange);
+    }
+    else {
+      $lastChange = 'undef';
+    }
+
+    return <<"_ENTITY_CONTENTS_";
+<tr>
+  <td>$id</td>
+  <td>$entity_type</td>
+  <td>$name</td>
+  <td>$mo_ref</td>
+  <td>$warnOrCrit</td>
+  <td>$perf_metric_id</td>
+  <td>$counterName</td>
+  <td>$instance</td>
+  <td>$isAcknowledged</td>
+  <td>$isActive</td>
+  <td>$alarm_time_str<br/>($alarm_time)</td>
+  <td>$lastChange_str<br/>($lastChange)</td>
+</tr>
+_ENTITY_CONTENTS_
+
+  }
+  elsif(ref($entity) eq 'OPerfCounterInfo') {
+    # $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields, $showPmis, $moref, $instance) . "\n";
+
+    my $showAllFields = $secondParam;
+    my $showAllFieldsSend = 0;
+    if(defined($showAllFields) && $showAllFields == 1) {
+      $showAllFieldsSend = 1;
+    }
+
+    my $showPmis = $thirdParam;
+    my $showPmisSend = 0;
+    if(defined($showPmis) && $showPmis == 1) {
+      $showPmisSend = 1;
+    }
+
+    my $args = { 'showAllFields'  => $showAllFieldsSend,
+                 'showPmis'       => $showPmisSend,
+                 'pmis'           => $forthParam };
+    return $entity->toHtmlTableRow($args);
+  }
+  else {
+    OInventory::log(3, "getHtmlTableRow got an unexpected "
+                    . ref($entity) . " param");
+    return '';
+  }
+}
+
+sub getHtmlTableRowHeader {
+  my $entity        = shift;
+  my $showAllFields = shift;
+  my $showPmis      = shift;
+  if(!defined($entity)) {
+    OInventory::log(3, "getHtmlTableRow got a undef param");
+    return '';
+  }
+  if($entity eq 'OAlarm') {
+
+    return <<"_ENTITY_CONTENTS_";
+<tr>
+  <th>id</th>
+  <th>entity_type</th>
+  <th>name</th>
+  <th>mo_ref</th>
+  <th>warnOrCrit</th>
+  <th>perf_metric_id</th>
+  <th>counter</th>
+  <th>instance</th>
+  <th>isAcknowledged</th>
+  <th>isActive</th>
+  <th>alarm_time</th>
+  <th>lastChange</th>
+</tr>
+_ENTITY_CONTENTS_
+
+  }
+  elsif($entity eq 'OPerfCounterInfo') {
+    my $showAllFieldsSend = 0;
+    if(defined($showAllFields) && $showAllFields == 1) {
+      $showAllFieldsSend = 1;
+    }
+    return "<tr>\n" . $entity->getCsvRowHeader($showAllFieldsSend, $showPmis) . "\n</tr>\n";
+  }
+  else {
+    OInventory::log(3, "getHtmlTableRowHeader got an unexpected "
+                    . ref($entity) . " param");
+    return '';
+  }
+}
+
+#
+# Gets the string to show the contents for "Thresholds"
+#
+# @return ref to hash with keys:
+#         * retval : 1 (ok) | 0 (errors)
+#         * output : html output to be returned
+#
+sub getContentsForShowThresholds {
+  my $cgiObject    = shift;
+  die "Must get a CGI object param" if(ref($cgiObject) ne 'CGI');
+  my $retval = 1;
+  my $errStr = '';
+  my $groupInfoKeys;
+  my $output;
+  my $pmis;
+  my $allPmis;
+  my $entType;
+
+  my $showAllFieldsGot = $cgiObject->param('showAllFields');
+  my $showAllFields = 0;
+  if(defined($showAllFieldsGot) && $showAllFieldsGot ne '') {
+    $showAllFields = 1;
+  }
+  my $showPmisGot = $cgiObject->param('showPmis');
+  my $showPmis = 0;
+  if(defined($showPmisGot) && $showPmisGot ne '') {
+    $showPmis = 1;
+  }
+
+  #
+  # Connect to Database:
+  #
+  if(OvomDao::connect() != 1) {
+    $retval = 0;
+    $errStr         .= "Can't connect to DataBase. ";
+    OInventory::log(3, "Can't connect to DataBase. ");
+    goto _GROUPINFO_KEYS_SEARCHED_;
+  }
+
+  $groupInfoKeys = OvomDao::getAllGroupInfoKeys();
+  if(! defined($groupInfoKeys)) {
+    $retval = 0;
+    $errStr         .= "Errors trying to get the list of PerfCounterInfos. ";
+    OInventory::log(3, "Errors trying to get the list of PerfCounterInfos. ");
+    goto _GROUPINFO_KEYS_SEARCHED_;
+  }
+
+  if($showPmis == 1) {
+    #
+    # Let's load the OPerfMetricId objects
+    #
+    $entType = 'PerfMetric';
+    $allPmis = OvomDao::getAllEntitiesOfType($entType);
+    if(! defined($allPmis)) {
+      $retval = 0;
+      $errStr         .= "There were errors trying to get the list of ${entType}s. ";
+      OInventory::log(3, "There were errors trying to get the list of ${entType}s. ");
+      goto _GROUPINFO_KEYS_DISCONNECT_;
+    }
+  }
+
+  $entType = 'groupInfoKey';
+  my $doSearch = $cgiObject->param('doSearch');
+  my $doUpdate = $cgiObject->param('doUpdate');
+  my @groupInfoKeys = $cgiObject->param('groupInfoKey');
+  my @pcis; # PerfCounterInfo objects
+
+  if(defined($doSearch) && $doSearch == 1) {
+    my $entities = OvomDao::getAllEntitiesOfType('PerfCounterInfo');
+    if(! defined($entities)) {
+      $retval = 0;
+      $errStr         .= "There were errors trying to get the list of ${entType}s. ";
+      OInventory::log(3, "There were errors trying to get the list of ${entType}s. ");
+      goto _GROUPINFO_KEYS_DISCONNECT_;
+    }
+    PCI_LABEL: foreach my $aPCI (@$entities) {
+      GIK_LABEL: foreach my $aGIK (@groupInfoKeys) {
+        if ($aGIK eq $aPCI->groupInfo->key) {
+          push @pcis, $aPCI;
+
+
+
+          last GIK_LABEL;
+        }
+        else {
+          next;
+        }
+
+      }
+    }
+  }
+  if(defined($doUpdate) && $doUpdate == 1) {
+
+    my %pcisToUpdate = ();
+    my %pmisToUpdate = (); # key == it's id in table
+    foreach my $aParam ($cgiObject->param()) {
+
+      #    woc  ,  formPciKey
+      my ($first, $second) = split /_/, $aParam;
+
+      if(defined($first) && $first eq 'keythressend') {
+        $pcisToUpdate{$second}{'found'} = 1;
+      }
+      if(defined($first) && $first eq 'pmithressend') {
+        $pmisToUpdate{$second}{'found'} = 1;
+      }
+      elsif(defined($first) && $first eq 'critthres') {
+        $pcisToUpdate{$second}{'critthres'} = $cgiObject->param($aParam);
+      }
+      elsif(defined($first) && $first eq 'warnthres') {
+        $pcisToUpdate{$second}{'warnthres'} = $cgiObject->param($aParam);
+      }
+      elsif(defined($first) && $first eq 'pmicritthres') {
+        $pmisToUpdate{$second}{'pmicritthres'} = $cgiObject->param($aParam);
+      }
+      elsif(defined($first) && $first eq 'pmiwarnthres') {
+        $pmisToUpdate{$second}{'pmiwarnthres'} = $cgiObject->param($aParam);
+      }
+      else {
+        next;
+      }
+    }
+    foreach my $aPciKey (keys %pcisToUpdate) {
+      #
+      # Let's load the OPerfCounterInfo object
+      #
+      $entType = 'OPerfCounterInfo';
+      my $entity     = OvomDao::loadEntity($aPciKey, $entType);
+      if (! defined($entity)) {
+          OInventory::log(3, "Can't find the $entType with key $aPciKey "
+                           . "in the Inventory DB. ");
+          $output = "Can't find the $entType with key $aPciKey "
+                  . "in the Inventory DB. ";
+          $retval = 0;
+          goto _GROUPINFO_KEYS_DISCONNECT_;
+      }
+
+      if(defined($pcisToUpdate{$aPciKey}{'critthres'}) && $pcisToUpdate{$aPciKey}{'critthres'} ne '') {
+        $entity->setCritThreshold($pcisToUpdate{$aPciKey}{'critthres'});
+      }
+      else {
+        $entity->setCritThreshold(undef);
+      }
+      if(defined($pcisToUpdate{$aPciKey}{'warnthres'}) && $pcisToUpdate{$aPciKey}{'warnthres'} ne '') {
+        $entity->setWarnThreshold($pcisToUpdate{$aPciKey}{'warnthres'});
+      }
+      else {
+        $entity->setWarnThreshold(undef);
+      }
+
+      if( ! OvomDao::update($entity) ) {
+        OInventory::log(3, "Can't update the $entType " . $entity);
+        $output = "Can't update the $entType ";
+        $retval = 0;
+        goto _GROUPINFO_KEYS_DISCONNECT_; # rollback
+      }
+    }
+    foreach my $aPmiKey (keys %pmisToUpdate) {
+      #
+      # Let's load the PerfMetric object
+      #
+      $entType = 'PerfMetric';
+      my $entity     = OvomDao::loadEntity($aPmiKey, $entType, '', '', 1);
+      if (! defined($entity)) {
+          OInventory::log(3, "Can't find the $entType with key $aPmiKey "
+                           . "in the Inventory DB. ");
+          $output = "Can't find the $entType with key $aPmiKey "
+                  . "in the Inventory DB. ";
+          $retval = 0;
+          goto _GROUPINFO_KEYS_DISCONNECT_;
+      }
+
+      if(defined($pmisToUpdate{$aPmiKey}{'pmicritthres'}) && $pmisToUpdate{$aPmiKey}{'pmicritthres'} ne '') {
+        $entity->setCritThreshold($pmisToUpdate{$aPmiKey}{'pmicritthres'});
+      }
+      else {
+        $entity->setCritThreshold(undef);
+      }
+      if(defined($pmisToUpdate{$aPmiKey}{'pmiwarnthres'}) && $pmisToUpdate{$aPmiKey}{'pmiwarnthres'} ne '') {
+        $entity->setWarnThreshold($pmisToUpdate{$aPmiKey}{'pmiwarnthres'});
+      }
+      else {
+        $entity->setWarnThreshold(undef);
+      }
+
+      if( ! OvomDao::update($entity) ) {
+        OInventory::log(3, "Can't update the $entType " . $entity);
+        $output = "Can't update the $entType ";
+        $retval = 0;
+        goto _GROUPINFO_KEYS_DISCONNECT_; # rollback
+      }
+    }
+  }
+
+  OInventory::log(1, "Let's commit the transaction on DB.");
+  if( ! OvomDao::transactionCommit()) {
+    OInventory::log(3, "Cannot commit transactions on DataBase. "
+                     . "Trying to disconnect from DB.");
+    # Let's disconnect from DB
+    goto _GROUPINFO_KEYS_DISCONNECT_;
+  }
+
+  #
+  # Let's disconnect from DB
+  #
+  _GROUPINFO_KEYS_DISCONNECT_:
+  if( OvomDao::disconnect() != 1 ) {
+    $retval = 0;
+    $errStr         .= "Cannot disconnect from DataBase.";
+    OInventory::log(3, "Cannot disconnect from DataBase.");
+  }
+  _GROUPINFO_KEYS_SEARCHED_:
+  if(! $retval) {
+    return { retval => $retval, output => $errStr };
+  }
+
+  #
+  # Let's compose the search menu
+  #
+  my $groupInfoCheckboxesHtml = <<"_JAVASCRIPT_TOGGLE_";
+<script language="JavaScript">
+function toggle(source) {
+  checkboxes = document.getElementsByName('groupInfoKey');
+  for(var i=0, n=checkboxes.length;i<n;i++) {
+    checkboxes[i].checked = source.checked;
+  }
+}
+</script>
+_JAVASCRIPT_TOGGLE_
+
+
+  my $i    = 1;
+  my $each = $OInventory::configuration{'web.groupInfosPerRow'};
+  foreach my $aGIKey (@$groupInfoKeys) {
+    $groupInfoCheckboxesHtml .= "<input type='checkbox' name='groupInfoKey' value='$aGIKey' checked /> $aGIKey\n";
+    $groupInfoCheckboxesHtml .= "<br/>\n"
+      if ( ! ($i ++ % $each) ) ;
+  }
+
+  #
+  # Let's compose the table with the results of the search of PCIs
+  #
+  my $perfCounterInfosHtml = <<"_THRESHOLDS_INIT_TABLE_";
+<form action="?" method="post" accept-charset="utf-8">
+  <input type="hidden" name="actionId" value="$ACTION_ID_SHOW_THRESHOLDS"/>
+  <input type="hidden" name="doUpdate" value="1"/>
+  <table>
+_THRESHOLDS_INIT_TABLE_
+
+  if(defined($doSearch) && $doSearch == 1) {
+    $perfCounterInfosHtml   .= getHtmlTableRowHeader('OPerfCounterInfo', $showAllFields, $showPmis) . "\n";
+    foreach my $aPCI (@pcis) {
+      my $moref    = 'samplemoref';
+      my $instance = 'sampleinstance';
+      my $pmisForPci = filterPmisForPci($aPCI, $allPmis);
+      $perfCounterInfosHtml .= getHtmlTableRow($aPCI, $showAllFields, $showPmis, $pmisForPci) . "\n";
+    }
+    my $colspan = 16;
+    $perfCounterInfosHtml .= "<tr><td colspan=$colspan><input type='submit' name='Set thresholds' value='Set thresholds'/></td></td>\n";
+    $perfCounterInfosHtml .= "</table>\n";
+    $perfCounterInfosHtml .= "</form>\n";
+  }
+
+  #
+  # Let's compose the output
+  #
+  $output = <<"_THRESHOLDS_";
+<h2>Thresholds</h2>
+  <h3> Show thresholds </h3>
+    <p> Choose which counters and thresholds do you want to show: </p>
+    <form action="?" method="post" accept-charset="utf-8">
+      <input type="hidden" name="actionId" value="$ACTION_ID_SHOW_THRESHOLDS"/>
+      <input type="hidden" name="doSearch" value="1"/>
+      <table border="1">
+        <tr>
+          <th valign="middle">
+            GroupInfo <br/>
+            <hr />
+            <input type='checkbox' onClick='toggle(this)' /> Toggle all
+          </th>
+          <td>
+            $groupInfoCheckboxesHtml
+          </td>
+        </tr>
+        <tr>
+          <td colspan='2' align="center">
+            <input type="checkbox" name="showAllFields" value="showAllFields" />
+            Show all fields for Group Info objects
+          </td>
+        </tr>
+        <tr>
+          <td colspan='2' align="center">
+            <input type="checkbox" name="showPmis" value="showPmis" />
+            Show also the concrete thresholds for all the <em>instances</em> <br/>
+            of those counters on all the <em>ManagedEntities</em> (PerfMetrics)
+          </td>
+        </tr>
+        <tr>
+          <td colspan='2' align="center">
+            <input type="submit" name="Show" value="Show" />
+          </td>
+        </tr>
+      </table>
+    </form>
+_THRESHOLDS_
+
+  if(defined($doSearch) && $doSearch == 1) {
+  $output .= <<"_THRESHOLDS2_";
+  <h3> PerfCounterInfo objects and its thresholds </h3>
+    <p> Please remember that these are generic counter objects, its values apply to all the affected entities. Later, these thresholds can be overriden in each of those entity. </p>
+    $perfCounterInfosHtml
+_THRESHOLDS2_
+  }
+
+  return { retval => $retval, output => $output };
+}
+
+
+sub filterPmisForPci {
+  my $pci  = shift;
+  my $pmis = shift;
+  my @r    = ();
+  if(! defined ($pci) ) {
+    OInventory::log(2, "filterPmisForPci got undefined pci");
+    return undef;
+  }
+  if(! defined ($pmis) ) {
+    OInventory::log(2, "filterPmisForPci got undefined pmi array");
+    return undef;
+  }
+  if(ref($pci) ne 'OPerfCounterInfo') {
+    OInventory::log(2, "filterPmisForPci got a 1st param "
+                     . "that's not a PCI, it's a " . ref($pci));
+    return undef;
+  }
+  if(ref($pmis) ne 'ARRAY') {
+    OInventory::log(2, "filterPmisForPci got a 2nd param "
+                     . "that's not an array of PMIs, it's a " . ref($pmis));
+    return undef;
+  }
+  foreach my $aPmi (@$pmis) {
+    if (ref($aPmi) ne 'OMockView::OMockPerfMetricId') {
+      OInventory::log(2, "Components of the 2on param array of "
+                       . "filterPmisForPci must be PMIs, one is " . ref($aPmi));
+      return undef;
+    }
+    if($aPmi->counterId eq $pci->key) {
+      push @r, $aPmi;
+    }
+  }
+  return \@r;
 }
 
 1;

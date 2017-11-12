@@ -29,16 +29,18 @@ sub new {
 sub newFromElementDescription {
   my ($class, $p) = @_;
 
-  if(! defined ($p) || ref($p) ne 'ElementDescription') {
+  if(        ! defined ($p)
+       || (    ref($p) ne 'ElementDescription'
+            && ref($p) ne 'OMockView::OMockNameInfo')) {
     Carp::croak("The constructor needs a ElementDescription and got a "
                 . ref($p));
     return undef;
   }
 
   my $self = bless {
-    _key     => $p->{key},
-    _label   => $p->{label},
-    _summary => $p->{summary},
+    _key     => $p->key,
+    _label   => $p->label,
+    _summary => $p->summary,
   }, $class;
   return $self;
 }

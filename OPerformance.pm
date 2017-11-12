@@ -31,6 +31,7 @@ use OMockView::OMockPerformanceManager;
 use OMockView::OMockPerfQuerySpec;
 use OStage;
 use OStageDescriptor;
+use OAlarm;
 
 our @ISA= qw( Exporter );
 
@@ -356,11 +357,6 @@ sub initCounterInfo {
     foreach my $aPCI ( @{$allCountersByGIKey{$oPCI->groupInfo->key}} ) {
       if ( $aPCI->key eq $oPCI->key ) {
         $perfCounterWasAlreadyPushed = 1;
-
-        #
-        # Let's overwrite the ref just in case thresholds have changed
-        #
-        $aPCI = $oPCI;
       }
     }
     if(! $perfCounterWasAlreadyPushed ) {
@@ -602,7 +598,7 @@ sub getPerfData {
     OInventory::log(3, "getPerfData argument must be a PerfQuerySpec");
     return undef;
   }
-  if ( $#{$perfQuerySpec->{metricId}} == -1 ) {
+  if ( $#{$perfQuerySpec->metricId} == -1 ) {
     OInventory::log(2, "getPerfData: perfQuerySpec got no metricIds");
     return undef;
   }
@@ -633,6 +629,10 @@ sub getPerfData {
     }
   }
 
+## print "==============================================\n";
+## print "perfQuerySpec = " . Dumper($perfQuerySpec ) . "\n";
+## print "queryPerf     = " . Dumper($r) . "\n";
+
   if (! defined ($r)) {
     OInventory::log(3, "perfManager->QueryPerf returned undef");
     return undef;
@@ -642,7 +642,10 @@ sub getPerfData {
     my $d = Dumper($r);
     chomp($d);
     OInventory::log(3, "perfManager->QueryPerf returned "
-                     . "an empty array of PerfEntityMetricCSV: " . $d);
+                     . "an empty array of PerfEntityMetricCSV for "
+                     . "entity {name=" . $perfQuerySpec->{entity}->{name}
+                     . ",mo_ref=" . $perfQuerySpec->{entity}->{mo_ref}->{value}
+                     . "}: " . $d);
     return undef;
   }
 
@@ -681,10 +684,16 @@ sub getPerfMetricIdThreshold {
   # print "DEBUG: all thresholds = " . Dumper($allPerfMetricIdThresholds) ."\n";
   if(defined($entity)) {
     if($thresType eq 'crit') {
-      return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[1];
+      return $$allPerfMetricIdThresholds{$entity->value}{$counterId}{$instance}[1];
     }
     else {
-      return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[0];
+
+## print "\n\n=======\ncounterId=$counterId\ninstance=$instance\nentity=" . Dumper($entity) . "\n\nthresholds=\n" . Dumper($allPerfMetricIdThresholds) . "\n=====\n";
+## #     return $$allPerfMetricIdThresholds{$entity->{value}}{$counterId}{$instance}[0];
+##       my %c = $$allPerfMetricIdThresholds{$entity->value};
+##       return $c{$counterId}{$instance}[0];
+
+      return $$allPerfMetricIdThresholds{$entity->value}{$counterId}{$instance}[0];
     }
   }
   else {
@@ -810,6 +819,8 @@ sub registerPerfDataSaved {
   $pmi = OvomDao::loadEntity($perfData->id->counterId, 'PerfMetric',
                              $perfData->id->instance,  $entity);
 
+  my $previousLastCollection = 0;
+
   #
   # Let's insert or update its entry in table for PerfMetric ('perf_metric')
   #
@@ -831,7 +842,7 @@ sub registerPerfDataSaved {
 # die "entity = " . Dumper($entity) . "\nconter = " . $perfData->id->counterId . ",instance=" . $perfData->id->instance . " , that's: pmiC=$pmiCritThresholdFromCsv , pmiW=$pmiWarnThresholdFromCsv";
 
     $pmi = OMockView::OMockPerfMetricId->new(
-                          [ $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
+                          [ undef, $entity->value, $perfData->id->counterId, $perfData->id->instance, $pmiCritThresholdFromCsv, $pmiWarnThresholdFromCsv ]
                         );
 
     #
@@ -852,11 +863,19 @@ sub registerPerfDataSaved {
     }
   }
   else {
-    # update
 
+    #
+    # Let's keep track of when was the last collection before this loop.
+    # We'll need it to update alarms just after the last execution.
+    #
+    $previousLastCollection = $pmi->lastCollection;
+
+    #
+    # update
+    #
     OInventory::log(0, "Let's update previous PerfMetricId:");
     # my $aPerfMetricId = OMockView::OMockPerfMetricId->new(
-    #                       [ $entity->value, $perfData->id->counterId, $perfData->id->instance ]
+    #                       [ undef, $entity->value, $perfData->id->counterId, $perfData->id->instance ]
     #                     );
 
     #
@@ -929,6 +948,15 @@ sub registerPerfDataSaved {
     $pds .= ", no warnThreshold";
   }
 
+  if(! setAlarmState($entity, $pmi, $perfData, $critThreshold, $warnThreshold, $timestamps, $values, $previousLastCollection)) {
+    OInventory::log(3, "Can't setAlarmState for "
+                . " counterId='"               . $perfData->id->counterId
+                . "',instance='"               . $perfData->id->instance
+                . "' for entity with mo_ref='" . $entity->value . "'");
+    return 0;
+
+  }
+
   if(defined($critThreshold) && defined($lastValue) && $lastValue >= $critThreshold) {
     # Let's trigger a critical alarm
 warn "DEBUG: Let's trigger a critical alarm for moref=" . $entity->value . ",counterId=" . $perfData->id->counterId . ",instance=" . $perfData->id->instance . ". Effective crit=$critThreshold, warn=$warnThreshold\n";
@@ -945,6 +973,370 @@ warn "DEBUG: Let's trigger a warning alarm for moref=" . $entity->value . ",coun
   OInventory::log(0, "Saved perf data: $pds");
 
   return 1;
+}
+
+# 
+# Set alarm state for this PMI based on the thresholds.
+# 
+# States:
+# * undef : Ok
+# * 0     : Ok
+# * 1     : Warn
+# * 2     : Crit
+# 
+# Transitions (hooks):
+# * uprise2Warn   (Ok|undef      => Warn)
+# * uprise2Crit   (Ok|Warn|undef => Crit)
+# * decrease2Warn (Crit          => Warn)
+# * recover       (Crit|Warn     => Ok)
+# 
+# @arg entity   : ManagedObjectReference
+#               : $entity->value (it's mo_ref)
+#                 $entity->type ('VirtualMachine', ...)
+# @arg pmi      : MockView::OMockPerfMetricId object
+# @arg perfData : PerfMetricSeriesCSV
+#               : $perfData->id->counterId
+#                 $perfData->id->instance
+# @arg critThreshold, can be undef for pmi or pci without threshold
+# @arg warnThreshold, can be undef for pmi or pci without threshold
+# @arg timestamps : ref to array of timestamps
+# @arg values     : ref to array of timestamps
+# @arg previousLastCollection : timestamp of the previous collection for this PMI
+#                               Can be undef, for new PMIs (first execution)
+# @return 1 ok, 0 error
+# 
+sub setAlarmState {
+  my $entity                 = shift; # ManagedObjectReference :
+                                      # $entity->value (it's mo_ref) ,
+                                      # $entity->type ('VirtualMachine', ...)
+  my $pmi                    = shift; # MockView::OMockPerfMetricId object
+  my $perfData               = shift; # PerfMetricSeriesCSV :
+                                      # $perfData->id->counterId ,
+                                      # $perfData->id->instance
+  my $critThreshold          = shift; # can be undef, pmi|pci without threshold
+  my $warnThreshold          = shift; # can be undef, pmi|pci without threshold
+  my $timestamps             = shift;
+  my $values                 = shift;
+  my $previousLastCollection = shift;
+
+  if(!defined($entity)) {
+    OInventory::log(3, "setAlarmState: got undefined entity");
+    return 0;
+  }
+  if(!defined($pmi)) {
+    OInventory::log(3, "setAlarmState: got undefined PerfMetricId");
+    return 0;
+  }
+  if(ref($pmi) ne 'OMockView::OMockPerfMetricId') {
+    OInventory::log(3, "setAlarmState: expected a MockView::OMockPerfMetricId "
+                     . "as 2nd parameter and got a " . ref($pmi));
+    return 0;
+  }
+  if(!defined($perfData)) {
+    OInventory::log(3, "setAlarmState: got undefined perfData");
+    return 0;
+  }
+  # thresholds can be undef (pmi or pci without thresholds) 
+  if(!defined($timestamps) || ref($timestamps) ne 'ARRAY') {
+    OInventory::log(3, "setAlarmState: timestamps must be an array of tstamps");
+    return 0;
+  }
+  if(!defined($values) || ref($values) ne 'ARRAY') {
+    OInventory::log(3, "setAlarmState: values must be an array of tstamps");
+    return 0;
+  }
+
+  my $prevState    = undef;
+  my $prevAlarm    = undef;
+  my $r            = undef;
+  my $newState     = 0;
+  my $newStateTime = $$timestamps[$#$timestamps];
+  my $firstPosAfterValue = 0;
+
+  ($r, $prevAlarm) = OvomDao::loadEntity($entity->value, 'OAlarm', $pmi->id);
+  if( ! defined($r) || $r != 1 ) {
+    OInventory::log(3, "Can't look for previous alarms");
+    return 0;
+  }
+
+# if(defined($prevAlarm)) {
+#   warn "DEBUG: Alarm found: ". Dumper($prevAlarm) . "\n";
+# }
+# else {
+#   warn "DEBUG: NO previous alarm found\n";
+# }
+
+  if(defined($prevAlarm)) {
+    if($prevAlarm->is_critical) {
+      $prevState = 2;
+    }
+    else {
+      $prevState = 1;
+    }
+  }
+
+  if(defined($critThreshold) || defined($warnThreshold)) {
+    if(! defined($critThreshold)) {
+      OInventory::log(3, "Warn threshold without Crit thr. is not supported");
+      return 0;
+    }
+
+    if(defined($previousLastCollection)) {
+      $firstPosAfterValue = 
+        getFirstPosAfterValue($timestamps, $previousLastCollection);
+    }
+  
+    if(!defined($firstPosAfterValue)) {
+      OInventory::log(3, "Errors getting the first pos after the timestamp "
+        . $previousLastCollection . ", so we can't check for alarms");
+      return 0;
+    }
+  
+# print "critThreshold=$critThreshold , warnThreshold=$warnThreshold\n";
+    for (my $i = $firstPosAfterValue; $i <= $#$values; $i++) {
+      my $v = $$values[$i];
+# print "checking value $v\n";
+      if(defined($critThreshold) && defined($v)) {
+        if($v >= $critThreshold) {
+          $newState = 2;
+          last;
+        }
+        if(    defined($warnThreshold)
+            && $newState == 0
+            && $v >= $warnThreshold) {
+          $newState = 1;
+        }
+      }
+    }
+
+  }
+
+  #
+  # Note:
+  #
+  # You can remove thresholds after having an alarm launched and you 
+  # can change thresholds after , so you always must check for previous 
+  # and new alarm states to trigger transitions, independently of 
+  # whether are there or are there not thresholds.
+  #
+
+  #
+  # Set alarm state and trigger transition hooks, if applies
+  #
+
+# 
+# States:
+# * undef : Ok
+# * 0     : Ok
+# * 1     : Warn
+# * 2     : Crit
+# 
+# Transitions (hooks):
+# * uprise2Warn   (Ok|undef      => Warn)
+# * uprise2Crit   (Ok|Warn|undef => Crit)
+# * decrease2Warn (Crit          => Warn)
+# * recover       (Crit|Warn     => Ok)
+# 
+
+  if(!defined($prevState) && $newState == 2) {
+    #
+    # * uprise2Crit   (Ok     |undef => Crit)
+    #
+    my $entityId = OInventory::entityType2entityId($entity->type);
+    if(!defined($entityId)) {
+      OInventory::log(3, "Can't get the entity id for " . $entity->type);
+      return 0;
+    }
+
+    my $a = { 'id'               => undef,
+              'entity_type'      => $entityId,
+              'mo_ref'           => $entity->value,
+              'is_critical'      => 1, # crit == 1 , warn = 0
+              'perf_metric_id'   => $pmi->id,
+              'is_acknowledged'  => 0,
+              'is_active'        => 1,
+              'alarm_time'       => $newStateTime,
+              'last_change'      => undef     # It will be set on db
+            };
+
+    my $alarm = OAlarm->newWithArgsHash($a);
+# warn "alarm = " . Dumper($alarm);
+
+    if( ! OvomDao::insert($alarm) ) {
+      OInventory::log(3, "Can't insert the Alarm $alarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm uprise2Crit from Ok "
+                     . " for entity=" . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif(defined($prevState) && $prevState == 1 && $newState == 2) {
+    #
+    # * uprise2Crit   (   Warn       => Crit)
+    #
+    $prevAlarm->setIsCritical(1);
+    if( ! OvomDao::update($prevAlarm) ) {
+      OInventory::log(3, "Can't update the Alarm $prevAlarm to Crit");
+      return -1;
+    }
+    OInventory::log(1, "Alarm uprise2Crit from Warn "
+                     . "for entity="    . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif((!defined($prevState) || $prevState == 0) && $newState == 1) {
+    #
+    # * uprise2Warn   (Ok|undef      => Warn)
+    #
+    my $entityId = OInventory::entityType2entityId($entity->type);
+    if(!defined($entityId)) {
+      OInventory::log(3, "Can't get the entity id for " . $entity->type);
+      return 0;
+    }
+
+    my $a = { 'id'               => undef,
+              'entity_type'      => $entityId,
+              'mo_ref'           => $entity->value,
+              'is_critical'      => 0, # crit == 1 , warn = 0
+              'perf_metric_id'   => $pmi->id,
+              'is_acknowledged'  => 0,
+              'is_active'        => 1,
+              'alarm_time'       => $newStateTime,
+              'last_change'      => undef     # It will be set on db
+            };
+
+    my $alarm = OAlarm->newWithArgsHash($a);
+# warn "alarm = " . Dumper($alarm);
+
+    if( ! OvomDao::insert($alarm) ) {
+      OInventory::log(3, "Can't insert the Alarm $alarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm uprise2Warn from Ok "
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif((defined($prevState) && $prevState == 2) && $newState == 1) {
+    #
+    # * decrease2Warn (Crit          => Warn)
+    #
+    $prevAlarm->setIsCritical(0);
+    if( ! OvomDao::update($prevAlarm) ) {
+      OInventory::log(3, "Can't update the Alarm $prevAlarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm decrease2Warn from Crit "
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  elsif((defined($prevState) && $prevState != 0) && $newState == 0) {
+    #
+    # * recover       (Crit|Warn     => Ok)
+    #
+    $prevAlarm->setIsActive(0);
+    if( ! OvomDao::update($prevAlarm) ) {
+      OInventory::log(3, "Can't update the Alarm $prevAlarm");
+      return -1;
+    }
+    OInventory::log(1, "Alarm recover from $prevState (Crit==1,Warn==2) "
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+  else {
+    OInventory::log(0, "No Alarm change"
+                     . " for entity="   . $entity->value
+                     . ",pmi_key="      . $pmi->counterId
+                     . ",pmi_instance=" . $pmi->instance);
+  }
+
+  return 1;
+}
+
+#
+# Get the first position after a value
+# in an array that always increases with a constant delta
+#
+# Simply iterating from the first component is computationally very inefficient
+#
+# @arg ref to array of equidistant values that are increasing
+#      (valid for array of timestamps or sorted data ascending)
+# @arg the value
+# @return first position in the array (0..N-1)
+#         that contains a value greater than the value,
+#         or undef if errors.
+#
+sub getFirstPosAfterValue {
+  my $values   = shift;
+  my $theValue = shift;
+
+  #
+  # Preconditions, errors:
+  #
+  if(!defined($values) || ref($values) ne 'ARRAY') {
+    OInventory::log(3,
+      "getFirstPosAfterValue: values must be an array of tstamps");
+    return 0;
+  }
+  if($#$values == -1) {
+    OInventory::log(3,
+      "getFirstPosAfterValue: values can't be an empty array");
+    return 0;
+  }
+  if(!defined($theValue)) {
+    OInventory::log(3,
+      "getFirstPosAfterValue: the value is undef");
+    return 0;
+  }
+
+  #
+  # Easy cases
+  #
+  if($$values[0] > $theValue) {
+    # First is already greater
+    return 0;
+  }
+  if($$values[$#$values] <= $theValue) {
+    # Last is lower or equal: No way
+    OInventory::log(3,
+      "getFirstPosAfterValue: Last is lower or equal: No way");
+    return undef;
+  }
+
+  #
+  # The value is greater than the first one in the array,
+  #           is lower or equal than the last one in the array
+  # and there's at least two points in the array
+  #
+  my $first  = $$values[0];
+  my $last   = $$values[$#$values];
+  my $diff   = $last-$first;
+  my $delta  = $diff/($#$values);
+  my $pos    = int(($theValue-$first)/$delta)+1;
+
+  #
+  # Some sanity checks:
+  #
+  if ($$values[$pos] <= $theValue) {
+    OInventory::log(3, "getFirstPosAfterValue: BUG! We calculated that "
+      . "the first position greater than $theValue in the array ("
+      . (join ", ", @$values) . ") should be the number $pos (0..N-1), "
+      . "but its value (" . $$values[$pos] . ") is not greater than $theValue");
+    return undef;
+  }
+  if (defined($$values[$pos-1]) && defined($$values[$pos-1]) > $theValue) {
+    OInventory::log(3, "getFirstPosAfterValue: BUG! We calculated that "
+      . "the first position greater than $theValue in the array ("
+      . (join ", ", @$values) . ") should be the number $pos (0..N-1), "
+      . "but the previous value in the array (" . $$values[$pos-1] . ") "
+      . "is also greater than $theValue");
+    return undef;
+  }
+
+  return $pos;
 }
 
 #
@@ -2476,7 +2868,6 @@ sub getLatestPerformance {
                                          metricId   => $filteredPerfMetricIds,
                                          format     => 'csv',
                                          intervalId => 20); # 20s hardcoded
-# die ref($perfQuerySpec ) . "\n". Dumper($perfQuerySpec );
     $eTime=Time::HiRes::time - $timeBefore;
     alarm 0;
     OInventory::log(1, "Profiling: Calling getPerfQuerySpec took "
@@ -2486,7 +2877,7 @@ sub getLatestPerformance {
       OInventory::log(3, "Could not get QuerySpec for entity");
       next;
     }
-    if($#{$perfQuerySpec->{metricId}} == -1) {
+    if($#{$perfQuerySpec->metricId} == -1) {
       OInventory::log(2, "QuerySpec contains no metricIds for a non-empty "
                        . "array of filteredPerfMetricIds. Why?");
       next;

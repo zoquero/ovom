@@ -134,28 +134,48 @@ our $sqlPerfCounterInfoUpdate
                              = 'UPDATE perf_counter_info set name_info_key = ?, name_info_label = ?, name_info_summary = ?, group_info_key = ?, group_info_label = ?, group_info_summary = ?, unit_info_key = ?, unit_info_label = ?, unit_info_summary = ?, rollup_type = ?, stats_type = ?, pci_level = ?, per_device_level = ?, crit_threshold = ?, warn_threshold = ? where pci_key = ?';
 our $sqlPerfCounterInfoDelete
                              = 'DELETE FROM perf_counter_info where mo_ref = ?';
+our $sqlPerfCounterInfoSelectGroupInfoKeys = 'SELECT distinct group_info_key FROM `perf_counter_info`';
 
 ####################################
 # SQL Statements for PerfMetric
 ####################################
 # a.crit_threshold, a.warn_threshold, a.last_value
 our $sqlPerfMetricSelectAll 
-                              = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+                              = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a';
-our $sqlPerfMetricSelectByKey = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+our $sqlPerfMetricSelectByKey = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                               . 'FROM perf_metric as a '
                               . 'where counter_id = ? and instance = ? and mo_ref = ? ';
-our $sqlPerfMetricSelectEntityPMs = 'SELECT a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+our $sqlPerfMetricSelectById  = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
+                              . 'FROM perf_metric as a '
+                              . 'where id = ?';
+our $sqlPerfMetricSelectEntityPMs = 'SELECT a.id, a.mo_ref, a.counter_id, a.instance, a.crit_threshold, a.warn_threshold, a.last_value , a.last_collection '
                                   . 'FROM perf_metric as a '
                                   . 'where mo_ref = ? ';
 our $sqlPerfMetricInsert
                               = 'INSERT INTO perf_metric (mo_ref, counter_id, instance, crit_threshold, warn_threshold) '
                               . 'VALUES (?, ?, ?, ?, ?)';
                              # Nop update just to update timestamp
-our $sqlPerfMetricUpdate
+our $sqlPerfMetricUpdateTouch
                              = 'UPDATE perf_metric set last_collection = NOW() where counter_id = ? and instance = ? and mo_ref = ?   ';
+our $sqlPerfMetricUpdateThresholdsById
+                             = 'UPDATE perf_metric set crit_threshold = ?, warn_threshold = ? where id = ?';
 our $sqlPerfMetricDelete
                              = 'DELETE FROM perf_metric where counter_id = ? and instance = ? and mo_ref = ? ';
+
+####################################
+# SQL Statements for Alarms
+####################################
+our $sqlAlarmsSelectAll       = 'SELECT a.id, a.entity_type, a.mo_ref, a.is_critical, a.perf_metric_id, a.is_acknowledged, a.is_active, UNIX_TIMESTAMP(a.alarm_time), UNIX_TIMESTAMP(a.last_change) '
+                              . 'FROM alarm as a';
+our $sqlAlarmsSelectByKey     = 'SELECT a.id, a.entity_type, a.mo_ref, a.is_critical, a.perf_metric_id, a.is_acknowledged, a.is_active, UNIX_TIMESTAMP(a.alarm_time), UNIX_TIMESTAMP(a.last_change) '
+                              . 'FROM alarm as a '
+                              . 'where mo_ref = ? and perf_metric_id = ? and is_active = 1';
+our $sqlAlarmsInsert
+                              = 'INSERT INTO alarm (entity_type, mo_ref, is_critical, perf_metric_id, is_acknowledged, is_active, alarm_time) '
+                              . 'VALUES (?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?))';
+our $sqlAlarmsUpdate          = 'UPDATE alarm set is_critical = ? , is_acknowledged = ? , is_active = ? , last_change = NOW() where id = ?';
+our $sqlAlarmsDelete          = 'DELETE FROM alarm where id = ? ';
 
 
 #
@@ -361,6 +381,51 @@ sub transactionRollback {
 
 
 #
+# Gets all the distinct groupInfo key of the registered PerfCounterInfo objects
+#
+# @return undef (if errors) or ref to array of strings with keys (else)
+#
+sub getAllGroupInfoKeys {
+  my @r    = ();
+  my @data = ();
+
+  my ($timeBefore, $eTime);
+  $timeBefore=Time::HiRes::time;
+  my $stmt;
+  my $sthRes;
+  OInventory::log(0, "Getting all group info keys");
+
+  $stmt = $sqlPerfCounterInfoSelectGroupInfoKeys;
+
+  eval {
+    my $sth = $dbh->prepare_cached($stmt)
+                or die "Can't prepare statement to get all group info keys: "
+                . $dbh->errstr;
+    $sthRes = $sth->execute();
+
+    if(! $sthRes) {
+      Carp::croak("Can't execute the statement to get all group info keys");
+      $sth->finish();
+      return undef;
+    }
+
+    while (@data = $sth->fetchrow_array()) {
+      push @r, $data[0];
+    }
+  };
+  if($@) {
+    OInventory::log(3, "Errors getting all group info keys from DB: $@");
+    return undef;
+  }
+
+  $eTime=Time::HiRes::time - $timeBefore;
+  OInventory::log(1, "Profiling: select all group info keys took "
+                        . sprintf("%.3f", $eTime) . " s "
+                        . "and returned " . ($#r + 1) . " keys");
+  return \@r;
+}
+
+#
 # Get all entities of a type from DB that are son of an entity.
 #
 # @arg entityType (Folder | Datacenter | ClusterComputeResource
@@ -472,14 +537,90 @@ sub getAllChildEntitiesOfType {
 
 
 #
+# Get all active OAlarms
+#
+# @return undef (if errors),
+#         or a reference to array of references to OAlarms (if ok)
+#
+sub getOAlarms {
+  my %args = (
+#   entity_type     => undef, # entity ids provided by OInventory::entityType2entityId
+#   mo_ref          => undef,
+#   is_critical     => undef,
+#   perf_metric_id  => undef,
+#   is_acknowledged => undef,
+    is_active       => '1',
+#   alarm_time      => undef,
+#   last_change     => undef,
+  );
+
+  my $entities = getAllEntitiesOfType('OAlarm', \%args);
+
+}
+
+#
+#
+#
+sub getSqlQuery {
+  my $sqlPrefix  = shift;
+  my $sqlSufix   = shift;
+  my $args       = shift;
+  my $append     = '';
+
+  if(!defined($sqlPrefix) || !defined($sqlSufix)) {
+    OInventory::log(3, "Missing sql prefix or sufix calling getSqlQuery");
+    return undef;
+  }
+
+  my $r = $sqlPrefix;
+
+  if(defined($args)) {
+    my @clauses;
+
+    my $isFirst = 1;
+    foreach my $key ( ('entity_type', 'mo_ref', 'is_critical', 'perf_metric_id',
+                     'is_acknowledged', 'is_active', 'alarm_time_upper',
+                     'alarm_time_lower') ) {
+      if($key eq 'alarm_time_lower') {
+        my $value = $$args{$key};
+        if(defined($value) && $value ne '') {
+          push @clauses, " alarm_time >= FROM_UNIXTIME($value)";
+        }
+      }
+      elsif($key eq 'alarm_time_upper') {
+        my $value = $$args{$key};
+        if(defined($value) && $value ne '') {
+          push @clauses, " alarm_time <= FROM_UNIXTIME($value)";
+        }
+      }
+      else {
+        my $value = $$args{$key};
+        if(defined($value) && $value ne '') {
+          push @clauses, " $key=$value";
+        }
+      }
+    }
+    $append .= join " and ", @clauses;
+  }
+  if($append ne '') {
+    $r .= " where $append";
+  }
+
+
+  $r .= " " . $sqlSufix;
+  return $r;
+}
+
+#
 # Get all entities of a type from DB.
 #
-# @arg entityType (Folder | Datacenter | ClusterComputeResource
-#                         | HostSystem | VirtualMachine | PerfCounterInfo)
+# @arg entityType ( Folder     | Datacenter     | ClusterComputeResource
+#                 | HostSystem | VirtualMachine | PerfCounterInfo
+#                 | PerfMetric | OAlarm )
 # @return undef (if errors),
 #         or a reference to array of references to entity objects (if ok)
-#         : objects OFolder | ODatacenter | OCluster | OHost
-#                           | OVirtualMachine | OPerfCounterInfo
+#         : objects OFolder | ODatacenter     | OCluster         | OHost
+#                           | OVirtualMachine | OPerfCounterInfo | OAlarm
 #
 sub getAllEntitiesOfType {
   my $entityType = shift;
@@ -490,6 +631,8 @@ sub getAllEntitiesOfType {
   my $stmt;
   my $sthRes;
   OInventory::log(0, "Getting all entities of type $entityType");
+
+  my $optArgs = shift;
 
   if($entityType eq 'Folder') {
     $stmt = $sqlFolderSelectAll;
@@ -509,8 +652,14 @@ sub getAllEntitiesOfType {
   elsif($entityType eq 'PerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoSelectAll;
   }
+  elsif($entityType eq 'OMockView::OMockPerfMetricId' || $entityType eq 'PerfMetric') {
+    $stmt = $sqlPerfMetricSelectAll;
+  }
+  elsif($entityType eq 'OAlarm') {
+    $stmt = getSqlQuery($sqlAlarmsSelectAll, '', $optArgs);
+  }
   else {
-    Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType");
+    Carp::croak("Not implemented in OvomDao.getAllEntitiesOfType for $entityType");
     return undef;
   }
 
@@ -550,7 +699,14 @@ sub getAllEntitiesOfType {
       }
       elsif($entityType eq 'PerfCounterInfo') {
         $e = OPerfCounterInfo->new(\@data);
-print "DEBUG: Dao: loaded PerfCounterInfo=$e\n";
+        push @r, $e;
+      }
+      elsif($entityType eq 'OMockView::OMockPerfMetricId' || $entityType eq 'PerfMetric') {
+        $e = OMockView::OMockPerfMetricId->new(\@data);
+        push @r, $e;
+      }
+      elsif($entityType eq 'OAlarm') {
+        $e = OAlarm->new(\@data);
         push @r, $e;
       }
       else {
@@ -674,17 +830,28 @@ sub update {
   }
   elsif($oClassName eq 'PerfMetricId'
      || $oClassName eq 'OMockView::OMockPerfMetricId') {
-    $mor  = shift;
-    if (! defined ($mor)) {
-      Carp::croak("OvomDao.update missing mor (2nd extra) parameter");
-      return 0;
+    if(!defined $entity->id) {
+      if (! defined ($mor)) {
+        Carp::croak("OvomDao.update missing mor (2nd extra) parameter");
+        return 0;
+      }
+      $stmt = $sqlPerfMetricUpdateTouch;
+      my $t = shift;
+      $mor  = $t->value;
     }
-
-    $stmt = $sqlPerfMetricUpdate;
+    else {
+      $stmt = $sqlPerfMetricUpdateThresholdsById;
+      $mor  = $entity->entity_mo_ref;
+    }
     $updateType = 3;
     $desc = $oClassName . ": counterId=" . $entity->counterId
             . ",instance=" . $entity->instance
-            . " for entity with mo_ref='" . $mor->value . "'";
+            . " for entity with mo_ref='" . $mor . "'";
+  }
+  elsif($oClassName eq 'OAlarm') {
+    $stmt = $sqlAlarmsUpdate;
+    $updateType = 4;
+    $desc = $oClassName . ": " . $entity->toCsvRow();
   }
   else {
     Carp::croak("Statement unimplemented for "
@@ -744,6 +911,20 @@ sub update {
 
     # PerfCounterInfo
     if($updateType == 2) {
+      my ($c, $w);
+      if(defined($entity->critThreshold) && $entity->critThreshold eq '') {
+        $c = undef;
+      }
+      else {
+        $c = $entity->critThreshold;
+      }
+      if(defined($entity->warnThreshold) && $entity->warnThreshold eq '') {
+        $w = undef;
+      }
+      else {
+        $w = $entity->warnThreshold;
+      }
+
       $sthRes = $sth->execute(
                   $entity->nameInfo->key ,
                   $entity->nameInfo->label ,
@@ -758,14 +939,19 @@ sub update {
                   $entity->statsType->val,
                   $entity->level,
                   $entity->perDeviceLevel,
-                  $entity->key,
-                  $entity->critThreshold,
-                  $entity->warnThreshold
+                  $c,
+                  $w,
+                  $entity->key
                 );
     }
     # PerfMetric
     elsif($updateType == 3) {
-      $sthRes = $sth->execute($entity->counterId, $entity->instance, $mor->value);
+      if(!defined $entity->id) {
+        $sthRes = $sth->execute($entity->counterId, $entity->instance, $mor);
+      }
+      else {
+        $sthRes = $sth->execute($entity->critThreshold, $entity->warnThreshold, $entity->id);
+      }
     }
     # Host, Cluster, VirtualMachine, ...
     elsif($updateType == 1) {
@@ -809,6 +995,10 @@ sub update {
                               $hostFolderPid, $networkFolderPid,
                               $entity->{mo_ref});
     }
+    # OAlarm
+    elsif($updateType == 4) {
+      $sthRes = $sth->execute($entity->is_critical, $entity->is_acknowledged, $entity->is_active, $entity->id);
+    }
     else {
       Carp::croak("Statement execution still unimplemented in OvomDao.update");
       return 0;
@@ -821,7 +1011,7 @@ sub update {
       return 0;
     }
     if(! $sthRes > 0 || $sthRes eq "0E0") {
-      Carp::croak("Didn't updated any $oClassName trying to update the $desc");
+      Carp::croak("Didn't updated any $oClassName trying to update the $desc, sthRes=$sthRes");
       return 0;
     }
   };
@@ -1010,20 +1200,34 @@ sub oClassName2EntityName {
 # Get an Entity from DB by mo_ref.
 #
 # @arg mo_ref
-# @arg entity type (  Folder | Datacenter | ClusterComputeResource
-#                   | HostSystem | VirtualMachine | PerfCounterInfo | PerfMetric)
-# @return undef (if errors), or a reference to an Entity object (if ok)
+# @arg entity type (  Folder     | Datacenter     | ClusterComputeResource
+#                   | HostSystem | VirtualMachine | PerfCounterInfo
+#                   | PerfMetric | OAlarm )
+# @return undef (if errors),
+#         or a reference to an Entity object (if ok)
+#         exception: if loading an 'OAlarm'
+#           then it returns an array (1, $object).
 #
 sub loadEntity {
-  my $aId      = shift;
+  my $aId        = shift;
   my $entityType = shift;
   my $stmt;
   my $r;
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
-  my $pmiInstance;
+  my $secondParam;
   my $pmiMor;
+  my $loadPerfMetricSelectMethod = 'key';
+
+  #
+  # Note: There's 2 load mechanisms to load a PerfMetric:
+  #
+  # By key:
+  # $pmi = OvomDao::loadEntity($counterId, 'PerfMetric', $instance,  $mo_Ref);
+  # By id:
+  # $pmi = OvomDao::loadEntity($pmiId, 'PerfMetric', '', '');
+  #
 
   if (! defined ($aId)) {
     Carp::croak("Got an undefined id trying to load a $entityType");
@@ -1057,7 +1261,7 @@ sub loadEntity {
   elsif($entityType eq 'VirtualMachine') {
     $stmt = $sqlVirtualMachineSelectByMoref;
   }
-  elsif($entityType eq 'PerfCounterInfo') {
+  elsif($entityType eq 'PerfCounterInfo' || $entityType eq 'OPerfCounterInfo') {
     $stmt = $sqlPerfCounterInfoSelectByKey;
   }
   #
@@ -1070,27 +1274,60 @@ sub loadEntity {
   #                           $managedObjectReference->value (it's mo_ref))
   elsif($entityType eq 'PerfMetric') {
     $stmt = $sqlPerfMetricSelectByKey;
-    $pmiInstance = shift;
+    $secondParam = shift; # pmiInstance
     $pmiMor      = shift;
-
-    if (! defined ($pmiInstance)) {
-      Carp::croak("Got an undefined instance trying to load a $entityType");
+    my $pmiLoadKeySelector = shift;
+    if(defined($pmiLoadKeySelector) && $pmiLoadKeySelector == 1) {
+      #
+      # $loadPerfMetricSelectMethod = 'id';
+      #
+      $loadPerfMetricSelectMethod = 'id';
+      $stmt = $sqlPerfMetricSelectById;
+      $secondParam = '';
+      $pmiMor      = '';
+    }
+    else {
+      #
+      # $loadPerfMetricSelectMethod = 'key';
+      #
+      if (! defined ($secondParam)) { # pmiInstance
+        Carp::croak("Got an undefined instance trying to load a $entityType");
+        return undef;
+      }
+      if (! defined ($pmiMor)) {
+        Carp::croak("Got an undefined mor trying to load a $entityType");
+        return undef;
+      }
+    }
+  }
+  elsif($entityType eq 'OAlarm') {
+    $stmt = $sqlAlarmsSelectByKey;
+    $secondParam = shift;           # id of PerfMetric table
+    if (! defined ($secondParam)) { # id of PerfMetric table
+      Carp::croak("Got an undefined PerfMetric id trying to load a $entityType");
       return undef;
     }
-    if (! defined ($pmiMor)) {
-      Carp::croak("Got an undefined mor trying to load a $entityType");
-      return undef;
-    }
-
   }
   else {
     Carp::croak("loadEntity not implemented for '$entityType'");
     return undef;
   }
 
+  #
+  # Debug messages for logs
+  #
   if($entityType eq 'PerfMetric') {
-    OInventory::log(0, "selecting from db the ${entityType} metricId='$aId',"
-                     . "instance='$pmiInstance',moRef='". $pmiMor->value . "'");
+    if($loadPerfMetricSelectMethod eq 'key') {
+      OInventory::log(0, "selecting from db the ${entityType} metricId='$aId',"
+                       . "instance='$secondParam',moRef='". $pmiMor->value . "'");
+    }
+    else {
+      OInventory::log(0, "selecting from db the ${entityType} id='$aId'");
+    }
+  }
+  elsif($entityType eq 'OAlarm') {
+    OInventory::log(0, "selecting from db the ${entityType} mo_ref='$aId',"
+                     . "pmi_table_id='$secondParam'");
   }
   else {
     OInventory::log(0, "selecting from db the ${entityType} id/mo_ref='"
@@ -1103,7 +1340,23 @@ sub loadEntity {
                      . "(" . $dbh->err . ") :" . $dbh->errstr;
     my $sthRes;
     if($entityType eq 'PerfMetric') {
-      $sthRes = $sth->execute($aId, $pmiInstance, $pmiMor->value);
+      if($loadPerfMetricSelectMethod eq 'key') {
+        #
+        # $loadPerfMetricSelectMethod = 'key';
+        #
+        $sthRes = $sth->execute($aId, $secondParam, $pmiMor->value);
+      }
+      else {
+        #
+        # $loadPerfMetricSelectMethod = 'id';
+        #
+        $sthRes = $sth->execute($aId);
+      }
+    }
+    elsif($entityType eq 'OAlarm') {
+      # mo_ref
+      # perf_metric_id
+      $sthRes = $sth->execute($aId, $secondParam);
     }
     else {
       $sthRes = $sth->execute($aId);
@@ -1120,9 +1373,20 @@ sub loadEntity {
     while (@data = $sth->fetchrow_array()) {
       if ($found++ > 0) {
         if($entityType eq 'PerfMetric') {
+          if($loadPerfMetricSelectMethod eq 'key') {
+            Carp::croak("Found more than one ${entityType} when "
+                      . "looking for the one with metricId='$aId',"
+                      . "instance='$secondParam',moRef='". $pmiMor->value . "'");
+          }
+          else {
+            Carp::croak("Found more than one ${entityType} when "
+                      . "looking for the one with id='$aId'");
+          }
+        }
+        elsif($entityType eq 'OAlarm') {
           Carp::croak("Found more than one ${entityType} when "
-                    . "looking for the one with metricId='$aId',"
-                    . "instance='$pmiInstance',moRef='". $pmiMor->value . "'");
+                    . "looking for the one with moref='$aId',"
+                    . "pmi_table_id='$secondParam'");
         }
         else {
           Carp::croak("Found more than one ${entityType} when "
@@ -1147,11 +1411,15 @@ sub loadEntity {
       elsif($entityType eq 'VirtualMachine') {
         $r = OVirtualMachine->new(\@data);
       }
-      elsif($entityType eq 'PerfCounterInfo') {
+      elsif(   $entityType eq 'PerfCounterInfo'
+            || $entityType eq 'OPerfCounterInfo') {
         $r = OPerfCounterInfo->new(\@data);
       }
       elsif($entityType eq 'PerfMetric') {
         $r = OMockView::OMockPerfMetricId->new(\@data);
+      }
+      elsif($entityType eq 'OAlarm') {
+        $r = OAlarm->new(\@data);
       }
       else {
         Carp::croak("Not implemented for $entityType in OvomDao.loadEntity");
@@ -1159,7 +1427,6 @@ sub loadEntity {
       }
     }
   };
-
   if($@) {
     OInventory::log(3, "Errors getting a ${entityType} from DB: $@");
     return undef;
@@ -1168,7 +1435,13 @@ sub loadEntity {
   $eTime=Time::HiRes::time - $timeBefore;
   OInventory::log(1, "Profiling: select a ${entityType} took "
                         . sprintf("%.3f", $eTime) . " s");
-  return $r;
+
+  if($entityType eq 'OAlarm') {
+    return (1, $r);
+  }
+  else {
+    return $r;
+  }
 }
 
 
@@ -1186,7 +1459,7 @@ sub loadPerfMetricIdsForEntity {
   my @data;
   my ($timeBefore, $eTime);
   $timeBefore=Time::HiRes::time;
-  my $pmiInstance;
+  my $secondParam;
   my $pmiMor;
 
   if (! defined ($mo_ref)) {
@@ -1304,8 +1577,13 @@ sub insert {
       $desc .= ",warnThreshold='" . $entity->{_warnThreshold} . "'";
     }
     else {
-      $desc .= ", no specific thresholds";
+      $desc .= ",no_thresholds";
     }
+  }
+  elsif($oClassName eq 'OAlarm') {
+    $stmt       = $sqlAlarmsInsert;
+    $insertType = 4;
+    $desc       = "$oClassName with for mo_ref='" . $entity->mo_ref . "'";
   }
   else {
     Carp::croak("Statement unimplemented for '$oClassName' in OvomDao.insert");
@@ -1326,12 +1604,27 @@ sub insert {
       return 0;
     }
   }
-
-  if($insertType == 3) {
+  elsif($insertType == 2) {
+    #
+    # Nothing to be done for PerfCounterInfo or OPerfCounterInfo
+    #
+  }
+  elsif($insertType == 3) {
     if( ! defined($mor->value) || $mor->value eq '' ) {
       Carp::croak("Trying to insert a $desc without related mo_ref");
       return 0;
     }
+  }
+  elsif($insertType == 4) {
+    # at least let's check de mo_ref
+    if( ! defined($entity->value) || $entity->value eq '' ) {
+      Carp::croak("Trying to insert a $desc without mo_ref");
+      return 0;
+    }
+  }
+  else {
+    Carp::croak("Unexpected insertType $insertType");
+    return 0;
   }
 
   OInventory::log(1, "Inserting into db the $desc");
@@ -1427,6 +1720,29 @@ sub insert {
                                $entity->critThreshold,
                                $entity->warnThreshold
                              );
+      my $newId = $dbh->{'mysql_insertid'};
+      if(!defined($newId)) {
+        Carp::croak("Can't get the new id generated with $stmt");
+        return 0;
+      }
+      $entity->setId($newId);
+    }
+    elsif($insertType == 4) {
+      $sthRes = $sth->execute(
+                               $entity->entity_type ,
+                               $entity->mo_ref,
+                               $entity->is_critical,
+                               $entity->perf_metric_id,
+                               $entity->is_acknowledged,
+                               $entity->is_active,
+                               $entity->alarm_time
+                             );
+      my $newId = $dbh->{'mysql_insertid'};
+      if(!defined($newId)) {
+        Carp::croak("Can't get the new id generated with $stmt");
+        return 0;
+      }
+      $entity->setId($newId);
     }
     elsif($insertType == 0) {
       #
@@ -1490,7 +1806,8 @@ sub insert {
                               $hostFolderPid, $networkFolderPid);
     }
     else {
-      Carp::croak("Insert statement unimplemented for $oClassName");
+      Carp::croak("Insert statement unimplemented "
+                . "for $oClassName and insertType $insertType");
       return 0;
     }
 

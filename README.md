@@ -16,25 +16,25 @@ vCenter is a great software but lacks some features. Some of them can be found i
 
 * Effective alarms: custom and manageable thresholds and alarms with hooks
 * Custom RoundRobin configuration for Performance Intervals
-** vSphere's static configuration sets that day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...
-** vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
+    * vSphere's static configuration sets that day == '*86400 points with a sample period of 300s*', week == '*604800 points with a sample period of 1800s*', ...
+    * vCenter just simply doesn't save some important performance data (like some latency data) after 1 hour, so you can't answer to '*what happened tonight?*'
 * Reporting:
-** Full performance report generation on custom intervals for your entities
-** Which are the top consumers of your resources and which are suffering the worst latencies?
+    * Full performance report generation on custom intervals for your entities
+    * Which are the top consumers of your resources and which are suffering the worst latencies?
 * vCenter API to ask for performance is too much heavy to be used by your preferred monitoring tool to poll your assets at scale
 
 # Features
 
 It's still in development but its **goals** are:
 
-* (done! *v0.1*) Maintain its own **Inventory** on a local database, but it also exports entities to CSV files to ease external access
+* (done! **v0.1**) Maintain its own **Inventory** on a local database, but it also exports entities to CSV files to ease external access
 * Extract **performance metrics**:
     * (done! **v0.2**) Extract realtime performance metrics of hosts, clusters and VMs
     * (done! **v0.2**) Store them on plain CSV files
     * (done! **v0.3** & **v0.4**) Housekeep them in a **RRDB** style, but with customizable rounding parameters, improving VMware's hardsettings regarding sample interval on real-time, daily, monthly and yearly graphs.
 * Show performance graphics:
     * (done! **v0.5** & **v0.6**) Offer a simple Web UI to allow have graphs for custom intervals on-demand.
-* Report alarms based on thresholds
+* (done! **v0.7**) Report alarms based on thresholds
 * Extend the inventory and performance data collection to more *managed entities* (Datastore, LUN, vDisk) 
 * Model the hierarchy to reflex the dependencies between the *managed entites* so that it can correlate, for examples, latencies in LUNs with latencies in VMs.
 * Suggest changes (initially just sugggest, later would be nice to allow to apply):
@@ -120,9 +120,13 @@ $ sudo chown -R ovom:ovom "$OVOM_BASE"
 ## vCenter access
 By now it just needs inventory access. A role like *Read-only* would be more than enough. In future releases it may need permissions for vMotion and Storage vMotion.
 
-Copy **`extra/secrets.conf.sample`** in to **`secrets.conf`** and set the credentials in its variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+* Copy **`extra/secrets.conf.sample`** in to **`secrets.conf`** 
+* set the *Fully Qualified Domain Name* of the vCenter in the variable **`OVOM_VC_FQDN`**
+* set its credentials in its variables **`OVOM_VC_USERNAME`** and **`OVOM_VC_PASSWORD`**
+
 ```
 $ cp extra/secrets.conf.sample secrets.conf
+$ vim secrets.conf
 ```
 
 ## Database

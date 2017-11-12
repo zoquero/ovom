@@ -64,6 +64,9 @@ our @counterTypes = ("cpu", "mem", "net", "disk", "sys");
 # our @entityTypes = ("Folder", "HostSystem", "ResourcePool", "VirtualMachine", "ComputeResource", "Datacenter", "ClusterComputeResource");
 our @entityTypes = ("Folder", "Datacenter", "ClusterComputeResource",
                     "HostSystem", "VirtualMachine");
+our @mockingEntityTypes = ("OMockView::OMockFolderView", "OMockView::OMockDatacenterView", "OMockView::OMockClusterView",
+                           "OMockView::OMockHostView", "OMockView::OMockVirtualMachineView");
+
 
 # vmname/last_hour/
 # vmname/last_day/
@@ -96,6 +99,57 @@ sub getEntityTypes {
   return \@entityTypes;
 }
 
+
+#
+# Given a string identitying an entity type it returns its numerical id.
+#
+# Those entity type and entity id correspond with
+# entity_types.type_.name and entity_types.id from database
+#
+sub entityType2entityId {
+  my $entityType = shift;
+  if(!defined($entityType)) {
+    OInventory::log(3, "entityType2entityId got no entity type");
+    return undef;
+  }
+
+  # Mapping for mocking views:
+
+  # Easy, we simply set its a id as its position in the array @entityTypes
+  for(my $i = 0; $i <= $#entityTypes; $i++) {
+    if ($entityTypes[$i] eq $entityType) {
+      return $i;
+    }
+    if ($mockingEntityTypes[$i] eq $entityType) {
+      return $i;
+    }
+  }
+  OInventory::log(3,
+    "entityType2entityId could not find the entity type $entityType");
+  return undef;
+}
+
+#
+# Given the numerical id of an entity returns the string identitying it
+#
+# Those entity type and entity id correspond with
+# entity_types.type_.name and entity_types.id from database
+#
+sub entityId2entityType {
+  my $entityId = shift;
+  if(!defined($entityId)) {
+    OInventory::log(3, "entityId2entityType got no entity id");
+    return undef;
+  }
+
+  my $r = $entityTypes[$entityId];
+  if(!defined($r))  {
+    OInventory::log(3,
+      "entityId2entityType could not find the entity id $entityId");
+  }
+  return $r;
+}
+
 #
 # Get a reference to the inventory hash
 # (inventory objects from vCenter).
@@ -125,12 +179,16 @@ sub connectToVcenter {
     return 1;
   }
 
-  my $vCWSUrl = 'https://'
-                . $OInventory::configuration{'vCenter.fqdn'}
-                . '/sdk/webService';
+  my $vcFqdn = $ENV{'OVOM_VC_FQDN'};
+  if ( ! defined($vcFqdn) || $vcFqdn eq '') {
+    OInventory::log(3, "Can't find vCenter's Fully Qualified Domain Name "
+                        . "in the environment. Read install instructions.");
+    return 0;
+  }
+  my $vCWSUrl = "https://$vcFqdn/sdk/webService";
   my $user = $ENV{'OVOM_VC_USERNAME'};
   my $pass = $ENV{'OVOM_VC_PASSWORD'};
-  if ( ! defined($user) || $user eq '' ||  ! defined($pass) || $pass eq '') {
+  if ( ! defined($user) || $user eq '' || ! defined($pass) || $pass eq '') {
     OInventory::log(3, "Can't find username or password for vCenter "
                         . "in the environment. Read install instructions.");
     return 0;
@@ -1380,11 +1438,17 @@ sub readConfiguration {
         $line =~s/\s+$//;           # no trailing white spaces
         next unless length($line);  # anything left?
         my ($var, $value) = split(/\s*=\s*/, $line, 2);
-        if(   $var eq 'OVOM_DB_USERNAME' || $var eq 'OVOM_DB_PASSWORD'
-           || $var eq 'OVOM_VC_USERNAME' || $var eq 'OVOM_VC_PASSWORD') {
+        if(   $var eq 'OVOM_VC_USERNAME' || $var eq 'OVOM_VC_PASSWORD'
+           || $var eq 'OVOM_DB_USERNAME' || $var eq 'OVOM_DB_PASSWORD') {
           if(!defined($ENV{$var})) {
             $ENV{$var} = $value;
           }
+        }
+        if($var eq 'OVOM_VC_FQDN') {
+          if(!defined($ENV{$var})) {
+            $ENV{$var} = $value;
+          }
+          $OInventory::configuration{'vCenter.fqdn'} = $value;
         }
     } 
     if( ! close(CONFIG) ) {

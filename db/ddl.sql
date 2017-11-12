@@ -128,25 +128,30 @@ CREATE TABLE `perf_metric` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
 
 --
--- Table structure for table `entity_types`
+-- Table structure for table `entity_type`
 --
 
-CREATE TABLE `entity_types` (
+CREATE TABLE `entity_type` (
   `id` TINYINT NOT NULL ,
   `type_name` VARCHAR(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
 
 --
--- Table structure for table `alerts`
+-- Table structure for table `alarm`
 --
 
-CREATE TABLE `alerts` (
+CREATE TABLE `alarm` (
   `id` INT(10) NOT NULL ,
   `entity_type` TINYINT NOT NULL ,
-  `entity_moref` VARCHAR(255) NOT NULL ,
+  `mo_ref` VARCHAR(255) NOT NULL ,
   `is_critical` BOOLEAN NULL DEFAULT NULL ,
-  `perf_metric_id` INT(10) UNSIGNED NOT NULL
+  `perf_metric_id` INT(10) UNSIGNED NOT NULL ,
+  `is_acknowledged` BOOLEAN NULL DEFAULT NULL ,
+  `is_active` BOOLEAN NULL DEFAULT NULL ,
+  `alarm_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ,
+  `last_change` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_spanish_ci;
+
 
 --
 -- Indexes for dumped tables
@@ -213,6 +218,12 @@ ALTER TABLE `perf_metric`
   ADD KEY `counter_id` (`counter_id`);
 
 --
+-- Indexes for table `alarm`
+--
+ALTER TABLE `alarm`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -245,6 +256,11 @@ ALTER TABLE `virtualmachine`
 -- AUTO_INCREMENT for table `perf_metric`
 --
 ALTER TABLE `perf_metric`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+--
+-- AUTO_INCREMENT for table `alarm`
+--
+ALTER TABLE `alarm`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 --
 -- Constraints for dumped tables
@@ -284,20 +300,19 @@ ALTER TABLE `perf_metric`
   ADD CONSTRAINT `pmi_pci_fk` FOREIGN KEY (`counter_id`) REFERENCES `perf_counter_info` (`pci_key`);
 
 --
--- Constraints for table `entity_types`
+-- Constraints for table `entity_type`
 --
-ALTER TABLE `entity_types`
+ALTER TABLE `entity_type`
   ADD PRIMARY KEY (`id`);
 
 --
--- Constraints for table `alerts`
+-- Constraints for table `alarm`
 --
-ALTER TABLE `alerts`
-  ADD PRIMARY KEY (`id`),
+ALTER TABLE `alarm`
   ADD INDEX ( `entity_type`); 
 
-ALTER TABLE `alerts`
-  ADD CONSTRAINT `entity_type_fk` FOREIGN KEY (`entity_type`) REFERENCES `entity_types`(`id`);
+ALTER TABLE `alarm`
+  ADD CONSTRAINT `entity_type_fk` FOREIGN KEY (`entity_type`) REFERENCES `entity_type`(`id`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

@@ -3,4 +3,4 @@ delta;3;ready;Ready;Time that the virtual machine was ready, but could not get s
 absolute;4;capacity.demand;CPU Capacity Demand;The amount of CPU resources a VM would use if there were no CPU contention or CPU limit;cpu;CPU;CPU;18;4;average;megaHertz;MHz;Megahertz
 absolute;4;usage;Host consumed %;Percentage of host physical memory that has been consumed;mem;Memory;Memory;23;4;none;percent;%;Percentage
 absolute;4;active;Active;Amount of guest physical memory that is being actively read or written by guest. Activeness is estimated by ESXi;mem;Memory;Memory;34;4;minimum;kiloBytes;KB;Kilobyte;
-absolute;1;used;Space actually used;Amount of space actually used by the virtual machine or the datastore;disk;Disk;Disk;240;1;latest;kiloBytes;KB;Kilobyte 
+absolute;1;used;Space actually used;Amount of space actually used by the virtual machine or the datastore;disk;Disk;Disk;240;1;latest;kiloBytes;KB;Kilobyte

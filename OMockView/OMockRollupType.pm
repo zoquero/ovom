@@ -22,13 +22,16 @@ sub new {
 sub newFromPerfSummaryType {
   my ($class, $p) = @_;
 
-  if(! defined ($p) || ref($p) ne 'PerfSummaryType') {
-    Carp::croak("The constructor needs a RollupType and got a " . ref($p));
+  if(        ! defined ($p)
+       || (    ref($p) ne 'PerfSummaryType'
+            && ref($p) ne 'OMockView::OMockRollupType')) {
+    Carp::croak("The constructor needs a RollupType and got a "
+                . ref($p));
     return undef;
   }
 
   my $self = bless {
-    _val => $p->{val},
+    _val => $p->val,
   }, $class;
   return $self;
 }
